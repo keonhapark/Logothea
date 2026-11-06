@@ -1,7 +1,7 @@
 # Logothea
 
-[![test](https://github.com/keonha123/Logothea/actions/workflows/test.yml/badge.svg)](https://github.com/keonha123/Logothea/actions/workflows/test.yml)
-[![release](https://img.shields.io/github/v/release/keonha123/Logothea?include_prereleases)](https://github.com/keonha123/Logothea/releases)
+[![test](https://github.com/keonhapark/Logothea/actions/workflows/test.yml/badge.svg)](https://github.com/keonhapark/Logothea/actions/workflows/test.yml)
+[![release](https://img.shields.io/github/v/release/keonhapark/Logothea?include_prereleases)](https://github.com/keonhapark/Logothea/releases)
 
 미국 기업의 어닝콜을 실시간 자막으로 보여 주고, 경영진 발언을 직전 분기 발언과 대조하는 어닝콜 분석 데스크톱 앱입니다.
 
@@ -83,7 +83,7 @@ flowchart LR
 
 ## 시작하기
 
-**앱 사용**: [릴리스 페이지](https://github.com/keonha123/Logothea/releases)에서 Windows 설치 파일을
+**앱 사용**: [릴리스 페이지](https://github.com/keonhapark/Logothea/releases)에서 Windows 설치 파일을
 받아 실행합니다. 현재 `v0.1.0-rc1` 은 검증 중인 시험판이며 시연 서버 주소가 설치본에 들어 있습니다.
 설치부터 시연 재생까지는 [빠른 시작](docs/overview/quick-start.md)에 정리되어 있습니다.
 
@@ -113,6 +113,6 @@ flowchart LR
 
 | 담당 | GitHub |
 |---|---|
-| backend, trading-terminal, infra | [@keonha123](https://github.com/keonha123) |
+| backend, trading-terminal, infra | [@keonhapark](https://github.com/keonhapark) |
 | ai-engine | [@james10419](https://github.com/james10419), [@yytss3](https://github.com/yytss3) |
 | data_pipeline | [@dheorb](https://github.com/dheorb) |

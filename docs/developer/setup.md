@@ -18,7 +18,7 @@
 ## 저장소 받기
 
 ```bash
-git clone https://github.com/keonha123/Logothea.git
+git clone https://github.com/keonhapark/Logothea.git
 cd Logothea
 ```
 
