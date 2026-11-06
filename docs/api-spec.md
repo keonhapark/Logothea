@@ -93,7 +93,7 @@ REST · STOMP · Redis 메시지의 형식을 정리한 문서입니다. 모듈�
 | `title`          | String |  Y   | 제목                                    |
 | `content`        | String |  Y   | 녹취록 본문                             |
 | `provider`       | String |  N   | 기본 `"investing"`                      |
-| `published_at`   | 날짜   |  N   | 발행 시각                               |
+| `published_at`   | Long 또는 날짜 |  N   | 발행 시각                               |
 | `fiscal_quarter` | String |  N   | 회계 분기 (예: `Q1 FY2027`)             |
 | `speaker_turns`  | Array  |  N   | `[{speaker, text, section}]`            |
 | `metadata`       | Object |  N   | 부가 정보                               |
@@ -356,7 +356,7 @@ Redis `trading-signals` 수신을 계기로 발행하던 토픽입니다. #127 �
 | `status`          | String  |  Y   | `EXECUTED` \| `FAILED`                                  |
 | `broker_order_id` | String  |  N   | 증권사 주문번호. `EXECUTED` 이면 필수                   |
 | `executed_price`  | Double  |  N   | 체결 평균가. 없으면 0                                   |
-| `executed_qty`    | Integer |  N   | 체결 수량. 없으면 0. 받으면 주문 수량을 이 값으로 덮어씁니다 |
+| `executed_qty`    | Integer |  N   | 체결 수량. 없으면 0. `EXECUTED` 이면 값이 없을 때(0)도 주문 수량을 이 값으로 덮어씁니다 |
 | `error_message`   | String  |  N   | 실패 사유. 저장하지 않고 로그에만 남깁니다              |
 
 ```json
@@ -458,7 +458,7 @@ Redis `trading-signals` 수신을 계기로 발행하던 토픽입니다. #127 �
 | `end_ms`         | Long    |  Y   | 세그먼트 끝 시각 (밀리초, 0 이상)                 |
 | `text`           | String  |  Y   | 세그먼트 텍스트                                   |
 | `speaker`        | String  |  N   | 발화자 라벨                                       |
-| `timestamp`      | Long    |  Y   | 세그먼트 시각 (Unix Epoch Second, 0 이상). 시연은 `call_started_at + start_ms`, data_pipeline 은 전송 시각 |
+| `timestamp`      | Long    |  Y   | 세그먼트 시각 (Unix Epoch Second, 0 이상). 시연은 `call_started_at + start_ms / 1000`(초), data_pipeline 은 전송 시각 |
 | `is_session_end` | Boolean |  N   | 어닝콜 세션 종료 신호. 없으면 `false`             |
 
 ```json
@@ -680,7 +680,7 @@ Redis `trading-signals` 수신을 계기로 발행하던 토픽입니다. #127 �
   3. 세그먼트 수는 3의 배수를 권장합니다. AI Engine 이 3개 단위로 검증하므로 나머지 1~2개는 `DISCARDED` 되어 마지막
      발언의 팩트체크가 나오지 않습니다. 어겨도 시작은 되며 경고 로그가 남습니다.
   4. 과거 어닝콜이면 `call_started_at`(ISO-8601)을 채웁니다. 비우면 세그먼트 시각을 재생 시점의 현재 시각으로 찍는데,
-     AI Engine 은 그 값을 기준으로 지난 30일을 근거 검색 창으로 잡습니다. 채우면 시각이 `call_started_at + start_ms`
+     AI Engine 은 그 값을 기준으로 지난 30일을 근거 검색 창으로 잡습니다. 채우면 시각이 `call_started_at + start_ms / 1000`(초)
      로 계산되어 검색 창이 그 콜 시점에 맞춰집니다. 형식이 틀리면 현재 시각으로 돌아가며 경고 로그가 남습니다.
   5. `related_tickers` 와 `analyst_qa` 는 종합 판단(4.7)에 쓰입니다. 앞의 것이 없으면 파급 영향이 비고, 뒤의 것이
      없으면 회피 지표가 빠집니다. `analyst_qa` 는 Q&A 에서 실제로 오간 질문 · 답변 한 쌍이어야 하며, `PLACEHOLDER` 로
@@ -973,7 +973,7 @@ HTTP 상태는 정상 흐름 전체가 200 이고, 요청 형식 위반만 422 �
 
 1. **`sentence_timestamp` 는 콜 시점 기준 시각입니다.** 근거 검색이 이 값에서 과거 N일을 조회하므로, 콜과 동떨어진
    값을 넣으면 근거가 적재되어 있어도 검색 결과가 0건이 되어 전부 `INSUFFICIENT_EVIDENCE` 가 됩니다. backend 시연
-   재생은 `call_started_at + start_ms` 를 보내고, `call_started_at` 이 없을 때만 현재 시각을 씁니다(7.8 규칙 4).
+   재생은 `call_started_at + start_ms / 1000`(초) 를 보내고, `call_started_at` 이 없을 때만 현재 시각을 씁니다(7.8 규칙 4).
 2. **근거는 미리 적재해야 합니다.** 검증할 종목의 뉴스를 2.2 로 넣어 둡니다. 관련성 게이트는 강한 관련도(strong)를
    넘는 문서가 하나라도 있으면 통과하고, 없으면 중간 관련도(moderate) 문서가 서로 다른 매체 2곳 이상이어야 합니다.
    채택하는 근거는 최대 3건입니다.
@@ -1059,8 +1059,9 @@ LLM 을 쓰지 않는 규칙 기반 엔드포인트입니다. 근거 검색을 �
 - **`impact_score` 는 `null` 일 수 있습니다.** 이 값은 그 종목이 이번 콜의 근거 문서에 함께 나오는 비율(함께 언급된
   문서 수 ÷ 전체 근거 문서 수)입니다. 근거 문서가 없으면 0.0 이 아니라 `null` 이 옵니다. "영향 없음" 과 "측정하지
   못함" 을 구분하기 위해서입니다. `confidence` 는 근거 문서 수를 20건 기준으로 환산한 값입니다.
-- **`risk_plan.available=false` 이면 나머지 필드는 모두 `null` 입니다.** 가격 정보가 없거나 방향이 서지 않았다는
-  뜻이므로, 화면에서 0으로 채우지 않고 `invalidation_text` 의 사유를 보여 줍니다.
+- **`risk_plan.available=false` 이면 가격 · 비율 필드(`reference_price` ~ `time_stop_days`)가 `null` 입니다.** 가격 정보가
+  없거나 방향이 서지 않았다는 뜻입니다. `invalidation_text` 와 `sizing_note_ko` 에는 보류 사유가 들어가고, `direction` 은
+  받은 방향 신호를 대문자로 바꾼 값이며 없으면 `NEUTRAL` 입니다. 화면에서는 0으로 채우지 않고 `invalidation_text` 의 사유를 보여 줍니다.
 
 ### 9.8. 근거 준비 확인 (`GET /v1/engine/evidence/readiness`)
 
