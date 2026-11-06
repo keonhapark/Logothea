@@ -43,6 +43,6 @@ Logothea 에 코드나 문서를 보태려는 팀원과 기여자를 위한 문�
 
 | 모듈 | 담당 |
 |---|---|
-| backend, trading-terminal, logothea-assistant, infra, docs, .github | @keonha123 |
+| backend, trading-terminal, logothea-assistant, infra, docs, .github | @keonhapark |
 | ai-engine | @james10419, @yytss3 |
 | data_pipeline | @dheorb |
