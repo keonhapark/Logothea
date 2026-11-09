@@ -11,6 +11,8 @@ import { registerVaultHandlers } from './ipc/vaultHandlers'
 import { registerKisHandlers, onFillNotice } from './ipc/kisHandlers'
 import { registerSettingsHandlers } from './ipc/settingsHandlers'
 import { registerThemeHandlers } from './ipc/themeHandlers'
+import { registerNotificationHandlers } from './ipc/notificationHandlers'
+import { NotificationService } from './services/NotificationService'
 import { registerWsHandlers } from './ipc/wsHandlers'
 import { registerMarketHandlers } from './ipc/marketHandlers'
 import { registerGlossaryHandlers } from './ipc/glossaryHandlers'
@@ -134,12 +136,17 @@ function registerAllHandlers() {
   // 정리를 태운다. 그러지 않으면 죽은 세션으로 폴러들이 계속 돌며 401 만 쌓는다.
   setRefreshFailedHandler(() => teardownSession())
   // KIS 실시간 체결통보가 오면 그 즉시 미체결 주문의 상태를 맞추고 화면에 알린다.
-  KisWebSocketService.setFillNoticeHandler((fill) => void onFillNotice(fill))
+  // 체결 알림은 실제 통보에만 보낸다. onFillNotice 는 주문 기록 뒤 재확인용으로도 다시 불린다.
+  KisWebSocketService.setFillNoticeHandler((fill) => {
+    NotificationService.notifyFill(fill)
+    void onFillNotice(fill)
+  })
   registerAuthHandlers()
   registerVaultHandlers()
   registerKisHandlers()
   registerSettingsHandlers()
   registerThemeHandlers()
+  registerNotificationHandlers()
   registerWsHandlers()
   registerMarketHandlers()
   registerGlossaryHandlers()

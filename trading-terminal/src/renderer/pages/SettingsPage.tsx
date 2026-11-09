@@ -12,12 +12,17 @@ import KisKeyForm, {
   type VaultSavePayload,
 } from '../components/settings/KisKeyForm'
 import SegmentedControl from '../components/common/SegmentedControl'
+import Switch from '../components/common/Switch'
+import Dropdown from '../components/common/Dropdown'
 import Modal from '../components/common/Modal'
 import { ComingSoon } from '../components/common/StateView'
 import { showIpcErrorToast } from '../components/common/Toast'
 import { notifyComingSoon } from '../components/auth/notifyComingSoon'
 import { getThemeChoice, setThemeChoice } from '../lib/theme'
 import { type ThemeChoice } from '../../lib/theme'
+import { useNotificationPrefsStore } from '../store/useNotificationPrefsStore'
+import { resetCallTour } from '../lib/callTour'
+import { CALL_START_LEAD_OPTIONS, type CallStartLeadMin } from '../../lib/notificationPrefs'
 
 /**
  * 키 삭제 시 분기 결정 helper (테스트 친화적 순수 함수).
@@ -527,10 +532,9 @@ function ConfirmModal({
 }
 
 /* -------------------------------------------------------------------------- */
-/* AppSettingsPanel — 앱 설정. 동작하는 항목은 테마뿐이고 나머지는 준비 중이다.  */
+/* AppSettingsPanel — 앱 설정. 테마 · 알림이 동작하고 나머지는 준비 중이다.      */
 /* -------------------------------------------------------------------------- */
 const APP_SETTINGS: { title: string; note: string }[] = [
-  { title: '알림', note: '콜 시작 · 체결 알림을 고르는 기능은 준비 중입니다' },
   { title: '언어', note: '지금은 한국어만 있습니다' },
   { title: '자동 로그인', note: '로그인 정보를 보관하는 방식을 정한 뒤 추가합니다' },
 ]
@@ -562,12 +566,105 @@ function AppSettingsPanel() {
           {theme === 'system' ? '운영체제의 밝은 화면 · 어두운 화면 설정을 따릅니다' : '운영체제 설정과 관계없이 이 테마로 보입니다'}
         </p>
       </div>
+      <NotificationSettings />
+      <CallTourReset />
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {APP_SETTINGS.map((it) => (
           <ComingSoon key={it.title} title={it.title} note={it.note} className="py-6 px-4" />
         ))}
       </div>
     </section>
+  )
+}
+
+const LEAD_ITEMS = CALL_START_LEAD_OPTIONS.map((m) => ({ value: String(m), label: `${m}분 전` }))
+
+/** 알림 — 콜 시작 · 체결 알림을 켜고 끈다. 설정은 main 이 기억한다(체결 알림은 main 이 보낸다). */
+function NotificationSettings() {
+  const prefs = useNotificationPrefsStore((s) => s.prefs)
+  const loaded = useNotificationPrefsStore((s) => s.loaded)
+  const failed = useNotificationPrefsStore((s) => s.failed)
+  const update = useNotificationPrefsStore((s) => s.update)
+
+  useEffect(() => {
+    if (!useNotificationPrefsStore.getState().loaded) void useNotificationPrefsStore.getState().load()
+  }, [])
+
+  return (
+    <div className="flex flex-col">
+      <span id="notify-label" className="text-ink-2 text-[12.5px] font-medium">알림</span>
+      {failed && !loaded && (
+        <p className="text-ink-3 text-[12.5px] pt-2">
+          알림 설정을 불러오지 못했습니다.{' '}
+          <button type="button" className="underline underline-offset-2 hover:text-ink-1" onClick={() => void useNotificationPrefsStore.getState().load()}>
+            다시 불러오기
+          </button>
+        </p>
+      )}
+      {/* 설정을 읽기 전에는 바꾸지 못하게 한다(읽기 전에 저장하면 기억한 값이 기본값으로 덮인다) */}
+      <fieldset disabled={!loaded} aria-labelledby="notify-label" className="flex flex-col min-w-0 border-0 p-0 m-0">
+        <div className="flex items-center gap-3 py-3">
+          <div className="flex flex-col gap-0.5 min-w-0">
+            <span id="notify-call-label" className="text-ink-1 text-[14px] font-semibold">콜 시작 알림</span>
+            <span id="notify-call-note" className="text-ink-3 text-[12.5px]">관심 · 보유 종목의 콜이 시작되기 전에 알립니다</span>
+          </div>
+          <span className="ml-auto">
+            <Dropdown
+              value={String(prefs.callStartLeadMin)}
+              options={LEAD_ITEMS}
+              onChange={(v) => void update({ callStartLeadMin: Number(v) as CallStartLeadMin })}
+              ariaLabel="콜 시작 몇 분 전에 알릴지"
+            />
+          </span>
+          <Switch
+            checked={prefs.callStart}
+            onChange={(callStart) => void update({ callStart })}
+            ariaLabelledBy="notify-call-label"
+            ariaDescribedBy="notify-call-note"
+          />
+        </div>
+        <div className="h-px bg-edge/[0.08]" aria-hidden />
+        <div className="flex items-center gap-3 py-3">
+          <div className="flex flex-col gap-0.5 min-w-0">
+            <span id="notify-fill-label" className="text-ink-1 text-[14px] font-semibold">체결 알림</span>
+            <span id="notify-fill-note" className="text-ink-3 text-[12.5px]">한국투자증권으로 보낸 주문이 체결되면 알립니다</span>
+          </div>
+          <span className="ml-auto" />
+          <Switch
+            checked={prefs.fills}
+            onChange={(fills) => void update({ fills })}
+            ariaLabelledBy="notify-fill-label"
+            ariaDescribedBy="notify-fill-note"
+          />
+        </div>
+      </fieldset>
+    </div>
+  )
+}
+
+/** 콜 화면 첫 사용 안내를 다시 보게 한다. 다음에 콜이 시작된 화면에서 다시 뜬다. */
+function CallTourReset() {
+  const [done, setDone] = useState(false)
+  return (
+    <div className="flex items-center gap-3">
+      <div className="flex flex-col gap-0.5 min-w-0">
+        <span className="text-ink-1 text-[14px] font-semibold">콜 화면 안내</span>
+        <span className="text-ink-3 text-[12.5px]" aria-live="polite">
+          {done ? '다음에 콜이 시작되면 안내를 다시 보여 줍니다' : '자막 · 대조 · 질문 · 주문의 자리를 차례로 알려 줍니다'}
+        </span>
+      </div>
+      <button
+        type="button"
+        className="gbtn gbtn-sm ml-auto shrink-0"
+        disabled={done}
+        onClick={() => {
+          resetCallTour()
+          setDone(true)
+        }}
+      >
+        다시 보기
+      </button>
+    </div>
   )
 }
 

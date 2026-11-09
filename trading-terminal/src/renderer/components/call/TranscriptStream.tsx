@@ -93,7 +93,7 @@ export default function TranscriptStream({
   const latestSeq = segments.length > 0 ? segments[segments.length - 1].sequence : null
 
   return (
-    <section className="cloud relative h-full rounded-[28px] overflow-hidden" aria-label="자막">
+    <section className="cloud relative h-full rounded-[28px] overflow-hidden" aria-label="자막" data-tour="transcript">
       <ScrollEdge height={topInset + 12} />
       <div
         ref={scrollRef}

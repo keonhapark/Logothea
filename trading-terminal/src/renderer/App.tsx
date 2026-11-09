@@ -5,6 +5,7 @@ import { useConnectionStore } from './store/useConnectionStore'
 import { usePortfolioStore } from './store/usePortfolioStore'
 import { useUserStore } from './store/useUserStore'
 import { useAssistantStore } from './store/useAssistantStore'
+import { useCallStartAlerts } from './hooks/useCallStartAlerts'
 
 import AuthPage from './pages/AuthPage'
 import HomePage from './pages/HomePage'
@@ -35,6 +36,8 @@ function AppRoutes() {
   const { setBalance } = usePortfolioStore()
   const { clear } = useUserStore()
   const navigate = useNavigate()
+
+  useCallStartAlerts(isAuthenticated)
 
   // 인증 상태 변화 시 WebSocket 연결/해제
   useEffect(() => {
@@ -84,6 +87,14 @@ function AppRoutes() {
 
       ipc.on(IPC_CHANNELS.KIS_TOKEN_REFRESHED, (payload: any) => {
         setKisTokenStatus(payload.isValid ? 'VALID' : 'EXPIRED')
+      }),
+
+      // 콜 시작 알림을 누르면 그 종목의 콜 화면을 연다
+      ipc.on(IPC_CHANNELS.NOTIFICATION_OPEN_CALL, (payload) => {
+        const ticker = (payload as { ticker?: unknown })?.ticker
+        if (typeof ticker === 'string' && useConnectionStore.getState().isAuthenticated) {
+          navigate(`/call?ticker=${encodeURIComponent(ticker)}`)
+        }
       }),
     ]
 
