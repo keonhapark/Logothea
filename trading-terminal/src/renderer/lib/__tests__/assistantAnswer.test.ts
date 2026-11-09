@@ -15,6 +15,31 @@ describe('splitAnswer', () => {
     expect(splitAnswer('늘었습니다.[S1')).toEqual([{ kind: 'text', text: '늘었습니다.[S1' }])
   })
 
+  it('마크다운 강조 기호를 지우고 그 사이를 굵게 표시한다', () => {
+    expect(splitAnswer('비교매출이 **4.1%에서 2.6%로** 낮아졌습니다.')).toEqual([
+      { kind: 'text', text: '비교매출이 ' },
+      { kind: 'text', text: '4.1%에서 2.6%로', strong: true },
+      { kind: 'text', text: ' 낮아졌습니다.' },
+    ])
+  })
+
+  it('강조가 근거 표시를 사이에 두고 이어진다', () => {
+    expect(splitAnswer('**늘었고[S1] 줄었습니다**[S2] 끝')).toEqual([
+      { kind: 'text', text: '늘었고', strong: true },
+      { kind: 'cite', marker: 'S1' },
+      { kind: 'text', text: ' 줄었습니다', strong: true },
+      { kind: 'cite', marker: 'S2' },
+      { kind: 'text', text: ' 끝' },
+    ])
+  })
+
+  it('스트리밍 중 닫히지 않은 강조는 기호 없이 굵게 둔다', () => {
+    expect(splitAnswer('비교매출이 **4.1')).toEqual([
+      { kind: 'text', text: '비교매출이 ' },
+      { kind: 'text', text: '4.1', strong: true },
+    ])
+  })
+
   it('표시가 없으면 본문 하나다', () => {
     expect(splitAnswer('찾지 못했습니다.')).toEqual([{ kind: 'text', text: '찾지 못했습니다.' }])
     expect(splitAnswer('')).toEqual([])
