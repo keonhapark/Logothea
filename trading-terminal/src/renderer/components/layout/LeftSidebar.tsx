@@ -110,7 +110,7 @@ function NavItem({ label, icon, active, onClick }: NavItemProps) {
         ${
           active
             ? 'glass rim rim-float text-ink-1 font-semibold on-glass'
-            : 'text-ink-3 font-medium hover:text-ink-1 hover:bg-white/[0.04]'
+            : 'text-ink-3 font-medium hover:text-ink-1 hover:bg-wash/[0.04]'
         }`}
     >
       <span className="w-[18px] h-[18px] shrink-0 [&>svg]:w-full [&>svg]:h-full">{icon}</span>

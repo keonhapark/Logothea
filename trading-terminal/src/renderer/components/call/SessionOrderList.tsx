@@ -57,7 +57,7 @@ export default function SessionOrderList({ orders, onRefresh, refreshing }: Sess
             const meta = isPartial ? { ...STATUS_META.EXECUTED, label: '부분 체결' } : STATUS_META[order.status]
             const isBuy = order.side === 'BUY'
             return (
-              <li key={order.localId} className="rounded-[14px] bg-white/[0.04] px-3 py-2 flex flex-col gap-0.5 text-[12.5px]">
+              <li key={order.localId} className="rounded-[14px] bg-wash/[0.04] px-3 py-2 flex flex-col gap-0.5 text-[12.5px]">
                 <div className="flex items-center justify-between gap-2">
                   <span>
                     <span className="font-semibold" style={{ color: isBuy ? 'var(--up)' : 'var(--down)' }}>

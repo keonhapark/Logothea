@@ -116,7 +116,7 @@ export default function MiniLineChart({
             y1={y}
             x2={viewWidth}
             y2={y}
-            stroke="rgba(251,250,246,0.08)"
+            stroke="var(--chart-grid)"
             strokeWidth={1}
           />
         )
@@ -139,7 +139,7 @@ export default function MiniLineChart({
             cy={lastY}
             r={3}
             fill={colors.dot}
-            stroke="#212226"
+            stroke="var(--chart-ring)"
             strokeWidth={1.5}
           />
         </>

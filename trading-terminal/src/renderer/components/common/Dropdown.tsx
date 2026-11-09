@@ -146,7 +146,7 @@ export default function Dropdown<V extends string = string>({
                   setOpen(false)
                 }}
                 className={`px-3 py-2 rounded-[12px] text-[12px] whitespace-nowrap cursor-pointer
-                            ${isHighlighted ? 'bg-white/[0.08] text-text-primary' : 'text-text-secondary'}
+                            ${isHighlighted ? 'bg-wash/[0.08] text-text-primary' : 'text-text-secondary'}
                             ${isSelected ? 'font-semibold text-text-primary' : ''}`}
               >
                 {opt.label}

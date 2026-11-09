@@ -99,6 +99,11 @@ module.exports = {
           focus: c('gold-hi'),
         },
 
+        // 옅은 면 · 옅은 테두리 · 표 머리
+        wash: c('wash'),
+        edge: c('edge'),
+        'table-head': c('table-head'),
+
         connected: c('ok'),
         connecting: c('caution'),
         reconnecting: c('caution'),
@@ -134,6 +139,7 @@ module.exports = {
         lg: 'var(--shadow-lg)',
         xl: 'var(--shadow-xl)',
         dialog: 'var(--shadow-dialog)',
+        side: 'var(--shadow-side)',
       },
       transitionTimingFunction: {
         spring: 'cubic-bezier(0.3, 1.35, 0.5, 1)',

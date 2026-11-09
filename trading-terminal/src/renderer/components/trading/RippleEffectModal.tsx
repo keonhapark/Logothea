@@ -125,7 +125,7 @@ export default function RippleEffectModal({
                     {/* 노드 원 */}
                     <circle
                       cx={x} cy={y} r={r}
-                      fill="#212226"
+                      fill="var(--chart-ring)"
                       stroke={color}
                       strokeWidth={isCenter ? 2 : 1.5}
                     />

@@ -269,7 +269,7 @@ function ActionBar({
   }, [isWatched, ticker])
 
   return (
-    <div className="px-6 py-4 flex gap-3 border-t border-white/[0.08] shrink-0">
+    <div className="px-6 py-4 flex gap-3 border-t border-edge/[0.08] shrink-0">
       <button
         type="button"
         onClick={toggleWatchlist}
@@ -354,7 +354,7 @@ function EarningsReactions({ rows }: { rows: StockDetailResponsePayload['earning
       </thead>
       <tbody>
         {rows.map((r) => (
-          <tr key={`${r.fiscalPeriodLabel}-${r.announcedAt}`} className="border-t border-white/[0.06]">
+          <tr key={`${r.fiscalPeriodLabel}-${r.announcedAt}`} className="border-t border-edge/[0.06]">
             <td className="py-2 text-ink-2">{r.fiscalPeriodLabel}</td>
             <td className="py-2 text-right tabular-nums text-ink-2">
               {formatEps(r.epsEstimate)} → <span className="text-ink-1">{formatEps(r.epsActual)}</span>
@@ -442,7 +442,7 @@ function KV({ k, v }: { k: string; v: string }) {
 function Chip({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <span
-      className="inline-flex items-center px-2 py-0.5 rounded-full text-[11.5px] font-semibold text-ink-3 border border-white/15"
+      className="inline-flex items-center px-2 py-0.5 rounded-full text-[11.5px] font-semibold text-ink-3 border border-edge/15"
       title={title}
     >
       {children}

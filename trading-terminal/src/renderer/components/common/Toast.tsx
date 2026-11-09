@@ -277,12 +277,12 @@ export function AppToaster(): JSX.Element {
       toastOptions={{
         duration: 6000,
         style: {
-          background: 'rgba(18,19,22,0.72)',
+          background: 'rgb(var(--scrim-rgb) / 0.72)',
           backdropFilter: 'blur(22px) saturate(1.2)',
-          color: '#fbfaf6',
+          color: 'var(--ink-1)',
           borderRadius: 20,
           boxShadow:
-            'inset 0 1px 0 rgba(255,255,255,0.18), inset 0 0 0 1px rgba(226,189,98,0.55), 0 14px 34px -12px rgba(0,0,0,0.55)',
+            'inset 0 1px 0 rgb(255 255 255 / 0.18), inset 0 0 0 1px rgb(var(--gold-rgb) / 0.55), var(--shadow-lg)',
           fontSize: 13,
         },
       }}

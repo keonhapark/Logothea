@@ -428,7 +428,7 @@ export default function HistoryPage() {
         </div>
 
         {/* Footer */}
-        <div className="h-14 shrink-0 flex items-center justify-between px-6 gap-3 border-t border-white/[0.08]">
+        <div className="h-14 shrink-0 flex items-center justify-between px-6 gap-3 border-t border-edge/[0.08]">
           <div className="text-[12.5px] text-ink-3 whitespace-nowrap">
             총 <b className="tabular-nums text-ink-1 font-semibold">{summary.totalCount}</b>건 중{' '}
             <b className="tabular-nums text-ink-1 font-semibold">
@@ -496,8 +496,8 @@ function Th({
   return (
     <th
       scope="col"
-      className={`sticky top-0 z-[1] bg-[#17181b] text-[12px] font-medium text-ink-3
-                  px-3 h-10 whitespace-nowrap border-b border-white/[0.08]
+      className={`sticky top-0 z-[1] bg-table-head text-[12px] font-medium text-ink-3
+                  px-3 h-10 whitespace-nowrap border-b border-edge/[0.08]
                   ${align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left'}`}
     >
       {children}
@@ -509,7 +509,7 @@ function SkeletonRow() {
   return (
     <tr>
       {Array.from({ length: 8 }).map((_, j) => (
-        <td key={j} className="px-3 h-12 border-b border-white/[0.06]">
+        <td key={j} className="px-3 h-12 border-b border-edge/[0.06]">
           <div className="skeleton h-3.5" />
         </td>
       ))}
@@ -519,11 +519,11 @@ function SkeletonRow() {
 
 function Row({ row, onDetail }: { row: HistoryRow; onDetail: () => void }) {
   const isFailed = row.status === 'FAILED'
-  const td = 'px-3 h-12 align-middle border-b border-white/[0.06]'
+  const td = 'px-3 h-12 align-middle border-b border-edge/[0.06]'
 
   return (
     <tr
-      className="hover:bg-white/[0.04] transition-colors duration-200"
+      className="hover:bg-wash/[0.04] transition-colors duration-200"
       title={row.failureReason ? `거부 사유: ${row.failureReason}` : undefined}
     >
       <td className={`${td} num text-[12px] text-ink-2`}>{formatDateTime(row.createdAt)}</td>
