@@ -79,6 +79,7 @@ export default function LeftSidebar({ activePath, onNavigate }: Props) {
         {NAV_ITEMS.map((item) => (
           <li key={item.path}>
             <NavItem
+              path={item.path}
               label={item.label}
               icon={NAV_ICONS[item.path]}
               active={activePath === item.path}
@@ -94,16 +95,19 @@ export default function LeftSidebar({ activePath, onNavigate }: Props) {
 }
 
 interface NavItemProps {
+  /** 관심 추가 효과(lib/flyToNav)가 날아갈 자리를 찾는 표시. */
+  path: string
   label: string
   icon: React.ReactNode
   active: boolean
   onClick: () => void
 }
 
-function NavItem({ label, icon, active, onClick }: NavItemProps) {
+function NavItem({ path, label, icon, active, onClick }: NavItemProps) {
   return (
     <button
       type="button"
+      data-nav={path}
       onClick={onClick}
       aria-current={active ? 'page' : undefined}
       className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-full text-[14px] transition-[color,transform] duration-200 ease-spring active:scale-[0.97]

@@ -573,6 +573,7 @@ export default function TradingRoomPage() {
                 <CallVerdict
                   summary={currentSummary}
                   demoStopped={stoppedCallId != null && stoppedCallId === lastCallId}
+                  waitKey={lastCallId}
                   diffCounts={diffCounts}
                   previousCallLabel={previousCallLabel}
                   onOpenTicker={(t) => openDrawer(t)}
