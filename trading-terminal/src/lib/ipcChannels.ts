@@ -42,6 +42,11 @@ export const IPC_CHANNELS = {
    * payload: { value: boolean }.
    */
   SETTINGS_PAPER_TRADING_CHANGED: 'terminal:settings:paper-trading-changed',
+  /**
+   * 테마 선택을 main 에 알린다. main 은 창 테마(nativeTheme)와 창 바탕색을 맞추고 다음 실행을 위해 기억한다.
+   * payload: ThemeChoice ('system' | 'light' | 'dark'), 응답: { ok: true }.
+   */
+  SETTINGS_SET_THEME: 'terminal:settings:set-theme',
 
   WS_CONNECT: 'terminal:ws:connect',
   WS_DISCONNECT: 'terminal:ws:disconnect',
