@@ -43,7 +43,9 @@ class _FakePublisher:
 def test_legacy_analyze_endpoint_accepts_original_payload_and_publishes(monkeypatch) -> None:
     publisher = _FakePublisher()
     monkeypatch.setattr(main.app.state.analysis_service, "analyze", _fake_analyze)
-    monkeypatch.setattr(main.app.state, "redis_signal_publisher", publisher)
+    # pytest 9.2 의 monkeypatch.setattr 는 starlette State 의 속성을 찾지 못하고, 복원할 때 원래 값을 지운다.
+    # State 가 값을 담는 _state 딕셔너리를 직접 바꿔 버전과 무관하게 복원되게 한다.
+    monkeypatch.setitem(main.app.state._state, "redis_signal_publisher", publisher)
     client = TestClient(main.app)
 
     response = client.post(
@@ -75,7 +77,7 @@ def test_legacy_analyze_endpoint_accepts_original_payload_and_publishes(monkeypa
 def test_legacy_analyze_endpoint_degrades_when_redis_publish_fails(monkeypatch) -> None:
     publisher = _FakePublisher(fail=True)
     monkeypatch.setattr(main.app.state.analysis_service, "analyze", _fake_analyze)
-    monkeypatch.setattr(main.app.state, "redis_signal_publisher", publisher)
+    monkeypatch.setitem(main.app.state._state, "redis_signal_publisher", publisher)
     client = TestClient(main.app)
 
     response = client.post(
