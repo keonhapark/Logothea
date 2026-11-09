@@ -63,7 +63,7 @@ interface Props {
 
 export default function LeftSidebar({ activePath, onNavigate }: Props) {
   return (
-    <nav className="glass glass-flat rim h-full rounded-[24px] flex flex-col" aria-label="메뉴">
+    <nav className="glass h-full rounded-[24px] flex flex-col" aria-label="메뉴">
       {/* 이름 — macOS 는 창 단추 아래로 내리고, 이 띠를 창 끌기 영역으로 쓴다 */}
       <div
         className={`shrink-0 px-5 ${isMac ? 'pt-11 [-webkit-app-region:drag]' : 'pt-5'} pb-4`}

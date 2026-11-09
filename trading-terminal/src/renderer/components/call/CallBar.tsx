@@ -61,7 +61,7 @@ export default function CallBar({
   return (
     <div
       ref={ref}
-      className="glass rim rim-float rounded-full flex items-center gap-4 pl-6 pr-2 py-2 min-w-0 [-webkit-app-region:no-drag]"
+      className="glass rounded-full flex items-center gap-4 pl-6 pr-2 py-2 min-w-0 [-webkit-app-region:no-drag]"
       role="toolbar"
       aria-label={`${ticker} 콜`}
     >

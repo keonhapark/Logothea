@@ -24,7 +24,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }, [location.pathname, closeDrawer])
 
   return (
-    <div className="h-screen overflow-hidden bg-bg-base text-text-secondary grid grid-cols-[232px_1fr]">
+    <div className="h-screen overflow-hidden text-text-secondary grid grid-cols-[232px_1fr]">
       <div className="p-2.5 pr-0 min-h-0">
         <LeftSidebar activePath={location.pathname} onNavigate={navigate} />
       </div>

@@ -98,7 +98,7 @@ export default function SidePanel({
           width,
           animation: 'sidepanel-slide-in 380ms cubic-bezier(0.3, 1.35, 0.5, 1)',
         }}
-        className="frost absolute top-0 right-0 bottom-0 border-l border-border-strong
+        className="read absolute top-0 right-0 bottom-0 border-l border-border-strong
                    flex flex-col shadow-side"
       >
         {children}

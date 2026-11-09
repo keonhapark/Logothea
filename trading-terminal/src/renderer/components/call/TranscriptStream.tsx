@@ -93,7 +93,7 @@ export default function TranscriptStream({
   const latestSeq = segments.length > 0 ? segments[segments.length - 1].sequence : null
 
   return (
-    <section className="frost relative h-full rounded-[28px] overflow-hidden" aria-label="자막">
+    <section className="cloud relative h-full rounded-[28px] overflow-hidden" aria-label="자막">
       <ScrollEdge height={topInset + 12} />
       <div
         ref={scrollRef}
@@ -199,7 +199,7 @@ export default function TranscriptStream({
 function DiffCard({ item }: { item: TranscriptDiffItem }) {
   const meta = CHANGE_META[item.changeType]
   return (
-    <div className="glass rim rounded-[18px] px-4 py-3 flex flex-col gap-2.5">
+    <div className="cloud-s rounded-[18px] px-4 py-3 flex flex-col gap-2.5">
       <div className="flex items-center justify-between gap-3">
         <span className="text-[13px] font-semibold" style={{ color: meta.color }}>
           {meta.symbol} {meta.label} · {topicLabel(item.topic)}
@@ -235,7 +235,7 @@ function DiffChip({ item, expandable }: { item: TranscriptDiffItem; expandable: 
   if (!expandable) {
     // 종료 후 좁은 보기에서는 펼치지 않는다. 누를 수 없는 것을 버튼으로 그리지 않는다.
     return (
-      <span className="glass rim self-start inline-flex items-center gap-2 rounded-full px-3 py-1 text-[12px] font-semibold" title={item.summaryKo}>
+      <span className="cloud-s rim self-start inline-flex items-center gap-2 rounded-full px-3 py-1 text-[12px] font-semibold" title={item.summaryKo}>
         <span className="whitespace-nowrap" style={{ color: meta.color }}>
           {meta.symbol} {meta.label}
         </span>
@@ -257,7 +257,7 @@ function DiffChip({ item, expandable }: { item: TranscriptDiffItem; expandable: 
     <button
       type="button"
       onClick={() => setOpen(true)}
-      className="glass rim self-start inline-flex items-center gap-2 rounded-full px-3 py-1 text-[12px] font-semibold max-w-full"
+      className="cloud-s rim self-start inline-flex items-center gap-2 rounded-full px-3 py-1 text-[12px] font-semibold max-w-full"
       aria-label={`${meta.label} · ${topicLabel(item.topic)} — 펼쳐 보기`}
       title={item.summaryKo}
     >
@@ -278,7 +278,7 @@ function TranslationToggle({ show, onChange }: { show: boolean; onChange: (show:
     { value: true, label: '원문 + 번역' },
   ]
   return (
-    <div className="glass rim inline-flex p-1 rounded-full text-[12px]" role="group" aria-label="자막 보기">
+    <div className="dent inline-flex p-1 rounded-full text-[12px]" role="group" aria-label="자막 보기">
       {options.map((o) => {
         const active = o.value === show
         return (
@@ -288,7 +288,7 @@ function TranslationToggle({ show, onChange }: { show: boolean; onChange: (show:
             aria-pressed={active}
             onClick={() => onChange(o.value)}
             className={`rounded-full px-3 py-1 ${
-              active ? 'glass rim rim-float font-semibold text-ink-1' : 'text-ink-3 hover:text-ink-1'
+              active ? 'cloud-s rim font-semibold text-ink-1' : 'text-ink-3 hover:text-ink-1'
             }`}
           >
             {o.label}

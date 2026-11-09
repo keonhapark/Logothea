@@ -116,7 +116,7 @@ function OpenSheet(props: OrderSheetProps) {
       role="dialog"
       aria-modal="false"
       aria-labelledby="order-sheet-title"
-      className="frost rim rim-heavy absolute right-3 bottom-3 z-30 w-[400px] rounded-[30px] flex flex-col overflow-hidden animate-slide-in-top [-webkit-app-region:no-drag]"
+      className="read absolute right-3 bottom-3 z-30 w-[400px] rounded-[30px] flex flex-col overflow-hidden animate-slide-in-top [-webkit-app-region:no-drag]"
       style={{ top: topInset }}
     >
       <SheetBody {...props} />

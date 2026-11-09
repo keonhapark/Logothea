@@ -65,7 +65,7 @@ export default function StaleDataOverlay({
                   bg-bg-base/45 backdrop-blur-[1px] rounded-[inherit]
                   ${className}`}
     >
-      <div className="glass rim on-glass flex flex-col items-center gap-2 px-5 py-4 max-w-[300px] text-center rounded-[22px]">
+      <div className="read flex flex-col items-center gap-2 px-5 py-4 max-w-[300px] text-center rounded-[22px]">
         <div className="flex items-center gap-1.5 text-danger text-[12px] font-semibold">
           <svg
             width="12"

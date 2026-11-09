@@ -52,7 +52,7 @@ export default function PriceCard({
       <div className="flex gap-1 flex-wrap" role="group" aria-label="차트 기간">
         {TIMEFRAMES.map((tf) =>
           tf === '30일' ? (
-            <span key={tf} className="glass rim rim-float rounded-full px-3 py-1 text-[12px] font-semibold text-ink-1">
+            <span key={tf} className="cloud-s rim rounded-full px-3 py-1 text-[12px] font-semibold text-ink-1">
               {tf}
             </span>
           ) : (

@@ -10,8 +10,8 @@ export const CHANGE_META: Record<
   TranscriptDiffChangeType,
   { label: string; symbol: string; color: string }
 > = {
-  improved: { label: '개선', symbol: '+', color: 'var(--olive)' },
-  weakened: { label: '후퇴', symbol: '−', color: 'var(--porphyra)' },
+  improved: { label: '개선', symbol: '+', color: 'var(--olive-ink)' },
+  weakened: { label: '후퇴', symbol: '−', color: 'var(--porphyra-ink)' },
   mixed: { label: '혼재', symbol: '±', color: 'var(--ink-2)' },
   unchanged: { label: '변화 없음', symbol: '=', color: 'var(--ink-3)' },
   new_claim: { label: '새 언급', symbol: '∗', color: 'var(--ink-3)' },

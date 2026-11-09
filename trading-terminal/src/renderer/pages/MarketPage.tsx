@@ -123,7 +123,7 @@ export default function MarketPage() {
         <SearchField value={query} onChange={changeQuery} />
       </div>
 
-      <section className="glass glass-flat rim rounded-[28px] flex flex-col" aria-label="종목 목록">
+      <section className="cloud rounded-[28px] flex flex-col" aria-label="종목 목록">
         {!isLoaded || (filter === 'week' && timelineStatus === 'loading') ? (
           <LoadingBlock lines={10} lineHeight={20} className="p-5" />
         ) : listFailed ? (
@@ -140,7 +140,7 @@ export default function MarketPage() {
             <EmptyState
               message={`${filter === 'all' ? '' : `${FILTER_LABELS[filter]} 종목 중 `}"${query.trim()}" 검색 결과가 없습니다.`}
               action={
-                <button type="button" className="gbtn rim gbtn-sm" onClick={() => changeQuery('')}>
+                <button type="button" className="gbtn gbtn-sm" onClick={() => changeQuery('')}>
                   검색어 지우기
                 </button>
               }
@@ -240,7 +240,7 @@ function FailureState({
       <p className="text-danger text-[13px] font-semibold">{message}</p>
       {reason && <p className="text-ink-3 text-[12px] max-w-[48ch] break-words">{reason}</p>}
       {onRetry && (
-        <button type="button" className="gbtn rim gbtn-sm" onClick={onRetry}>
+        <button type="button" className="gbtn gbtn-sm" onClick={onRetry}>
           다시 시도
         </button>
       )}

@@ -31,7 +31,7 @@
 
   /* ── 채널 ─────────────────────────────────────────────────────────── */
   /* 바탕과 불투명 면(목록 · 입력 · 펼침 메뉴) */
-  --bg-rgb: 29 30 34;
+  --bg-rgb: 22 23 27;
   --surface-0-rgb: 33 34 38;
   --surface-1-rgb: 38 39 43;
   --surface-2-rgb: 45 46 51;
@@ -54,6 +54,9 @@
   --lapis-rgb: 92 140 255;
   --olive-rgb: 176 204 82;
   --porphyra-rgb: 232 102 192;
+  /* 같은 색을 글자로 쓸 때(대조 '개선' · '후퇴', 실행 조건) — 라이트에서는 대비를 위해 더 진하다 */
+  --olive-ink-rgb: 176 204 82;
+  --porphyra-ink-rgb: 232 102 192;
 
   /* 가격 — 상승 빨강 · 하락 파랑, 글자에만 */
   --up-rgb: 255 90 95;
@@ -86,6 +89,8 @@
   --lapis: rgb(var(--lapis-rgb));
   --olive: rgb(var(--olive-rgb));
   --porphyra: rgb(var(--porphyra-rgb));
+  --olive-ink: rgb(var(--olive-ink-rgb));
+  --porphyra-ink: rgb(var(--porphyra-ink-rgb));
   --up: rgb(var(--up-rgb));
   --down: rgb(var(--down-rgb));
   --ok: rgb(var(--ok-rgb));
@@ -108,12 +113,49 @@
   /* 유리 위 글자 그림자 — 뒤가 밝아져도 대비를 지킨다 */
   --glass-text-shadow: 0 1px 2px rgb(0 0 0 / 0.55);
   --gbtn-text-shadow: 0 1px 2px rgb(0 0 0 / 0.45);
-  /* 서리 유리 */
-  --frost-fill: rgb(18 19 22 / 0.58);
-  --frost-edge: inset 0 1px 0 rgb(255 255 255 / 0.18), inset 0 0 0 1px rgb(255 255 255 / 0.08);
-  /* 투명도 줄이기 설정에서 유리 · 서리 유리 대신 까는 불투명 바탕 */
+  /* 투명도 줄이기 설정에서 유리 · 읽는 유리 대신 까는 불투명 바탕 */
   --solid-glass: #2d2e33;
   --solid-frost: #18191c;
+
+  /* 앱 바탕의 옅은 빛 — 브랜드 세 색과 금 */
+  --glow: 0.22;
+  --backdrop:
+    radial-gradient(42vw 52vh at 6% 14%, rgb(92 140 255 / var(--glow)), rgb(92 140 255 / 0) 70%),
+    radial-gradient(44vw 54vh at 92% 6%, rgb(176 204 82 / calc(var(--glow) * 0.9)), rgb(176 204 82 / 0) 70%),
+    radial-gradient(48vw 62vh at 74% 100%, rgb(232 102 192 / calc(var(--glow) * 0.85)), rgb(232 102 192 / 0) 70%),
+    radial-gradient(40vw 52vh at 22% 96%, rgb(226 189 98 / calc(var(--glow) * 0.85)), rgb(226 189 98 / 0) 70%);
+
+  /* 구름(클레이) — 부푼 판 · 작은 구름 · 눌린 자리 */
+  --cloud: linear-gradient(150deg, #2c2d34, #24252b 45%, #1d1e23);
+  --puff-big:
+    inset 6px 8px 18px rgb(255 255 255 / 0.07), inset -12px -16px 32px rgb(0 0 0 / 0.38),
+    16px 26px 50px -18px rgb(0 0 0 / 0.65), 5px 9px 18px -8px rgb(0 0 0 / 0.5);
+  --puff-small:
+    inset 3px 4px 8px rgb(255 255 255 / 0.1), inset -4px -5px 10px rgb(0 0 0 / 0.4),
+    6px 9px 18px -8px rgb(0 0 0 / 0.6), 2px 3px 7px -3px rgb(0 0 0 / 0.45);
+  --press: inset 5px 6px 13px rgb(0 0 0 / 0.45), inset -3px -4px 9px rgb(255 255 255 / 0.06);
+  --dent-bg: #1a1b1f;
+
+  /* 투명 유리 — 채움은 거의 없고 반사광 · 그림자 · 두께로 보인다 */
+  --glass-fill: rgb(255 255 255 / 0.05);
+  --glass-bright: 1.1;
+  --glass-spec: 0.85;
+  --glass-cast: 0 22px 40px -14px rgb(0 0 0 / 0.6), 0 5px 12px -5px rgb(0 0 0 / 0.45);
+  --glass-thick: inset 0 -12px 18px -12px rgb(0 0 0 / 0.45), inset 0 12px 16px -12px rgb(255 255 255 / 0.22);
+  /* 읽는 유리 — 글 위의 팝오버 · 시트. 흐림과 채움을 더해 아래 글자와 구분한다 */
+  --read-fill: rgb(30 31 37 / 0.66);
+  /* 색상 유리 버튼 */
+  --tint-k: 1;
+  --tint-glow: 0.5;
+  --tint-drop: 0 12px 26px -14px rgb(0 0 0 / 0.55);
+  /* 색상 유리 글자 그림자 세기(검은 그림자 · 색 번짐). --c 는 버튼마다 달라 여기서 완성하지 않는다 */
+  --tint-ts-shade: 0.35;
+  --tint-ts-glow: 0.45;
+  --on-lapis: var(--ink-1);
+  --on-olive: var(--ink-1);
+  --on-porphyra: var(--ink-1);
+  --on-strong: var(--ink-1);
+  --gbtn-hover: 1.15;
 
   /* 글꼴 */
   --font-sans: 'Pretendard Variable', -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', system-ui, sans-serif;
@@ -131,7 +173,91 @@
   --dur-spring: 380ms;
 
   /* 유리 배경 처리 — 굴절 맵은 lib/refraction.ts 가 앞에 덧붙인다 */
-  --glass-filter: blur(1.5px) saturate(1.6) brightness(1.06);
-  --tint-filter: blur(1.5px) saturate(1.9) brightness(1.12);
-  --frost-filter: blur(22px) saturate(1.2);
+  --glass-filter: blur(2px) saturate(1.5) brightness(var(--glass-bright));
+  --tint-filter: blur(2px) saturate(1.9) brightness(calc(var(--glass-bright) + 0.02));
+  --read-filter: blur(30px) saturate(1.5) brightness(var(--glass-bright));
+}
+
+/*
+ * 라이트 — 채널과 재질 값만 덮어쓴다. 반사광은 두 테마 모두 흰색이고 세기만 다르다.
+ * 그림자는 검정 대신 남색이 섞인 보랏빛(92 80 120 · 44 46 96)을 써서 구름이 뭉글뭉글하게 보이게 한다.
+ */
+:root[data-theme='light'] {
+  color-scheme: light;
+
+  --bg-rgb: 235 233 227;
+  --surface-0-rgb: 250 249 246;
+  --surface-1-rgb: 244 242 237;
+  --surface-2-rgb: 236 234 228;
+  --surface-3-rgb: 226 223 216;
+
+  --ink-rgb: 27 28 32;
+  --a-ink-2: 0.78;
+  --a-ink-3: 0.58;
+  --a-ink-4: 0.42;
+  --a-line: 0.09;
+  --a-line-strong: 0.14;
+
+  --gold-hi-rgb: 244 217 140;
+  --gold-rgb: 192 143 38;
+  --gold-lo-rgb: 106 72 14;
+
+  --lapis-rgb: 52 98 226;
+  --olive-rgb: 112 142 22;
+  --porphyra-rgb: 186 52 146;
+  --olive-ink-rgb: 93 118 18;
+  --porphyra-ink-rgb: 176 48 127;
+
+  --up-rgb: 209 52 59;
+  --down-rgb: 40 98 214;
+
+  --ok-rgb: 93 118 18;
+  --danger-rgb: 196 81 42;
+  --caution-rgb: 158 108 16;
+
+  --wash-rgb: 27 28 32;
+  --edge-rgb: 27 28 32;
+  --scrim-rgb: 250 249 246;
+  --table-head-rgb: 244 242 237;
+
+  --shadow-sm: 0 1px 2px rgb(44 46 96 / 0.12);
+  --shadow-md: 0 4px 10px rgb(44 46 96 / 0.14);
+  --shadow-lg: 0 14px 34px -12px rgb(44 46 96 / 0.24);
+  --shadow-xl: 0 24px 60px -16px rgb(44 46 96 / 0.3);
+  --shadow-dialog: 0 24px 60px -16px rgb(44 46 96 / 0.3);
+  --shadow-side: -12px 0 48px rgb(44 46 96 / 0.18);
+
+  --glass-text-shadow: none;
+  --gbtn-text-shadow: none;
+  --solid-glass: #f4f2ed;
+  --solid-frost: #fbfaf6;
+
+  --glow: 0.36;
+
+  --cloud: linear-gradient(150deg, #ffffff, #fbfaf6 40%, #eeebe3);
+  --puff-big:
+    inset 6px 8px 18px rgb(255 255 255 / 1), inset -12px -16px 32px rgb(92 80 120 / 0.12),
+    16px 26px 50px -18px rgb(92 80 120 / 0.32), 5px 9px 18px -8px rgb(92 80 120 / 0.18);
+  --puff-small:
+    inset 3px 4px 9px rgb(255 255 255 / 0.95), inset -4px -5px 10px rgb(92 80 120 / 0.12),
+    6px 9px 18px -8px rgb(92 80 120 / 0.3), 2px 3px 7px -3px rgb(92 80 120 / 0.2);
+  --press: inset 5px 6px 13px rgb(92 80 120 / 0.18), inset -3px -4px 9px rgb(255 255 255 / 0.85);
+  --dent-bg: #f1eee7;
+
+  --glass-fill: rgb(255 255 255 / 0.1);
+  --glass-bright: 1.03;
+  --glass-spec: 0.95;
+  --glass-cast: 0 22px 40px -14px rgb(44 46 96 / 0.34), 0 5px 12px -5px rgb(44 46 96 / 0.2);
+  --glass-thick: inset 0 -12px 18px -12px rgb(34 38 70 / 0.3), inset 0 12px 16px -12px rgb(255 255 255 / 0.95);
+  --read-fill: rgb(255 255 255 / 0.62);
+
+  --tint-k: 0.75;
+  --tint-glow: 0.3;
+  --tint-drop: 0 8px 18px -10px rgb(44 46 96 / 0.3);
+  --tint-ts-shade: 0;
+  --tint-ts-glow: 0;
+  --on-lapis: rgb(31 71 184);
+  --on-olive: rgb(var(--olive-ink-rgb));
+  --on-porphyra: rgb(var(--porphyra-ink-rgb));
+  --gbtn-hover: 1.04;
 }

@@ -165,7 +165,7 @@ export default function AssetsView() {
   const failedWithoutBalance = !hasBalance && balanceFetchError != null && !isSyncing
 
   const retryButton = (
-    <button type="button" className="gbtn rim gbtn-sm" onClick={() => void syncBalance()} disabled={isSyncing}>
+    <button type="button" className="gbtn gbtn-sm" onClick={() => void syncBalance()} disabled={isSyncing}>
       {isSyncing ? '조회 중' : '다시 조회'}
     </button>
   )
@@ -173,7 +173,7 @@ export default function AssetsView() {
   return (
     <div className="h-full min-h-0 flex flex-col gap-4">
       <div className="grid grid-cols-[minmax(0,5fr)_minmax(0,7fr)] gap-4 shrink-0 h-[300px]">
-        <section className="relative glass rim on-glass rounded-[28px] p-6 flex flex-col gap-5" aria-label="계좌 요약">
+        <section className="relative cloud rounded-[28px] p-6 flex flex-col gap-5" aria-label="계좌 요약">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-baseline gap-2 min-w-0">
               <h2 className="text-[18px] font-semibold text-ink-1 whitespace-nowrap">계좌</h2>
@@ -188,7 +188,7 @@ export default function AssetsView() {
             </div>
             <button
               type="button"
-              className="gbtn rim gbtn-sm shrink-0"
+              className="gbtn gbtn-sm shrink-0"
               onClick={() => void syncBalance()}
               disabled={isSyncing}
             >
@@ -222,7 +222,7 @@ export default function AssetsView() {
         <AssetTrendCard />
       </div>
 
-      <section className="relative frost rim rounded-[28px] flex-1 min-h-[240px] overflow-hidden" aria-label="보유 종목">
+      <section className="relative cloud rounded-[28px] flex-1 min-h-[240px] overflow-hidden" aria-label="보유 종목">
         {failedWithoutBalance ? (
           <EmptyState message="잔고를 불러오지 못해 보유 종목을 표시할 수 없습니다." action={retryButton} className="h-full" />
         ) : !hasBalance ? (

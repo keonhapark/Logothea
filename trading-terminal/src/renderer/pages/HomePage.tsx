@@ -87,7 +87,7 @@ export default function HomePage() {
               <EmptyState
                 message="관심 종목이나 보유 종목이 없습니다. 종목 브리핑에서 관심 종목을 더하면 여기에 콜 일정이 모입니다."
                 action={
-                  <button type="button" className="gbtn rim gbtn-sm" onClick={() => navigate('/stocks')}>
+                  <button type="button" className="gbtn gbtn-sm" onClick={() => navigate('/stocks')}>
                     종목 찾기
                   </button>
                 }
@@ -200,7 +200,7 @@ function LiveCallCard({
 }) {
   return (
     <section
-      className="glass glass-flat rim rim-float rounded-[28px] px-6 py-5 flex items-center gap-6"
+      className="cloud rounded-[28px] px-6 py-5 flex items-center gap-6"
       aria-label="진행 중인 콜"
     >
       <div className="flex flex-col gap-1.5 min-w-0 flex-1">
@@ -219,7 +219,7 @@ function LiveCallCard({
           <span className="num">{event.elapsed}</span>
         </span>
       </div>
-      <button type="button" onClick={onOpen} className="gbtn gbtn-lapis rim">
+      <button type="button" onClick={onOpen} className="gbtn gbtn-lapis">
         콜 화면 열기
       </button>
     </section>
@@ -331,7 +331,7 @@ function TimelineError({ onRetry }: { onRetry: () => void }) {
     <EmptyState
       message="실적 콜 일정을 불러오지 못했습니다."
       action={
-        <button type="button" className="gbtn rim gbtn-sm" onClick={onRetry}>
+        <button type="button" className="gbtn gbtn-sm" onClick={onRetry}>
           다시 시도
         </button>
       }
@@ -389,7 +389,7 @@ function AccountSummary({
         ) : neverSynced && balanceFetchError ? (
           <div className="flex flex-col items-start gap-3">
             <p className="text-[13px] text-ink-3">잔고를 불러오지 못했습니다.</p>
-            <button type="button" className="gbtn rim gbtn-sm" onClick={onRetry} disabled={isSyncing}>
+            <button type="button" className="gbtn gbtn-sm" onClick={onRetry} disabled={isSyncing}>
               다시 시도
             </button>
           </div>
@@ -423,7 +423,7 @@ function AccountSummary({
                 <span style={{ color: 'var(--caution)' }}>
                   동기화 실패 · {lastSyncedAt ? `${formatSyncTime(lastSyncedAt)} 값` : '이전 값'}
                 </span>
-                <button type="button" className="gbtn rim gbtn-sm" onClick={onRetry} disabled={isSyncing}>
+                <button type="button" className="gbtn gbtn-sm" onClick={onRetry} disabled={isSyncing}>
                   다시 시도
                 </button>
               </div>
@@ -482,7 +482,7 @@ function IndexRow({ item }: { item: MarketIndexItem }) {
 
 function Panel({ title, meta, children }: { title: string; meta?: string; children: React.ReactNode }) {
   return (
-    <section className="glass glass-flat rim rounded-[28px] flex flex-col" aria-label={title}>
+    <section className="cloud rounded-[28px] flex flex-col" aria-label={title}>
       <div className="flex items-baseline justify-between gap-3 px-5 pt-4 pb-2">
         <h2 className="text-[16px] font-semibold text-ink-1 on-glass">{title}</h2>
         {meta && <span className="text-[12px] text-ink-3">{meta}</span>}

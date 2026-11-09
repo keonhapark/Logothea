@@ -36,9 +36,9 @@ const ACTION_LABELS: Record<string, string> = {
 
 /** 실행 조건 — 통과는 올리브, 조건부 보류는 ink-2, 차단은 포르피라 글자 (design-system 종합 판단). */
 const GATE_META: Record<string, { label: string; color: string }> = {
-  pass: { label: '통과', color: 'var(--olive)' },
+  pass: { label: '통과', color: 'var(--olive-ink)' },
   soft_block: { label: '조건부 보류', color: 'var(--ink-2)' },
-  hard_block: { label: '차단', color: 'var(--porphyra)' },
+  hard_block: { label: '차단', color: 'var(--porphyra-ink)' },
 }
 
 /**
@@ -99,7 +99,7 @@ function signedPct(v: number | null): string {
  */
 export default function CallVerdict({ summary, diffCounts, previousCallLabel, onOpenTicker, demoStopped = false, topInset }: CallVerdictProps) {
   return (
-    <section className="frost relative h-full rounded-[28px] overflow-hidden" aria-label="종합 판단">
+    <section className="cloud relative h-full rounded-[28px] overflow-hidden" aria-label="종합 판단">
       <ScrollEdge height={topInset + 12} />
       {/* 위쪽에 판단 / 질문 전환이 떠 있어, 본문이 그 아래로 지나가면 글자가 겹친다. 스크롤 영역을 전환 아래에서 시작한다 */}
       <div className="absolute inset-x-0 bottom-0 overflow-y-auto" style={{ top: topInset }}>
@@ -351,7 +351,7 @@ function DiffSummary({
 
 function Fold({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
   return (
-    <details className="group glass rim rounded-[18px] px-4 py-3 [&_summary::-webkit-details-marker]:hidden">
+    <details className="group cloud-s rounded-[18px] px-4 py-3 [&_summary::-webkit-details-marker]:hidden">
       <summary className="flex items-center justify-between gap-3 cursor-pointer list-none">
         <span className="text-[14px] font-semibold text-ink-1 on-glass">{title}</span>
         <span className="flex items-center gap-2 text-[12px] text-ink-3">

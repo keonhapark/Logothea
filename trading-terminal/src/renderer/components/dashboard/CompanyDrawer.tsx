@@ -230,7 +230,7 @@ function PanelHeader({
           </span>
         )}
       </div>
-      <button type="button" aria-label="닫기" onClick={onClose} className="gbtn rim gbtn-icon gbtn-sm">
+      <button type="button" aria-label="닫기" onClick={onClose} className="gbtn gbtn-icon gbtn-sm">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden>
           <path d="M4 4l8 8M12 4l-8 8" />
         </svg>
@@ -274,7 +274,7 @@ function ActionBar({
         type="button"
         onClick={toggleWatchlist}
         disabled={busy}
-        className="gbtn rim flex-1"
+        className="gbtn flex-1"
         aria-pressed={isWatched}
       >
         <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden>
@@ -283,7 +283,7 @@ function ActionBar({
         {isWatched ? '관심 해제' : '관심 추가'}
       </button>
       {onOpenCall && (
-        <button type="button" onClick={() => onOpenCall(ticker)} className="gbtn gbtn-lapis rim flex-[1.4]">
+        <button type="button" onClick={() => onOpenCall(ticker)} className="gbtn gbtn-lapis flex-[1.4]">
           콜 화면 열기
         </button>
       )}
