@@ -75,7 +75,7 @@ export default function SettingsPage() {
 /* -------------------------------------------------------------------------- */
 function PaperAccountPanel() {
   return (
-    <section className="glass rim rounded-[var(--radius-panel)] p-6 flex flex-col gap-3">
+    <section className="cloud rounded-[var(--radius-panel)] p-6 flex flex-col gap-3">
       <div className="flex items-center gap-3">
         <h2 className="on-glass text-ink-1 text-[16px] font-semibold">페이퍼 계정</h2>
         <StatusChip ok label="준비됨" />
@@ -279,7 +279,7 @@ function KisPanel() {
         : `${KIS_MODE_LABEL[otherMode]} 키도 등록하면 바꿀 수 있습니다.`
 
   return (
-    <section className="glass rim rounded-[var(--radius-panel)] p-6 flex flex-col gap-6">
+    <section className="cloud rounded-[var(--radius-panel)] p-6 flex flex-col gap-6">
       <div className="flex items-center gap-3">
         <h2 className="on-glass text-ink-1 text-[16px] font-semibold">KIS 연동</h2>
         <StatusChip ok={isKisHealthy} label={isKisHealthy ? '연결 정상' : '연결 대기'} />
@@ -401,7 +401,7 @@ function KisKeyRow({
           <div className="flex items-center gap-2">
             <span className="text-ink-1 text-[14px] font-semibold">{KIS_MODE_LABEL[mode]}</span>
             {inUse && (
-              <span className="glass rim rounded-full px-2 py-0.5 text-[11px] font-semibold text-ink-1 on-glass">사용 중</span>
+              <span className="cloud-s rim rounded-full px-2 py-0.5 text-[11px] font-semibold text-ink-1 on-glass">사용 중</span>
             )}
           </div>
           {registered && masked ? (
@@ -446,7 +446,7 @@ function KisKeyRow({
       </div>
 
       {editing && canEdit && (
-        <div className="frost rounded-[20px] p-4">
+        <div className="dent rounded-[20px] p-4">
           <KisKeyForm
             mode={mode}
             existing={registered ? masked : null}
@@ -536,7 +536,7 @@ const APP_SETTINGS: { title: string; note: string }[] = [
 
 function AppSettingsPanel() {
   return (
-    <section className="glass rim rounded-[var(--radius-panel)] p-6 flex flex-col gap-4">
+    <section className="cloud rounded-[var(--radius-panel)] p-6 flex flex-col gap-4">
       <h2 className="on-glass text-ink-1 text-[16px] font-semibold">앱 설정</h2>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {APP_SETTINGS.map((it) => (

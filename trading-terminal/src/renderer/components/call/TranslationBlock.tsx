@@ -153,9 +153,9 @@ function TermPopover({
       }}
       aria-label={`${term.ko} 용어 설명`}
       tabIndex={-1}
-      className="frost rim fixed z-[400] rounded-[20px] px-5 py-4 flex flex-col gap-3 outline-none"
+      className="read fixed z-[400] rounded-[20px] px-5 py-4 flex flex-col gap-3 outline-none"
       // 글자 위에 뜨는 작은 판이라 서리 유리보다 짙게 깐다 — 뒤 자막이 비치면 설명을 읽기 어렵다
-      style={{ width: POPOVER_WIDTH, left: pos?.left ?? -9999, top: pos?.top ?? -9999, background: 'rgb(var(--scrim-rgb) / 0.92)' }}
+      style={{ width: POPOVER_WIDTH, left: pos?.left ?? -9999, top: pos?.top ?? -9999 }}
     >
       <div className="flex items-baseline gap-2 flex-wrap">
         <span className="text-[15px] font-semibold text-ink-1">{term.ko}</span>

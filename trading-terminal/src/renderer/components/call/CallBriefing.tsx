@@ -25,7 +25,7 @@ export default function CallBriefing({ detail, loading, error, topInset }: CallB
   const history = [...(detail?.earningsHistory ?? [])].sort((a, b) => b.announcedAt - a.announcedAt).slice(0, 4)
 
   return (
-    <section className="frost relative h-full rounded-[28px] overflow-hidden" aria-label="시작 전 브리핑">
+    <section className="cloud relative h-full rounded-[28px] overflow-hidden" aria-label="시작 전 브리핑">
       <ScrollEdge height={topInset + 12} />
       <div className="absolute inset-0 overflow-y-auto" style={{ paddingTop: topInset }}>
         <div className="px-8 pt-4 pb-10 flex flex-col gap-8 max-w-[760px]">

@@ -59,7 +59,7 @@ export default function Tabs({
 
         if (variant === 'pill') {
           const pillCls = isActive
-            ? 'glass rim rim-float text-text-primary rounded-full on-glass'
+            ? 'cloud-s rim text-text-primary rounded-full'
             : 'text-text-tertiary hover:text-text-primary rounded-full'
           return (
             <button

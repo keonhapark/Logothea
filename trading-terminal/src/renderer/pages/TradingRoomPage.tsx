@@ -509,7 +509,7 @@ export default function TradingRoomPage() {
               topInset={TOP_INSET}
             />
             <aside
-              className="frost h-full rounded-[28px] overflow-y-auto px-6 pb-6"
+              className="cloud h-full rounded-[28px] overflow-y-auto px-6 pb-6"
               style={{ paddingTop: TOP_INSET + 16 }}
               aria-label="가격과 내 포지션"
             >
@@ -571,7 +571,7 @@ export default function TradingRoomPage() {
                 />
               ) : (
                 <section
-                  className="frost h-full rounded-[28px] overflow-hidden flex flex-col px-6 pb-5"
+                  className="cloud h-full rounded-[28px] overflow-hidden flex flex-col px-6 pb-5"
                   style={{ paddingTop: TOP_INSET + ENDED_SWITCH_HEIGHT }}
                   aria-label="질문"
                 >

@@ -97,7 +97,7 @@ export default function Dropdown<V extends string = string>({
         aria-label={ariaLabel}
         onClick={() => setOpen((o) => !o)}
         onKeyDown={handleKey}
-        className="glass rim inline-flex items-center gap-1.5 px-3.5 h-[32px] rounded-full
+        className="glass inline-flex items-center gap-1.5 px-3.5 h-[32px] rounded-full
                    text-text-secondary text-[12px] hover:text-text-primary transition-colors duration-100
                    whitespace-nowrap"
       >
@@ -126,7 +126,7 @@ export default function Dropdown<V extends string = string>({
             // 열릴 때 자동 포커스 (키보드 접근성)
             if (el) el.focus()
           }}
-          className="frost absolute top-full left-0 mt-1.5 min-w-full z-50
+          className="read absolute top-full left-0 mt-1.5 min-w-full z-50
                      rounded-[16px] shadow-lg
                      p-1 max-h-64 overflow-y-auto focus:outline-none"
         >

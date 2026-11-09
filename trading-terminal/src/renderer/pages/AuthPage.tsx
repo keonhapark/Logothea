@@ -68,7 +68,7 @@ export default function AuthPage() {
   }
 
   return (
-    <div className="relative h-screen w-screen overflow-hidden bg-bg-base text-ink-2">
+    <div className="relative h-screen w-screen overflow-hidden text-ink-2">
       {/*
         macOS 창 드래그 영역. 이 화면에는 메뉴가 없어 창을 잡을 곳이 없다.
         상단 40px 는 비어 있어 겹치는 컨트롤이 없다.
@@ -177,7 +177,7 @@ function LoginForm({ onSuccess }: { onSuccess: (user: any, accountType?: string)
 
   return (
     <>
-      <div className="frost rim rim-float w-[400px] max-w-full rounded-[var(--radius-sheet)] px-8 pt-7 pb-7">
+      <div className="cloud w-[400px] max-w-full rounded-[var(--radius-sheet)] px-8 pt-7 pb-7">
         <form onSubmit={handleSubmit} className="flex flex-col">
           <h1 className="text-ink-1 text-[19px] font-bold">로그인</h1>
 
@@ -315,7 +315,7 @@ function KisKeyOffer({ onSaved, onSkip }: { onSaved: () => Promise<void>; onSkip
   }
 
   return (
-    <div className="frost rim rim-float w-[440px] max-w-full rounded-[var(--radius-sheet)] px-8 pt-7 pb-7 flex flex-col gap-5">
+    <div className="cloud w-[440px] max-w-full rounded-[var(--radius-sheet)] px-8 pt-7 pb-7 flex flex-col gap-5">
       <div className="flex flex-col gap-1.5">
         <h1 className="text-ink-1 text-[19px] font-bold">주문용 KIS 키 등록</h1>
         <p className="text-ink-3 text-[13px] leading-relaxed">
