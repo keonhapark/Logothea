@@ -24,7 +24,7 @@ function TranslationBlock({ item, compact = false }: TranslationBlockProps) {
   }, [])
 
   return (
-    <div className={`border-l-2 border-white/15 ${compact ? 'pl-3' : 'pl-4'} flex flex-col gap-1`}>
+    <div className={`border-l-2 border-edge/15 ${compact ? 'pl-3' : 'pl-4'} flex flex-col gap-1`}>
       <span className="text-[11px] text-ink-3">번역</span>
       <p className={`select-text leading-[1.7] text-ink-1 ${compact ? 'text-[13px]' : 'text-[14.5px]'}`}>
         {renderWithTerms(item, openSpan?.span ?? null, popoverId, toggle)}
@@ -155,7 +155,7 @@ function TermPopover({
       tabIndex={-1}
       className="frost rim fixed z-[400] rounded-[20px] px-5 py-4 flex flex-col gap-3 outline-none"
       // 글자 위에 뜨는 작은 판이라 서리 유리보다 짙게 깐다 — 뒤 자막이 비치면 설명을 읽기 어렵다
-      style={{ width: POPOVER_WIDTH, left: pos?.left ?? -9999, top: pos?.top ?? -9999, background: 'rgba(18, 19, 22, 0.92)' }}
+      style={{ width: POPOVER_WIDTH, left: pos?.left ?? -9999, top: pos?.top ?? -9999, background: 'rgb(var(--scrim-rgb) / 0.92)' }}
     >
       <div className="flex items-baseline gap-2 flex-wrap">
         <span className="text-[15px] font-semibold text-ink-1">{term.ko}</span>

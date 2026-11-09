@@ -41,7 +41,7 @@ export default function CompanyLogo({
   if (fg) style.color = fg
   // 디자인 캔버스의 inset 1px 보더 효과 — 헥스 미전달 시도 자연스럽게
   style.boxShadow = `inset 0 0 0 1px ${
-    fg ? hexToRgba(fg, 0.18) : 'rgba(255,255,255,0.08)'
+    fg ? hexToRgba(fg, 0.18) : 'rgb(var(--wash-rgb) / 0.08)'
   }`
 
   const fallbackCls = bg ? '' : 'bg-surface-3'

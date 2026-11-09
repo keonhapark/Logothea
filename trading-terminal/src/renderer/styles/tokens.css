@@ -64,6 +64,14 @@
   --danger-rgb: 255 138 92;
   --caution-rgb: 226 189 98;
 
+  /* 옅은 면 · 옅은 테두리 — 바탕 위에 투명도를 붙여 쓴다(bg-wash/[0.04] · border-edge/[0.06]) */
+  --wash-rgb: 255 255 255;
+  --edge-rgb: 255 255 255;
+  /* 글자 위에 뜨는 판의 바탕 · 스크롤 끝 옅어짐 */
+  --scrim-rgb: 18 19 22;
+  /* 표 머리 — 스크롤해도 아래 행이 비치지 않는 불투명 면 */
+  --table-head-rgb: 23 24 27;
+
   /* ── 완성 값 ──────────────────────────────────────────────────────── */
   --bg: rgb(var(--bg-rgb));
   --ink-1: rgb(var(--ink-rgb));
@@ -90,6 +98,13 @@
   --shadow-lg: 0 14px 34px -12px rgb(0 0 0 / 0.55);
   --shadow-xl: 0 24px 60px -16px rgb(0 0 0 / 0.7);
   --shadow-dialog: 0 24px 60px -16px rgb(0 0 0 / 0.7);
+  --shadow-side: -12px 0 48px rgb(0 0 0 / 0.5);
+  /* 차트 · 게이지 */
+  --chart-grid: rgb(var(--ink-rgb) / 0.08);
+  --chart-area: rgb(var(--ink-rgb) / 0.06);
+  --chart-hatch: rgb(var(--ink-rgb) / 0.18);
+  --chart-ring: rgb(var(--surface-0-rgb));
+  --chart-label: rgb(71 85 105);
   /* 유리 위 글자 그림자 — 뒤가 밝아져도 대비를 지킨다 */
   --glass-text-shadow: 0 1px 2px rgb(0 0 0 / 0.55);
   --gbtn-text-shadow: 0 1px 2px rgb(0 0 0 / 0.45);

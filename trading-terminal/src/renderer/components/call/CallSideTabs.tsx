@@ -75,7 +75,7 @@ export default function CallSideTabs({ diffItems, onFocusSequence, price, ask, t
                       <button
                         type="button"
                         onClick={() => onFocusSequence(item.sequence)}
-                        className="w-full text-left rounded-[14px] px-3 py-2 hover:bg-white/[0.05] flex flex-col gap-0.5"
+                        className="w-full text-left rounded-[14px] px-3 py-2 hover:bg-wash/[0.05] flex flex-col gap-0.5"
                       >
                         <span className="text-[12.5px] font-semibold" style={{ color: meta.color }}>
                           {meta.symbol} {meta.label} · <span className="text-ink-2 font-medium">{topicLabel(item.topic)}</span>

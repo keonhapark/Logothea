@@ -134,7 +134,7 @@ function Sparkline({ series }: { series: readonly PricePoint[] }) {
   return (
     <figure className="flex flex-col gap-1">
       <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="w-full h-[120px]" role="img" aria-label="30일 종가 추이">
-        <path d={path.area} fill="rgba(251,250,246,0.06)" />
+        <path d={path.area} fill="var(--chart-area)" />
         <path d={path.line} fill="none" stroke="var(--ink-2)" strokeWidth="1.5" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
       </svg>
       <figcaption className="flex justify-between num text-[11px] text-ink-3">

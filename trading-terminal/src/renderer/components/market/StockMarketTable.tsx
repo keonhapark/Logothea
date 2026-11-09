@@ -50,12 +50,12 @@ export default function StockMarketTable({ stocks, rankOffset, prices, marks, on
             <tr
               key={stock.ticker}
               onClick={() => onPick(stock.ticker)}
-              className="cursor-pointer transition-colors duration-100 hover:bg-white/[0.05] focus-within:bg-white/[0.05]"
+              className="cursor-pointer transition-colors duration-100 hover:bg-wash/[0.05] focus-within:bg-wash/[0.05]"
             >
-              <td className="num text-right text-[12px] text-ink-3 pl-5 pr-3 py-2.5 border-t border-white/[0.06]">
+              <td className="num text-right text-[12px] text-ink-3 pl-5 pr-3 py-2.5 border-t border-edge/[0.06]">
                 {rankOffset + idx + 1}
               </td>
-              <td className="px-3 py-2.5 border-t border-white/[0.06]">
+              <td className="px-3 py-2.5 border-t border-edge/[0.06]">
                 <button
                   type="button"
                   aria-label={`${stock.ticker} 종목 브리핑 열기`}
@@ -65,7 +65,7 @@ export default function StockMarketTable({ stocks, rankOffset, prices, marks, on
                   {stock.ticker}
                 </button>
               </td>
-              <td className="px-3 py-2.5 border-t border-white/[0.06] max-w-0">
+              <td className="px-3 py-2.5 border-t border-edge/[0.06] max-w-0">
                 <div className="flex items-center gap-2 min-w-0">
                   <span className="text-ink-2 truncate">{stock.companyName}</span>
                   {watched && <WatchStar />}
@@ -73,17 +73,17 @@ export default function StockMarketTable({ stocks, rankOffset, prices, marks, on
                   {callAt !== undefined && <Mark>콜 {formatCallDate(callAt)}</Mark>}
                 </div>
               </td>
-              <td className="px-3 py-2.5 text-ink-3 hidden xl:table-cell truncate max-w-[200px] border-t border-white/[0.06]">
+              <td className="px-3 py-2.5 text-ink-3 hidden xl:table-cell truncate max-w-[200px] border-t border-edge/[0.06]">
                 {stock.sector ?? '—'}
               </td>
-              <td className="tabular-nums text-right px-3 py-2.5 text-ink-2 border-t border-white/[0.06]">
+              <td className="tabular-nums text-right px-3 py-2.5 text-ink-2 border-t border-edge/[0.06]">
                 {formatMarketCap(stock.marketCapUsd)}
               </td>
-              <td className="tabular-nums text-right px-3 py-2.5 text-ink-1 border-t border-white/[0.06]">
+              <td className="tabular-nums text-right px-3 py-2.5 text-ink-1 border-t border-edge/[0.06]">
                 {formatPrice(price)}
               </td>
               <td
-                className={`tabular-nums text-right pl-3 pr-5 py-2.5 font-medium border-t border-white/[0.06] ${
+                className={`tabular-nums text-right pl-3 pr-5 py-2.5 font-medium border-t border-edge/[0.06] ${
                   change.dir ? CHANGE_COLOR[change.dir] : 'text-ink-3'
                 }`}
               >
@@ -112,7 +112,7 @@ function Mark({ children, strong = false }: { children: React.ReactNode; strong?
   return (
     <span
       className={`shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-[11.5px] font-semibold border tabular-nums
-                  ${strong ? 'text-ink-1 border-white/25' : 'text-ink-3 border-white/10'}`}
+                  ${strong ? 'text-ink-1 border-edge/25' : 'text-ink-3 border-edge/10'}`}
     >
       {children}
     </span>

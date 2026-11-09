@@ -255,7 +255,7 @@ function SchedulePager({
         ))}
       </div>
       {pages.length > 1 && (
-        <div className="border-t border-white/[0.06]">
+        <div className="border-t border-edge/[0.06]">
           <Pagination page={current} totalPages={pages.length} onPageChange={setPage} />
         </div>
       )}
@@ -308,7 +308,7 @@ function EventList({
               onClick={() => onPick(e.ticker)}
               className="w-full grid grid-cols-[176px_64px_minmax(0,1fr)_auto_20px] items-center gap-3
                          px-3 py-2.5 rounded-[14px] text-left transition-colors duration-100
-                         hover:bg-white/[0.05] focus-visible:outline focus-visible:outline-1 focus-visible:outline-gold"
+                         hover:bg-wash/[0.05] focus-visible:outline focus-visible:outline-1 focus-visible:outline-gold"
             >
               <span className="text-[13px] text-ink-2 tabular-nums">
                 {showDate ? formatDateTime(e.scheduledAt) : formatClock(e.scheduledAt)}
@@ -343,7 +343,7 @@ function Tag({ tag }: { tag: MineTag }) {
   return (
     <span
       className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11.5px] font-semibold border
-                  ${tag === '보유' ? 'text-ink-1 border-white/25' : 'text-ink-3 border-white/10'}`}
+                  ${tag === '보유' ? 'text-ink-1 border-edge/25' : 'text-ink-3 border-edge/10'}`}
     >
       {tag}
     </span>
@@ -465,7 +465,7 @@ function IndexRow({ item }: { item: MarketIndexItem }) {
   // 금리처럼 % 로 표시하는 지표의 등락은 %p 다.
   const chgLabel = `${sign}${Math.abs(chg).toFixed(2)}${item.format === 'percent' ? '%p' : '%'}`
   return (
-    <li className="flex items-baseline gap-3 py-2 border-b border-white/[0.06] last:border-b-0">
+    <li className="flex items-baseline gap-3 py-2 border-b border-edge/[0.06] last:border-b-0">
       <span className="num text-[12.5px] font-semibold text-ink-3 w-10">{item.symbol}</span>
       <span className="flex-1 text-right text-[14px] tabular-nums text-ink-1">{price}</span>
       <span

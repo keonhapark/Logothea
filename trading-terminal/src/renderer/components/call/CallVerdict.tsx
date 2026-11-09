@@ -372,8 +372,8 @@ function Meter({ label, value }: { label: string; value: number | null }) {
       <span className="text-[12px] text-ink-3 w-12 shrink-0">{label}</span>
       {/* 값이 없으면 0% 막대로 그리지 않는다 — 0 과 미상은 다른 이야기다. */}
       <div
-        className="flex-1 h-1 rounded-full bg-white/[0.08]"
-        style={value === null ? { backgroundImage: 'repeating-linear-gradient(90deg, rgba(251,250,246,0.18) 0 3px, transparent 3px 6px)' } : undefined}
+        className="flex-1 h-1 rounded-full bg-wash/[0.08]"
+        style={value === null ? { backgroundImage: 'repeating-linear-gradient(90deg, var(--chart-hatch) 0 3px, transparent 3px 6px)' } : undefined}
       >
         {value !== null && <div className="h-full rounded-full bg-ink-2" style={{ width: `${value * 100}%` }} />}
       </div>
