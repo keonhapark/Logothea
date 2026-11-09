@@ -11,6 +11,10 @@ interface SegmentedControlProps<V extends string = string> {
   activeId: V
   onChange: (id: V) => void
   className?: string
+  /** 탭 묶음의 이름(화면 낭독기용). */
+  ariaLabel?: string
+  /** 주면 탭에 `${idPrefix}-tab-${id}` 를, 짝 패널에 `${idPrefix}-panel-${id}` 를 잇는다(aria-controls). */
+  idPrefix?: string
 }
 
 /**
@@ -19,15 +23,18 @@ interface SegmentedControlProps<V extends string = string> {
  * 맑은 유리 트랙(금테 1px) 안에서 맑은 유리 썸(금테 1.4px)이 고른 칸으로 스프링처럼 미끄러진다
  * (docs/design/design-system.md 세그먼트). 색상 유리는 버튼에만 쓰므로 썸에는 쓰지 않는다.
  *
- * 키보드: Tab 으로 그룹 진입, ←/→ 로 항목 이동.
+ * 키보드: Tab 으로 그룹 진입, ←/→ 로 항목 이동(Home · End 는 처음 · 끝). 고른 칸으로 포커스도 따라간다.
  */
 export default function SegmentedControl<V extends string = string>({
   items,
   activeId,
   onChange,
   className = '',
+  ariaLabel,
+  idPrefix,
 }: SegmentedControlProps<V>) {
   const trackRef = useRef<HTMLDivElement>(null)
+  const buttonRefs = useRef<(HTMLButtonElement | null)[]>([])
   const [thumb, setThumb] = useState<{ left: number; width: number } | null>(null)
 
   // 고른 칸의 위치 · 폭을 재서 썸을 옮긴다. 라벨 · 개수가 바뀌어 폭이 달라져도 다시 잰다.
@@ -48,20 +55,25 @@ export default function SegmentedControl<V extends string = string>({
     return () => observer.disconnect()
   }, [activeId, items])
 
+  // 고른 칸만 Tab 순서에 있으므로(tabIndex 0), 선택을 옮기면 포커스도 옮겨야 다음 화살표가 이어진다.
   const handleKey = (e: React.KeyboardEvent<HTMLButtonElement>, idx: number) => {
-    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
-      e.preventDefault()
-      onChange(items[(idx + 1) % items.length].id)
-    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
-      e.preventDefault()
-      onChange(items[(idx - 1 + items.length) % items.length].id)
-    }
+    const n = items.length
+    let next: number | null = null
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') next = (idx + 1) % n
+    else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') next = (idx - 1 + n) % n
+    else if (e.key === 'Home') next = 0
+    else if (e.key === 'End') next = n - 1
+    if (next == null) return
+    e.preventDefault()
+    onChange(items[next].id)
+    buttonRefs.current[next]?.focus()
   }
 
   return (
     <div
       ref={trackRef}
       role="tablist"
+      aria-label={ariaLabel}
       className={`dent relative inline-flex p-1 rounded-full ${className}`}
     >
       {thumb && (
@@ -76,7 +88,12 @@ export default function SegmentedControl<V extends string = string>({
         return (
           <button
             key={it.id}
+            ref={(el) => {
+              buttonRefs.current[idx] = el
+            }}
             role="tab"
+            id={idPrefix ? `${idPrefix}-tab-${it.id}` : undefined}
+            aria-controls={idPrefix ? `${idPrefix}-panel-${it.id}` : undefined}
             aria-selected={isActive}
             tabIndex={isActive ? 0 : -1}
             onClick={() => onChange(it.id)}

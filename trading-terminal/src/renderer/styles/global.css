@@ -580,3 +580,28 @@
     .order-body.is-away { transform: none; }
   }
 }
+
+@layer components {
+  /* ── 포트폴리오 비중 도넛 (W5) ────────────────────────────────────────
+     donut-hover-expand(ui-shelf)의 방식. 올린 조각이 굵어지며 바깥으로 나오고 나머지는 옅어진다. */
+  .donut-seg {
+    pointer-events: stroke;
+    transition:
+      transform 450ms var(--spring),
+      stroke-width 450ms var(--spring),
+      opacity 250ms;
+  }
+  .donut-center { animation: donut-center 320ms var(--ease); }
+  @keyframes donut-center { from { opacity: 0; transform: translateY(5px); } }
+  @media (prefers-reduced-motion: reduce) {
+    .donut-seg { transition: opacity 150ms; }
+    .donut-center { animation: none; }
+  }
+}
+
+@layer components {
+  /* ── 손절 · 익절 가격 띠 (W6) ─────────────────────────────────────────
+     forecast-band(ui-shelf)의 방식. 띠는 Tab 으로도 가고, 그때 금테 대신 띠 가장자리를 밝힌다. */
+  .risk-band { cursor: default; transition: opacity 200ms; }
+  .risk-band:focus-visible rect { stroke: var(--gold); stroke-width: 1.5; }
+}
