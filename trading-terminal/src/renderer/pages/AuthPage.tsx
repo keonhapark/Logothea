@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ipc, IPC_CHANNELS, isMac } from '../lib/ipc'
 import { useConnectionStore } from '../store/useConnectionStore'
@@ -111,20 +111,42 @@ function LoginForm({ onSuccess }: { onSuccess: (user: any, accountType?: string)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
+  // 이메일 로그인 버튼의 상태 — 누르면 동그라미로 줄며 돌고(busy), 맞으면 체크를 그린 뒤(ok) 넘어간다
+  const [phase, setPhase] = useState<'idle' | 'busy' | 'ok'>('idle')
+  const loading = phase !== 'idle'
   const [oauthLoading, setOauthLoading] = useState<'google' | 'kakao' | null>(null)
+  const cardRef = useRef<HTMLDivElement>(null)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    if (loading || oauthLoading !== null) return
     setError(null)
-    setLoading(true)
+    setPhase('busy')
+    const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
     try {
       const result = await ipc.invoke<{ user: any; accountType?: string }>(
         IPC_CHANNELS.AUTH_LOGIN,
         { email, password },
       )
+      // 체크가 그려지는 것을 보고 넘어가도록 잠깐 둔다
+      setPhase('ok')
+      if (!reduceMotion) await new Promise((r) => setTimeout(r, 650))
       await onSuccess(result.user, result.accountType)
     } catch (err: any) {
+      // 틀리면 카드가 고개를 젓듯 흔들린다
+      if (!reduceMotion) {
+        cardRef.current?.animate(
+          [
+            { transform: 'none' },
+            { transform: 'translateX(-9px)' },
+            { transform: 'translateX(8px)' },
+            { transform: 'translateX(-5px)' },
+            { transform: 'translateX(3px)' },
+            { transform: 'none' },
+          ],
+          { duration: 450, easing: 'ease-out' },
+        )
+      }
       // user enumeration 방지: 백엔드의 "이메일 없음"/"비밀번호 틀림" 구분
       // 메시지를 그대로 노출하지 않고 generic 메시지로 통일.
       // 네트워크 오류만 별도 분기 (TypeError 또는 'fetch' 키워드 포함 시).
@@ -146,7 +168,7 @@ function LoginForm({ onSuccess }: { onSuccess: (user: any, accountType?: string)
         showIpcErrorToast(err)
       }
     } finally {
-      setLoading(false)
+      setPhase('idle')
     }
   }
 
@@ -177,7 +199,7 @@ function LoginForm({ onSuccess }: { onSuccess: (user: any, accountType?: string)
 
   return (
     <>
-      <div className="cloud w-[400px] max-w-full rounded-[var(--radius-sheet)] px-8 pt-7 pb-7">
+      <div ref={cardRef} className="cloud w-[400px] max-w-full rounded-[var(--radius-sheet)] px-8 pt-7 pb-7">
         <form onSubmit={handleSubmit} className="flex flex-col">
           <h1 className="text-ink-1 text-[19px] font-bold">로그인</h1>
 
@@ -226,13 +248,29 @@ function LoginForm({ onSuccess }: { onSuccess: (user: any, accountType?: string)
             <span className="text-ink-3 text-[13px]">자동 로그인</span>
           </button>
 
-          <p className="min-h-[18px] mt-3 text-danger text-[13px] leading-snug" role="alert">
-            {error}
+          <p className={`min-h-[18px] mt-3 text-[13px] leading-snug ${phase === 'ok' ? 'text-ink-2' : 'text-danger'}`} role="alert">
+            {phase === 'ok' ? '환영합니다' : error}
           </p>
 
-          <button type="submit" disabled={busy} className="gbtn gbtn-lapis w-full mt-1">
-            {loading ? '로그인 중' : '로그인'}
-          </button>
+          <div className="flex justify-center mt-1">
+            <button
+              type="submit"
+              disabled={oauthLoading !== null}
+              aria-busy={loading}
+              aria-label={phase === 'busy' ? '로그인 중' : phase === 'ok' ? '로그인됨' : undefined}
+              className={`gbtn gbtn-lapis login-btn ${loading ? 'is-busy' : ''}`}
+            >
+              {phase === 'busy' ? (
+                <span className="login-spin" aria-hidden />
+              ) : phase === 'ok' ? (
+                <svg viewBox="0 0 18 18" aria-hidden className="login-check">
+                  <path d="M3.5 9.5l3.5 3.5 7.5-8" />
+                </svg>
+              ) : (
+                '로그인'
+              )}
+            </button>
+          </div>
 
           <div className="flex items-center gap-3 mt-5">
             <span className="flex-1 h-px bg-border-subtle" />

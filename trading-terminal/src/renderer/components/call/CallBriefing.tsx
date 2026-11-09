@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import type { StockDetailResponsePayload } from '../../../lib/types/stockDetail'
 import { countdownParts, epsBulletDomain, epsBulletRatio } from '../../lib/callScreen'
 import { formatDirectPercent, formatEps, formatRevenue } from '../../lib/companyDetailFormatters'
@@ -98,19 +99,33 @@ function Countdown({ next }: { next: StockDetailResponsePayload['nextEarning'] }
   }
 
   const parts = countdownParts(next.scheduledAt, now)
+  const hot = parts != null && parts.days === 0 && parts.hours === 0 && parts.minutes === 0 && parts.seconds <= 10
   return (
     <div className="flex flex-col gap-2">
       <span className="text-[13px] text-ink-3">콜 시작까지</span>
       {parts ? (
-        <span className="num text-[44px] font-semibold leading-none tracking-[-0.02em] text-ink-1" aria-live="off">
+        <span
+          role="timer"
+          aria-live="off"
+          className={`flex flex-wrap items-center gap-1.5 ${hot ? 'flip-hot' : ''}`}
+        >
+          <span className="sr-only">
+            {parts.days > 0 && `${parts.days}일 `}
+            {parts.hours}시간 {parts.minutes}분 {parts.seconds}초
+          </span>
           {parts.days > 0 && (
-            <>
+            <span aria-hidden className="num text-[40px] font-semibold text-ink-1 mr-2">
               {parts.days}
-              <span className="font-sans text-[28px] text-ink-2">일 </span>
-            </>
+              <span className="font-sans text-[26px] text-ink-2">일</span>
+            </span>
           )}
-          {String(parts.hours).padStart(2, '0')}:{String(parts.minutes).padStart(2, '0')}:
-          {String(parts.seconds).padStart(2, '0')}
+          {[parts.hours, parts.minutes, parts.seconds].map((n, g) => (
+            <span key={g} aria-hidden className="flex items-center gap-1.5">
+              {g > 0 && <span className="num text-[34px] font-semibold text-ink-3 mx-0.5">:</span>}
+              <FlipDigit value={String(n).padStart(2, '0')[0]} />
+              <FlipDigit value={String(n).padStart(2, '0')[1]} />
+            </span>
+          ))}
         </span>
       ) : (
         <span className="text-[24px] font-bold text-ink-1">예정 시각이 지났습니다 · 첫 자막을 기다립니다</span>
@@ -129,6 +144,78 @@ function Block({ title, children }: { title: string; children: React.ReactNode }
     <div className="flex flex-col gap-3">
       <span className="text-[13px] font-semibold text-ink-2">{title}</span>
       {children}
+    </div>
+  )
+}
+
+/**
+ * 넘어가는 숫자판 한 자리 — 값이 바뀌면 위 반쪽이 옛 숫자를 들고 접히고, 아래 반쪽이 새 숫자를 들고 펼쳐진다.
+ * 접는 반쪽은 React 밖에서 잠깐 붙였다 뗀다. 모션 줄이기를 켰으면 바로 바뀐다. 모양은 global.css `.flip-digit`.
+ */
+function FlipDigit({ value }: { value: string }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const shown = useRef(value)
+  // 아래 반쪽은 펼침이 끝날 때까지 옛 숫자를 들고 있다
+  const [bottom, setBottom] = useState(value)
+
+  useLayoutEffect(() => {
+    const old = shown.current
+    shown.current = value
+    const el = ref.current
+    if (old === value || !el) return
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    if (reduce || typeof el.animate !== 'function') {
+      setBottom(value)
+      return
+    }
+    const flap = (side: 'top' | 'bot', text: string) => {
+      const d = document.createElement('div')
+      d.className = `half ${side} flap`
+      const i = document.createElement('i')
+      i.textContent = text
+      d.append(i)
+      el.append(d)
+      return d
+    }
+    const top = flap('top', old)
+    const bot = flap('bot', value)
+    bot.style.transform = 'rotateX(90deg)'
+    let unfold: Animation | null = null
+    const fold = top.animate([{ transform: 'rotateX(0deg)' }, { transform: 'rotateX(-90deg)' }], {
+      duration: 220,
+      easing: 'ease-in',
+      fill: 'forwards',
+    })
+    fold.onfinish = () => {
+      unfold = bot.animate([{ transform: 'rotateX(90deg)' }, { transform: 'rotateX(0deg)' }], {
+        duration: 220,
+        easing: 'ease-out',
+        fill: 'forwards',
+      })
+      unfold.onfinish = () => {
+        // 반쪽을 떼기 전에 아래 반쪽을 새 숫자로 그려 둔다. 미루면 옛 숫자가 한 프레임 비친다.
+        flushSync(() => setBottom(value))
+        top.remove()
+        bot.remove()
+      }
+    }
+    return () => {
+      fold.cancel()
+      unfold?.cancel()
+      top.remove()
+      bot.remove()
+      setBottom(value)
+    }
+  }, [value])
+
+  return (
+    <div ref={ref} className="flip-digit">
+      <div className="half top">
+        <i>{value}</i>
+      </div>
+      <div className="half bot">
+        <i>{bottom}</i>
+      </div>
     </div>
   )
 }
