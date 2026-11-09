@@ -271,7 +271,11 @@ function TurnView({
           <p className="text-[14px] text-ink-1 leading-[1.7] select-text whitespace-pre-wrap">
             {splitAnswer(visibleText(turn)).map((part, i) =>
               part.kind === 'text' ? (
-                <span key={i}>{part.text}</span>
+                part.strong ? (
+                  <strong key={i} className="font-semibold">{part.text}</strong>
+                ) : (
+                  <span key={i}>{part.text}</span>
+                )
               ) : (
                 <CiteChip
                   key={i}
@@ -331,7 +335,7 @@ function TurnView({
   )
 }
 
-/** 본문 속 근거 번호. 원문과 일치하는지 확인하지 못한 근거는 점선 테두리로 약하게 둔다. */
+/** 본문 속 근거 번호. 답의 수치를 원문에서 확인하지 못한 근거는 점선 테두리로 약하게 둔다. */
 function CiteChip({
   number,
   citation,
@@ -352,7 +356,9 @@ function CiteChip({
       disabled={!citation}
       className={`inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 mx-0.5 align-[2px] rounded-full text-[10.5px] font-semibold tabular-nums
                   ${weak ? 'border border-dashed border-white/25 text-ink-3' : 'border border-white/20 text-ink-2 hover:text-ink-1 hover:border-white/40'}`}
-      aria-label={`근거 ${number ?? ''}${weak ? ' — 원문과 일치하지 않을 수 있음' : ''}`}
+      aria-label={`근거 ${number ?? ''}${
+        !weak ? '' : !citation || citation.type === null ? ' — 근거 목록에 없는 표시' : ' — 수치를 원문에서 확인하지 못함'
+      }`}
     >
       {number ?? '·'}
     </button>
@@ -412,9 +418,14 @@ function CitationList({
                 </span>
                 {c.title && <span className="text-[12.5px] text-ink-1 font-medium leading-snug">{c.title}</span>}
                 {c.quote && (
-                  <p className={`text-[12.5px] leading-snug select-text line-clamp-3 ${weak ? 'text-ink-3' : 'text-ink-2'}`}>{c.quote}</p>
+                  <p className="text-[12.5px] leading-snug select-text line-clamp-3 text-ink-2">{c.quote}</p>
                 )}
-                {weak && <span className="text-[11px] text-ink-3">원문과 일치하지 않을 수 있습니다</span>}
+                {/* verified=false 는 인용문이 틀렸다는 뜻이 아니다. 답 문장의 수치를 이 근거 원문에서 찾지 못했다는 뜻이다 */}
+                {weak && (
+                  <span className="text-[11px] text-ink-3">
+                    {c.type === null ? '근거 목록에 없는 표시입니다' : '이 근거를 단 문장의 수치를 원문에서 확인하지 못했습니다'}
+                  </span>
+                )}
                 {Number.isFinite(sequence) && (
                   <button
                     type="button"
@@ -539,7 +550,8 @@ const STATUS_ANNOUNCE: Record<AssistantTurn['status'], string> = {
 
 /** 스트리밍 중에는 끝에 아직 닫히지 않은 근거 표시(`[S2` 처럼)가 걸릴 수 있어 그 조각을 숨긴다. */
 function visibleText(turn: AssistantTurn): string {
-  return turn.status === 'streaming' ? turn.text.replace(/\[[A-Z]?\d*$/, '') : turn.text
+  // 스트리밍 중 아직 닫히지 않은 근거 표시(`[S1`)와 반쯤 온 강조 기호(`*`)는 다음 조각이 올 때까지 숨긴다
+  return turn.status === 'streaming' ? turn.text.replace(/\[[A-Z]?\d*$/, '').replace(/(?<!\*)\*$/, '') : turn.text
 }
 
 const KST_TIME = new Intl.DateTimeFormat('ko-KR', { timeZone: 'Asia/Seoul', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit' })

@@ -236,10 +236,10 @@ function DiffChip({ item, expandable }: { item: TranscriptDiffItem; expandable: 
     // 종료 후 좁은 보기에서는 펼치지 않는다. 누를 수 없는 것을 버튼으로 그리지 않는다.
     return (
       <span className="glass rim self-start inline-flex items-center gap-2 rounded-full px-3 py-1 text-[12px] font-semibold" title={item.summaryKo}>
-        <span style={{ color: meta.color }}>
+        <span className="whitespace-nowrap" style={{ color: meta.color }}>
           {meta.symbol} {meta.label}
         </span>
-        <span className="text-ink-3 font-medium">{topicLabel(item.topic)}</span>
+        <span className="whitespace-nowrap text-ink-3 font-medium">{topicLabel(item.topic)}</span>
       </span>
     )
   }
@@ -261,11 +261,12 @@ function DiffChip({ item, expandable }: { item: TranscriptDiffItem; expandable: 
       aria-label={`${meta.label} · ${topicLabel(item.topic)} — 펼쳐 보기`}
       title={item.summaryKo}
     >
-      <span style={{ color: meta.color }}>
+      {/* 좁을 때 줄어드는 것은 요약뿐이다. 유형과 주제는 한 줄로 둔다 */}
+      <span className="shrink-0 whitespace-nowrap" style={{ color: meta.color }}>
         {meta.symbol} {meta.label}
       </span>
-      <span className="text-ink-3 font-medium">{topicLabel(item.topic)}</span>
-      <span className="text-ink-2 font-normal truncate">{item.summaryKo}</span>
+      <span className="shrink-0 whitespace-nowrap text-ink-3 font-medium">{topicLabel(item.topic)}</span>
+      <span className="min-w-0 text-ink-2 font-normal truncate">{item.summaryKo}</span>
     </button>
   )
 }
