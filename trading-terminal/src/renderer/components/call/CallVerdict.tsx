@@ -3,6 +3,8 @@ import type { EarningsSummary, ImpactDirection, SignalDirection } from '../../ty
 import type { TranscriptDiffChangeType } from '../../store/useTranscriptDiffStore'
 import { CHANGE_META, CHANGE_ORDER } from './diffMeta'
 import ScrollEdge from './ScrollEdge'
+import RiskBandChart from './RiskBandChart'
+import type { PricePoint } from '../../types/priceSeries'
 import { catalystLabel } from '../../lib/catalystLabel'
 
 interface CallVerdictProps {
@@ -15,8 +17,12 @@ interface CallVerdictProps {
   demoStopped?: boolean
   /** 기다리기 시작한 시각을 기억할 열쇠(콜 회차). 판단 · 질문 전환으로 다시 붙어도 지난 시간을 이어 센다. */
   waitKey?: string | null
+  /** 30일 종가. 손절 · 익절 띠의 가격선으로 쓴다. 비어 있으면 띠만 그린다. */
+  priceSeries?: readonly PricePoint[]
   topInset: number
 }
+
+const NO_PRICES: readonly PricePoint[] = []
 
 // 회차별로 판단을 기다리기 시작한 시각. 판단 · 질문 전환으로 이 판이 떨어졌다 다시 붙어도 이어 센다.
 const waitStarts = new Map<string, number>()
@@ -113,7 +119,16 @@ function signedPct(v: number | null): string {
  *  - 근거 · 반대 논거 · 질문 회피 · 파급 영향 · 손절 계획은 펼쳐 본다.
  *  - 없는 값을 0 으로 채우지 않고, 엔진 경고와 부가 정보 누락도 감추지 않는다.
  */
-export default function CallVerdict({ summary, diffCounts, previousCallLabel, onOpenTicker, demoStopped = false, waitKey, topInset }: CallVerdictProps) {
+export default function CallVerdict({
+  summary,
+  diffCounts,
+  previousCallLabel,
+  onOpenTicker,
+  demoStopped = false,
+  waitKey,
+  priceSeries = NO_PRICES,
+  topInset,
+}: CallVerdictProps) {
   return (
     <section className="cloud relative h-full rounded-[28px] overflow-hidden" aria-label="종합 판단">
       <ScrollEdge height={topInset + 12} />
@@ -121,7 +136,7 @@ export default function CallVerdict({ summary, diffCounts, previousCallLabel, on
       <div className="absolute inset-x-0 bottom-0 overflow-y-auto" style={{ top: topInset }}>
         <div className="px-8 pt-4 pb-10 flex flex-col gap-6 max-w-[820px]">
           {summary ? (
-            <Verdict summary={summary} onOpenTicker={onOpenTicker} />
+            <Verdict summary={summary} onOpenTicker={onOpenTicker} priceSeries={priceSeries} />
           ) : demoStopped ? (
             <div className="flex flex-col gap-2" role="status">
               <span className="text-[13px] text-ink-3">종합 판단</span>
@@ -230,7 +245,15 @@ function WaitingProgress({ startedAt }: { startedAt: number }) {
   )
 }
 
-function Verdict({ summary, onOpenTicker }: { summary: EarningsSummary; onOpenTicker: (t: string) => void }) {
+function Verdict({
+  summary,
+  onOpenTicker,
+  priceSeries,
+}: {
+  summary: EarningsSummary
+  onOpenTicker: (t: string) => void
+  priceSeries: readonly PricePoint[]
+}) {
   const { judgment, gate, evasion, impactChain, riskPlan, warnings } = summary
   const action = gate?.action ? ACTION_LABELS[gate.action] ?? gate.action : null
   const gateMeta = gate?.gateResult ? GATE_META[gate.gateResult] ?? { label: gate.gateResult, color: 'var(--ink-2)' } : null
@@ -361,6 +384,17 @@ function Verdict({ summary, onOpenTicker }: { summary: EarningsSummary; onOpenTi
                     {riskPlan.referencePrice !== null && ` · 기준가 ${money(riskPlan.referencePrice)}`}
                   </span>
                 )}
+                <RiskBandChart
+                  series={priceSeries}
+                  referencePrice={riskPlan.referencePrice}
+                  stopLoss={riskPlan.stopLoss}
+                  takeProfit1={riskPlan.takeProfit1}
+                  takeProfit2={riskPlan.takeProfit2}
+                  stopPct={riskPlan.stopPct}
+                  takeProfit1Pct={riskPlan.takeProfit1Pct}
+                  takeProfit2Pct={riskPlan.takeProfit2Pct}
+                  days={riskPlan.timeStopDays}
+                />
                 <dl className="grid grid-cols-3 gap-3">
                   <Plan label="손절" value={money(riskPlan.stopLoss)} sub={signedPct(riskPlan.stopPct)} />
                   <Plan label="1차 익절" value={money(riskPlan.takeProfit1)} sub={signedPct(riskPlan.takeProfit1Pct)} />

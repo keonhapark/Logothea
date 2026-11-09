@@ -1,4 +1,6 @@
-import type { ReactNode } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
+import SegmentedControl from '../common/SegmentedControl'
+import WeightDonut from './WeightDonut'
 import CompanyLogo from '../common/CompanyLogo'
 import { EmptyState } from '../common/StateView'
 import type { EarningsTimelineStatus } from '../../hooks/useEarningsTimeline'
@@ -28,24 +30,42 @@ export interface HoldingRow {
 
 interface HoldingsTableProps {
   rows: HoldingRow[]
+  /** 현금. 비중 보기에서 한 조각이 된다. */
+  cash: number
   /** 행을 누르면 종목 브리핑을 연다. */
   onRowClick: (ticker: string) => void
   callStatus: EarningsTimelineStatus
   onRetryCalls: () => void
 }
 
+const VIEW_ITEMS: { id: 'table' | 'weight'; label: string }[] = [
+  { id: 'table', label: '표' },
+  { id: 'weight', label: '비중' },
+]
+
 /**
  * 보유 종목 표 — 예전 캐러셀의 "종목 비중" · 종목별 손익을 열로 펼쳤다.
  * 관심 종목은 홈 · 종목 화면이 맡아서 이 표에는 두지 않는다.
  */
-export default function HoldingsTable({ rows, onRowClick, callStatus, onRetryCalls }: HoldingsTableProps) {
+export default function HoldingsTable({ rows, cash, onRowClick, callStatus, onRetryCalls }: HoldingsTableProps) {
+  // 숫자 표는 그대로 두고, 같은 자리에서 비중 도넛으로 바꿔 볼 수 있다(W5).
+  const [view, setView] = useState<'table' | 'weight'>('table')
+  const donutHoldings = useMemo(
+    () => rows.map((r) => ({ ticker: r.ticker, name: r.name, marketValue: r.marketValue })),
+    [rows],
+  )
   return (
     <div className="h-full flex flex-col min-h-0">
       <div className="flex items-center justify-between gap-3 px-6 pt-5 pb-3">
-        <h2 className="text-[18px] font-semibold text-ink-1">
-          보유 종목 <span className="tabular-nums text-ink-3 font-normal">{rows.length}</span>
-        </h2>
-        {callStatus === 'error' && (
+        <div className="flex items-center gap-4">
+          <h2 className="text-[18px] font-semibold text-ink-1">
+            보유 종목 <span className="tabular-nums text-ink-3 font-normal">{rows.length}</span>
+          </h2>
+          {rows.length > 0 && (
+            <SegmentedControl items={VIEW_ITEMS} activeId={view} onChange={setView} ariaLabel="보유 종목 보기" idPrefix="holdings" />
+          )}
+        </div>
+        {callStatus === 'error' && view === 'table' && (
           <span className="flex items-center gap-2 text-[12.5px] text-ink-3">
             <span className="text-danger">콜 일정을 불러오지 못했습니다</span>
             <button type="button" className="gbtn gbtn-sm" onClick={onRetryCalls}>
@@ -56,8 +76,17 @@ export default function HoldingsTable({ rows, onRowClick, callStatus, onRetryCal
       </div>
       {rows.length === 0 ? (
         <EmptyState message="보유 종목이 없습니다. 주문이 체결되면 여기에 표시됩니다." />
+      ) : view === 'weight' ? (
+        <div className="flex-1 min-h-0" role="tabpanel" id="holdings-panel-weight" aria-labelledby="holdings-tab-weight">
+          <WeightDonut holdings={donutHoldings} cash={cash} onOpenTicker={onRowClick} />
+        </div>
       ) : (
-        <div className="flex-1 min-h-0 overflow-y-auto px-3 pb-3">
+        <div
+          className="flex-1 min-h-0 overflow-y-auto px-3 pb-3"
+          role="tabpanel"
+          id="holdings-panel-table"
+          aria-labelledby="holdings-tab-table"
+        >
           <table className="w-full border-separate border-spacing-0 text-[13px]">
             <caption className="sr-only">보유 종목 목록</caption>
             <thead>

@@ -74,14 +74,22 @@ export function emptyFilterMessage(filter: StockFilter): string {
   }
 }
 
-/** 실시간 시세가 있으면 그 값으로, 없으면 목록에 실려 온 값으로 현재가 · 일일 등락률을 정한다. */
+/**
+ * 실시간 시세가 있으면 그 값으로, 없으면 목록에 실려 온 값으로 현재가 · 일일 등락률을 정한다.
+ * 실시간 시세는 전일 종가를 모르면 0 을 싣는다. 그때는 목록의 전일 종가로 계산한다.
+ */
 export function resolveQuote(
   stock: Sp500Stock,
   live: { currentPrice: number; previousClose: number } | undefined,
 ): { price: number | null; changePct: number | null } {
   if (!live) return { price: stock.currentPrice, changePct: stock.changePercent }
-  const changePct =
-    live.previousClose > 0 ? ((live.currentPrice - live.previousClose) / live.previousClose) * 100 : null
+  const prev =
+    live.previousClose > 0
+      ? live.previousClose
+      : stock.previousClose != null && stock.previousClose > 0
+        ? stock.previousClose
+        : null
+  const changePct = prev != null ? ((live.currentPrice - prev) / prev) * 100 : null
   return { price: live.currentPrice, changePct }
 }
 

@@ -580,3 +580,49 @@
     .order-body.is-away { transform: none; }
   }
 }
+
+@layer components {
+  /* ── 포트폴리오 비중 도넛 (W5) ────────────────────────────────────────
+     donut-hover-expand(ui-shelf)의 방식. 올린 조각이 굵어지며 바깥으로 나오고 나머지는 옅어진다. */
+  .donut-seg {
+    pointer-events: stroke;
+    transition:
+      transform 450ms var(--spring),
+      stroke-width 450ms var(--spring),
+      opacity 250ms;
+  }
+  .donut-center { animation: donut-center 320ms var(--ease); }
+  @keyframes donut-center { from { opacity: 0; transform: translateY(5px); } }
+  @media (prefers-reduced-motion: reduce) {
+    .donut-seg { transition: opacity 150ms; }
+    .donut-center { animation: none; }
+  }
+}
+
+@layer components {
+  /* ── 손절 · 익절 가격 띠 (W6) ─────────────────────────────────────────
+     forecast-band(ui-shelf)의 방식. 띠는 Tab 으로도 가고, 그때 금테 대신 띠 가장자리를 밝힌다. */
+  .risk-band { cursor: default; transition: opacity 200ms; }
+  .risk-band:focus-visible rect { stroke: var(--gold); stroke-width: 1.5; }
+}
+
+@layer components {
+  /* ── 시장 지도 (W1) ───────────────────────────────────────────────────
+     treemap-drilldown(ui-shelf)의 방식. 칸은 종목별 자리를 기억해 섹터 확대 · 축소 때 제자리에서 커지고 준다. */
+  .map-tile {
+    box-shadow: inset 0 0 0 1px rgb(var(--ink-rgb) / 0.06);
+    transition:
+      left 500ms cubic-bezier(0.2, 0.8, 0.2, 1),
+      top 500ms cubic-bezier(0.2, 0.8, 0.2, 1),
+      width 500ms cubic-bezier(0.2, 0.8, 0.2, 1),
+      height 500ms cubic-bezier(0.2, 0.8, 0.2, 1),
+      opacity 350ms,
+      background-color 300ms;
+  }
+  .map-resizing .map-tile { transition: none; }
+  .map-tile:hover,
+  .map-tile:focus-visible { box-shadow: inset 0 0 0 2px var(--gold); outline: none; }
+  @media (prefers-reduced-motion: reduce) {
+    .map-tile { transition: opacity 150ms, background-color 150ms; }
+  }
+}

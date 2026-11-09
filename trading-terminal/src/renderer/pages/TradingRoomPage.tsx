@@ -583,6 +583,7 @@ export default function TradingRoomPage() {
                   summary={currentSummary}
                   demoStopped={stoppedCallId != null && stoppedCallId === lastCallId}
                   waitKey={lastCallId}
+                  priceSeries={chartSeries}
                   diffCounts={diffCounts}
                   previousCallLabel={previousCallLabel}
                   onOpenTicker={(t) => openDrawer(t)}
