@@ -55,7 +55,11 @@ public class MarketIndicesScheduler {
 
     /**
      * 1분 주기. 5종 × 분당 1회 = Finnhub 무료 등급(분당 60회) 안에서 여유롭다.
+     *
+     * <p>{@code @Async} 로 돌린다. 호출 5회가 rate limiter 를 기다리며 10초 넘게 걸릴 수 있는데,
+     * 기본 스케줄러 스레드는 하나뿐이라 그동안 1초 주기 시세 발행(StockPricePublisher)이 멈춘다.
      */
+    @Async
     @Scheduled(fixedRate = 60_000L, initialDelay = 60_000L)
     public void refreshPeriodically() {
         refresh("scheduled");
