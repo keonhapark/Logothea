@@ -28,6 +28,9 @@
     color: var(--ink-1);
     -webkit-font-smoothing: antialiased;
     font-feature-settings: 'ss06';
+    /* 한국어는 낱말(어절) 단위로 줄을 바꾼다. 한 낱말이 칸보다 길 때만 낱말 안에서 끊는다 */
+    word-break: keep-all;
+    overflow-wrap: break-word;
     user-select: none; /* 데스크톱 앱 — 텍스트 선택 기본 비활성 */
   }
 

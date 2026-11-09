@@ -149,3 +149,22 @@ export function translationsByLastSequence<T extends { callId: string; sequences
   }
   return map
 }
+
+/**
+ * 최근 어닝 반응의 EPS 막대가 함께 쓰는 눈금 범위. 분기마다 예상과 실제는 몇 센트 차이라
+ * 0 에서 시작하면 막대 끝이 모두 같아 보인다. 그래서 값들의 최솟값 아래로 여유를 두고 시작해
+ * 예상을 넘었는지 못 미쳤는지가 막대 길이로 보이게 한다. 값이 하나도 없으면 null.
+ */
+export function epsBulletDomain(values: readonly (number | null)[]): readonly [number, number] | null {
+  const nums = values.filter((v): v is number => v != null && Number.isFinite(v))
+  if (nums.length === 0) return null
+  const min = Math.min(...nums)
+  const max = Math.max(...nums)
+  const span = max - min || Math.max(Math.abs(max) * 0.1, 0.01)
+  return [min - span * 0.6, max + span * 0.15]
+}
+
+/** 눈금 범위 안의 비율(0~1). 범위를 벗어나면 양 끝에 붙인다. */
+export function epsBulletRatio(value: number, [lo, hi]: readonly [number, number]): number {
+  return Math.min(1, Math.max(0, (value - lo) / (hi - lo)))
+}

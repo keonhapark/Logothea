@@ -80,6 +80,9 @@ export interface AssistantState {
   conversation: AssistantConversation | null
   /** 진행 중인 턴의 id. 없으면 null. */
   activeTurnId: string | null
+  /** 콜별로 쓰다 만 질문. 탭을 옮겨 입력칸이 사라져도 남는다. 대화를 새로 열어도 지우지 않는다. */
+  drafts: Record<string, string>
+  setDraft: (callId: string, text: string) => void
   open: (scope: { ticker: string; callId: string; anchorSequence?: number | null }) => void
   ask: (input: { question: string; suggestedQuestionId?: SuggestedQuestionId | null }) => Promise<void>
   cancel: () => Promise<void>
@@ -107,6 +110,12 @@ if (import.meta.hot) {
 export const useAssistantStore = create<AssistantState>((set, get) => ({
   conversation: null,
   activeTurnId: null,
+  drafts: {},
+
+  setDraft: (callId, text) => {
+    const { [callId]: _previous, ...rest } = get().drafts
+    set({ drafts: text === '' ? rest : { ...rest, [callId]: text } })
+  },
 
   open: ({ ticker, callId, anchorSequence = null }) => {
     const current = get().conversation

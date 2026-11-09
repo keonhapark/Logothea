@@ -131,6 +131,7 @@ export default function AssistantPanel({
         streaming={streaming}
         remaining={remaining}
         locked={dailyLimited}
+        callId={callId}
         onSend={(q) => send(q)}
         onCancel={() => void cancel()}
         onNewConversation={startNewConversation}
@@ -450,6 +451,7 @@ function Composer({
   streaming,
   remaining,
   locked,
+  callId,
   onSend,
   onCancel,
   onNewConversation,
@@ -458,11 +460,16 @@ function Composer({
   remaining: number
   /** 하루 한도 초과 — 입력과 보내기를 막는다. */
   locked: boolean
+  /** 쓰다 만 질문은 이 콜 몫으로 스토어에 둔다. 탭을 옮겨 입력칸이 사라져도 남는다. */
+  callId: string
   onSend: (question: string) => void
   onCancel: () => void
   onNewConversation: () => void
 }) {
-  const [draft, setDraft] = useState('')
+  // 입력칸만 구독한다. 패널에서 구독하면 글자마다 답 목록까지 다시 그린다
+  const draft = useAssistantStore((s) => s.drafts[callId] ?? '')
+  const setDraft = useAssistantStore((s) => s.setDraft)
+  const onDraftChange = (text: string) => setDraft(callId, text)
   const trimmed = draft.trim()
   const tooLong = trimmed.length > MAX_QUESTION_CHARS
   const canSend = !streaming && !locked && remaining > 0 && trimmed.length > 0 && !tooLong
@@ -470,7 +477,7 @@ function Composer({
   const submit = () => {
     if (!canSend) return
     onSend(trimmed)
-    setDraft('')
+    onDraftChange('')
   }
 
   return (
@@ -490,7 +497,7 @@ function Composer({
         <>
           <textarea
             value={draft}
-            onChange={(e) => setDraft(e.target.value)}
+            onChange={(e) => onDraftChange(e.target.value)}
             onKeyDown={(e) => {
               // 한글 조합 중 Enter 는 글자 확정이라 보내지 않는다
               if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {

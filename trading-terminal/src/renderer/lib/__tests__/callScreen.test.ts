@@ -4,6 +4,8 @@ import {
   countdownParts,
   currentCallSegments,
   deriveCallPhase,
+  epsBulletDomain,
+  epsBulletRatio,
   formatCallClock,
   groupDiffsBySequence,
   isProminentDiff,
@@ -168,5 +170,39 @@ describe('translationsByLastSequence', () => {
 
   it('지금 콜을 모르면 비어 있다', () => {
     expect(translationsByLastSequence([tr('a', [0])], null).size).toBe(0)
+  })
+})
+
+describe('epsBulletDomain', () => {
+  it('값이 없으면 null', () => {
+    expect(epsBulletDomain([])).toBeNull()
+    expect(epsBulletDomain([null, Number.NaN])).toBeNull()
+  })
+
+  it('최솟값 아래로 여유를 두어 몇 센트 차이도 막대 길이로 갈린다', () => {
+    const domain = epsBulletDomain([0.65, 0.69, 0.64, 0.66, 0.58, 0.6])!
+    expect(domain[0]).toBeLessThan(0.58)
+    expect(domain[1]).toBeGreaterThan(0.69)
+    expect(epsBulletRatio(0.69, domain) - epsBulletRatio(0.65, domain)).toBeGreaterThan(0.2)
+  })
+
+  it('값이 모두 같아도 범위가 0 이 되지 않는다', () => {
+    const [lo, hi] = epsBulletDomain([0.5, 0.5])!
+    expect(hi).toBeGreaterThan(lo)
+    const [lo0, hi0] = epsBulletDomain([0, 0])!
+    expect(hi0).toBeGreaterThan(lo0)
+  })
+
+  it('음수 EPS 도 다룬다', () => {
+    const domain = epsBulletDomain([-0.2, -0.1])!
+    expect(epsBulletRatio(-0.1, domain)).toBeGreaterThan(epsBulletRatio(-0.2, domain))
+  })
+})
+
+describe('epsBulletRatio', () => {
+  it('범위를 벗어나면 양 끝에 붙인다', () => {
+    expect(epsBulletRatio(-5, [0, 1])).toBe(0)
+    expect(epsBulletRatio(5, [0, 1])).toBe(1)
+    expect(epsBulletRatio(0.25, [0, 1])).toBe(0.25)
   })
 })
