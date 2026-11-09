@@ -47,6 +47,17 @@ export const IPC_CHANNELS = {
    * payload: ThemeChoice ('system' | 'light' | 'dark'), 응답: { ok: true }.
    */
   SETTINGS_SET_THEME: 'terminal:settings:set-theme',
+  /** 알림 설정을 읽는다. 응답: NotificationPrefs. */
+  SETTINGS_GET_NOTIFICATIONS: 'terminal:settings:get-notifications',
+  /** 알림 설정을 바꾼다. payload: NotificationPrefs(온전한 값만), 응답: { ok: true }. */
+  SETTINGS_SET_NOTIFICATIONS: 'terminal:settings:set-notifications',
+  /**
+   * 콜 시작 알림을 보낸다(Renderer → Main, invoke). 보낼 때는 renderer 가 정하고, 설정이 꺼져 있으면 main 이 버린다.
+   * payload: { ticker: string; companyName: string; minutesLeft: number }, 응답: { ok: true }.
+   */
+  NOTIFY_CALL_START: 'terminal:notify:call-start',
+  /** 콜 시작 알림을 눌렀다(Main → Renderer). payload: { ticker: string }. 그 종목의 콜 화면을 연다. */
+  NOTIFICATION_OPEN_CALL: 'terminal:notify:open-call',
 
   WS_CONNECT: 'terminal:ws:connect',
   WS_DISCONNECT: 'terminal:ws:disconnect',

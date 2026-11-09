@@ -16,6 +16,8 @@ import SegmentedControl from "../components/common/SegmentedControl";
 import CallVerdict from "../components/call/CallVerdict";
 import PriceCard from "../components/call/PriceCard";
 import OrderSheet, { type OrderSubmitPayload } from "../components/call/OrderSheet";
+import CallTour from "../components/call/CallTour";
+import { isCallTourDone } from "../lib/callTour";
 import { useOrderAccount } from "../hooks/useOrderAccount";
 import { DEMO_TICKER } from "../constants/demo";
 import { showIpcErrorToast } from "../components/common/Toast";
@@ -153,6 +155,13 @@ export default function TradingRoomPage() {
     [transcriptDiffItems],
   );
   const isLive = phase === "LIVE";
+
+  // 첫 사용 안내 — 실제 콜이 처음 시작된 화면에서 한 번만 띄운다. 시연 재생 중에는 띄우지 않는다.
+  const [tourOpen, setTourOpen] = useState(false);
+  useEffect(() => {
+    if (isLive && !isDemo && !isCallTourDone()) setTourOpen(true);
+  }, [isLive, isDemo]);
+  const showTour = tourOpen && isLive && !isDemo;
   const lastCallId = segments.length > 0 ? segments[segments.length - 1].callId : null;
   const translations = useMemo(
     () => translationsByLastSequence(translationItems, lastCallId),
@@ -612,6 +621,8 @@ export default function TradingRoomPage() {
         activeSpeakerKey={currentSpeakerKey}
         isLive={isLive}
       />
+
+      {showTour && <CallTour onClose={() => setTourOpen(false)} />}
     </div>
   );
 }

@@ -99,7 +99,7 @@ export default function Dropdown<V extends string = string>({
         onKeyDown={handleKey}
         className="glass inline-flex items-center gap-1.5 px-3.5 h-[32px] rounded-full
                    text-text-secondary text-[12px] hover:text-text-primary transition-colors duration-100
-                   whitespace-nowrap"
+                   whitespace-nowrap disabled:opacity-50"
       >
         {prefix && <span className="text-text-tertiary">{prefix}</span>}
         <span className="text-text-primary font-medium">{selectedLabel}</span>
