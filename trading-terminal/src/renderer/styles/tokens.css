@@ -1,10 +1,15 @@
 /*
  * Logothea 디자인 토큰 — 값의 기준은 이 파일이다.
- * 쓰는 규칙과 이유는 docs/design/design-system.md 에 있다.
- * tailwind.config.js 는 같은 값을 클래스 이름으로 노출한다. 값을 바꾸면 두 곳을 함께 고친다.
- * 지금은 다크 한 벌만 정의한다. 라이트를 더할 때는 [data-theme="light"] 로 이 블록만 덮어쓴다.
+ * 쓰는 규칙과 이유는 docs/design/design-system.md 에 있다. tailwind.config.js 는 이 변수를 클래스 이름으로 노출한다.
+ *
+ * 색은 두 꼴로 둔다.
+ *  - 채널 `--{역할}-rgb`: 공백으로 나눈 RGB 세 숫자. `rgb(var(--ok-rgb) / 0.12)` 처럼 투명도를 붙여 쓰고,
+ *    tailwind 의 `bg-ok/15` 같은 투명도 수식도 이 채널로 계산한다.
+ *  - 완성 값 `--{역할}`: 바로 쓰는 색. 테마마다 투명도가 다른 글자 · 선은 투명도를 `--a-*` 로 따로 둔다.
+ * `rgba(var(--x-rgb), a)` 처럼 쉼표로 섞어 쓰면 값이 무효가 되어 조용히 투명해진다. 늘 `rgb(… / a)` 로 쓴다.
+ *
+ * 지금은 다크 한 벌이다. 라이트는 `:root[data-theme="light"]` 블록이 채널과 재질 값만 덮어쓴다.
  */
-
 @font-face {
   font-family: 'Pretendard Variable';
   src: url('../assets/fonts/PretendardVariable.woff2') format('woff2-variations');
@@ -24,41 +29,76 @@
 :root {
   color-scheme: dark;
 
-  /* 바탕과 글자 */
-  --bg: #1d1e22;
-  --ink-1: #fbfaf6;
-  --ink-2: rgba(251, 250, 246, 0.82);
-  --ink-3: rgba(251, 250, 246, 0.58);
-  --ink-4: rgba(251, 250, 246, 0.4);
-  --line: rgba(251, 250, 246, 0.1);
-  --line-strong: rgba(251, 250, 246, 0.16);
+  /* ── 채널 ─────────────────────────────────────────────────────────── */
+  /* 바탕과 불투명 면(목록 · 입력 · 펼침 메뉴) */
+  --bg-rgb: 29 30 34;
+  --surface-0-rgb: 33 34 38;
+  --surface-1-rgb: 38 39 43;
+  --surface-2-rgb: 45 46 51;
+  --surface-3-rgb: 53 54 59;
+
+  /* 글자 · 선의 바탕 채널과 단계별 투명도 */
+  --ink-rgb: 251 250 246;
+  --a-ink-2: 0.82;
+  --a-ink-3: 0.58;
+  --a-ink-4: 0.4;
+  --a-line: 0.1;
+  --a-line-strong: 0.16;
 
   /* 금 — 금테와 포커스 테두리에만 */
-  --gold-hi: #fff1c4;
-  --gold: #e2bd62;
-  --gold-lo: #8a6420;
+  --gold-hi-rgb: 255 241 196;
+  --gold-rgb: 226 189 98;
+  --gold-lo-rgb: 138 100 32;
 
-  /* 색상 유리 — 버튼 면에만. rgba(var(--lapis), a) 로 쓴다 */
-  --lapis: 92, 140, 255;
-  --olive: 176, 204, 82;
-  --porphyra: 232, 102, 192;
+  /* 색상 유리 — 버튼 면에만 */
+  --lapis-rgb: 92 140 255;
+  --olive-rgb: 176 204 82;
+  --porphyra-rgb: 232 102 192;
 
   /* 가격 — 상승 빨강 · 하락 파랑, 글자에만 */
-  --up: #ff5a5f;
-  --down: #5b9bff;
+  --up-rgb: 255 90 95;
+  --down-rgb: 91 155 255;
 
   /* 상태 글자 — 정상 · 오류 · 주의 */
-  --ok: #b0cc52;
-  --danger: #ff8a5c;
-  --caution: #e2bd62;
+  --ok-rgb: 176 204 82;
+  --danger-rgb: 255 138 92;
+  --caution-rgb: 226 189 98;
 
-  /* 같은 색의 RGB 삼원색 — rgba(var(--ok-rgb), 0.12) 처럼 옅은 면 · 테두리에 쓴다 */
-  --ink-rgb: 251, 250, 246;
-  --ok-rgb: 176, 204, 82;
-  --danger-rgb: 255, 138, 92;
-  --caution-rgb: 226, 189, 98;
-  --up-rgb: 255, 90, 95;
-  --down-rgb: 91, 155, 255;
+  /* ── 완성 값 ──────────────────────────────────────────────────────── */
+  --bg: rgb(var(--bg-rgb));
+  --ink-1: rgb(var(--ink-rgb));
+  --ink-2: rgb(var(--ink-rgb) / var(--a-ink-2));
+  --ink-3: rgb(var(--ink-rgb) / var(--a-ink-3));
+  --ink-4: rgb(var(--ink-rgb) / var(--a-ink-4));
+  --line: rgb(var(--ink-rgb) / var(--a-line));
+  --line-strong: rgb(var(--ink-rgb) / var(--a-line-strong));
+  --gold-hi: rgb(var(--gold-hi-rgb));
+  --gold: rgb(var(--gold-rgb));
+  --gold-lo: rgb(var(--gold-lo-rgb));
+  --lapis: rgb(var(--lapis-rgb));
+  --olive: rgb(var(--olive-rgb));
+  --porphyra: rgb(var(--porphyra-rgb));
+  --up: rgb(var(--up-rgb));
+  --down: rgb(var(--down-rgb));
+  --ok: rgb(var(--ok-rgb));
+  --danger: rgb(var(--danger-rgb));
+  --caution: rgb(var(--caution-rgb));
+
+  /* ── 재질 · 그림자 ────────────────────────────────────────────────── */
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-md: 0 4px 10px rgb(0 0 0 / 0.45);
+  --shadow-lg: 0 14px 34px -12px rgb(0 0 0 / 0.55);
+  --shadow-xl: 0 24px 60px -16px rgb(0 0 0 / 0.7);
+  --shadow-dialog: 0 24px 60px -16px rgb(0 0 0 / 0.7);
+  /* 유리 위 글자 그림자 — 뒤가 밝아져도 대비를 지킨다 */
+  --glass-text-shadow: 0 1px 2px rgb(0 0 0 / 0.55);
+  --gbtn-text-shadow: 0 1px 2px rgb(0 0 0 / 0.45);
+  /* 서리 유리 */
+  --frost-fill: rgb(18 19 22 / 0.58);
+  --frost-edge: inset 0 1px 0 rgb(255 255 255 / 0.18), inset 0 0 0 1px rgb(255 255 255 / 0.08);
+  /* 투명도 줄이기 설정에서 유리 · 서리 유리 대신 까는 불투명 바탕 */
+  --solid-glass: #2d2e33;
+  --solid-frost: #18191c;
 
   /* 글꼴 */
   --font-sans: 'Pretendard Variable', -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', system-ui, sans-serif;

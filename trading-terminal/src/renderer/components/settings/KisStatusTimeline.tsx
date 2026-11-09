@@ -38,8 +38,8 @@ function TimelineStep({
 }) {
   const iconStyles = {
     done: {
-      bg: 'rgba(var(--ok-rgb),0.12)',
-      border: 'rgba(var(--ok-rgb),0.35)',
+      bg: 'rgb(var(--ok-rgb) / 0.12)',
+      border: 'rgb(var(--ok-rgb) / 0.35)',
       color: 'var(--ok)',
     },
     pending: {
@@ -48,8 +48,8 @@ function TimelineStep({
       color: 'var(--ink-4)',
     },
     error: {
-      bg: 'rgba(var(--danger-rgb),0.12)',
-      border: 'rgba(var(--danger-rgb),0.35)',
+      bg: 'rgb(var(--danger-rgb) / 0.12)',
+      border: 'rgb(var(--danger-rgb) / 0.35)',
       color: 'var(--danger)',
     },
   }[step.status]

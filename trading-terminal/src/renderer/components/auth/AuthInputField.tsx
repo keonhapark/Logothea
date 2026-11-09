@@ -64,7 +64,7 @@ export default function AuthInputField({
           focused ? 'border-gold' : 'border-border-strong'
         }`}
         style={{
-          background: 'rgba(var(--ink-rgb),0.04)',
+          background: 'rgb(var(--ink-rgb) / 0.04)',
           boxShadow: focused ? '0 0 0 1px var(--gold)' : undefined,
         }}
       >

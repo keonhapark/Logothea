@@ -36,9 +36,9 @@ const ACTION_LABELS: Record<string, string> = {
 
 /** 실행 조건 — 통과는 올리브, 조건부 보류는 ink-2, 차단은 포르피라 글자 (design-system 종합 판단). */
 const GATE_META: Record<string, { label: string; color: string }> = {
-  pass: { label: '통과', color: 'rgb(var(--olive))' },
+  pass: { label: '통과', color: 'var(--olive)' },
   soft_block: { label: '조건부 보류', color: 'var(--ink-2)' },
-  hard_block: { label: '차단', color: 'rgb(var(--porphyra))' },
+  hard_block: { label: '차단', color: 'var(--porphyra)' },
 }
 
 /**

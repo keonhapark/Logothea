@@ -42,8 +42,8 @@
   /* 스크롤바 */
   ::-webkit-scrollbar { width: 6px; height: 6px; }
   ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: rgba(251, 250, 246, 0.14); border-radius: 999px; }
-  ::-webkit-scrollbar-thumb:hover { background: rgba(251, 250, 246, 0.24); }
+  ::-webkit-scrollbar-thumb { background: rgb(var(--ink-rgb) / 0.14); border-radius: 999px; }
+  ::-webkit-scrollbar-thumb:hover { background: rgb(var(--ink-rgb) / 0.24); }
 }
 
 @layer components {
@@ -111,16 +111,14 @@
   .rim-heavy { --rim: 2.2px; }
 
   .frost {
-    background: rgba(18, 19, 22, 0.58);
+    background: var(--frost-fill);
     -webkit-backdrop-filter: var(--frost-filter);
     backdrop-filter: var(--frost-filter);
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.18),
-      inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+    box-shadow: var(--frost-edge);
   }
 
   /* 유리 위 글자는 뒤가 밝아져도 대비를 지키도록 그림자를 준다 */
-  .on-glass { text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55); }
+  .on-glass { text-shadow: var(--glass-text-shadow); }
 
   /* ── 버튼 ─────────────────────────────────────────────────────────────
      .gbtn 맑은 유리 보조 버튼. .gbtn-lapis(주 행동) · .gbtn-olive(확인) · .gbtn-porphyra(위험)
@@ -141,7 +139,7 @@
     color: var(--ink-1);
     white-space: nowrap;
     cursor: pointer;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+    text-shadow: var(--gbtn-text-shadow);
     transition:
       transform 220ms var(--spring),
       filter 200ms var(--ease),
@@ -162,33 +160,33 @@
   .gbtn-icon { width: 44px; height: 44px; padding: 0; }
   .gbtn-icon.gbtn-sm { width: 36px; height: 36px; padding: 0; }
 
-  .gbtn-lapis { --c: var(--lapis); }
-  .gbtn-olive { --c: var(--olive); }
-  .gbtn-porphyra { --c: var(--porphyra); }
+  .gbtn-lapis { --c: var(--lapis-rgb); }
+  .gbtn-olive { --c: var(--olive-rgb); }
+  .gbtn-porphyra { --c: var(--porphyra-rgb); }
   .gbtn-lapis,
   .gbtn-olive,
   .gbtn-porphyra {
     background:
-      radial-gradient(120% 130% at 50% 125%, rgba(var(--c), 0.42), rgba(var(--c), 0) 62%),
-      linear-gradient(180deg, rgba(var(--c), 0.14), rgba(var(--c), 0.06));
+      radial-gradient(120% 130% at 50% 125%, rgb(var(--c) / 0.42), rgb(var(--c) / 0) 62%),
+      linear-gradient(180deg, rgb(var(--c) / 0.14), rgb(var(--c) / 0.06));
     -webkit-backdrop-filter: var(--tint-filter);
     backdrop-filter: var(--tint-filter);
     box-shadow:
       inset 0 1px 0 rgba(255, 255, 255, 0.9),
-      inset 0 0 0 1px rgba(var(--c), 0.6),
-      inset 0 0 14px rgba(var(--c), 0.32),
-      inset 0 -7px 12px -7px rgba(var(--c), 0.75),
-      0 6px 22px -6px rgba(var(--c), 0.5),
+      inset 0 0 0 1px rgb(var(--c) / 0.6),
+      inset 0 0 14px rgb(var(--c) / 0.32),
+      inset 0 -7px 12px -7px rgb(var(--c) / 0.75),
+      0 6px 22px -6px rgb(var(--c) / 0.5),
       0 12px 26px -14px rgba(0, 0, 0, 0.55);
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 0 10px rgba(var(--c), 0.45);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 0 10px rgb(var(--c) / 0.45);
   }
   /* 색을 더 채운 색상 유리. 작은 버튼은 기본 색상 유리의 옅은 색이 잘 보이지 않아 색 비율을 높인다 */
   .gbtn-strong.gbtn-lapis,
   .gbtn-strong.gbtn-olive,
   .gbtn-strong.gbtn-porphyra {
     background:
-      radial-gradient(120% 130% at 50% 125%, rgba(var(--c), 0.7), rgba(var(--c), 0.12) 70%),
-      linear-gradient(180deg, rgba(var(--c), 0.34), rgba(var(--c), 0.2));
+      radial-gradient(120% 130% at 50% 125%, rgb(var(--c) / 0.7), rgb(var(--c) / 0.12) 70%),
+      linear-gradient(180deg, rgb(var(--c) / 0.34), rgb(var(--c) / 0.2));
   }
   .gbtn-lapis::before,
   .gbtn-olive::before,
@@ -203,7 +201,7 @@
     @apply w-full px-3.5 py-2.5 bg-surface-1 text-text-primary text-base placeholder:text-text-disabled
            focus:outline-none transition-colors duration-100;
     border-radius: var(--radius-field);
-    border: 1px solid rgba(251, 250, 246, 0.12);
+    border: 1px solid rgb(var(--ink-rgb) / 0.12);
   }
   .input-base:focus { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold); }
   .input-error { @apply input-base; border-color: var(--danger); }
@@ -254,7 +252,7 @@
   /* 불러오는 중 — 자리와 크기를 미리 잡은 흐린 막대 */
   .skeleton {
     border-radius: 8px;
-    background: linear-gradient(90deg, rgba(251, 250, 246, 0.05), rgba(251, 250, 246, 0.1), rgba(251, 250, 246, 0.05));
+    background: linear-gradient(90deg, rgb(var(--ink-rgb) / 0.05), rgb(var(--ink-rgb) / 0.1), rgb(var(--ink-rgb) / 0.05));
     background-size: 200% 100%;
     animation: skeleton-shimmer 1.6s ease-in-out infinite;
   }
@@ -278,12 +276,12 @@
 @media (prefers-reduced-transparency: reduce) {
   .glass,
   .gbtn {
-    background: #2d2e33;
+    background: var(--solid-glass);
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
   }
   .frost {
-    background: #18191c;
+    background: var(--solid-frost);
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
   }
