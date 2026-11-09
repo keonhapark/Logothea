@@ -77,6 +77,10 @@ describe('resolveQuote', () => {
     expect(resolveQuote(stock('A'), { currentPrice: 110, previousClose: 0 }).changePct).toBeNull()
   })
 
+  it('실시간 시세가 전일 종가를 모르면 목록의 전일 종가로 계산한다', () => {
+    expect(resolveQuote({ ...stock('A'), previousClose: 100 }, { currentPrice: 105, previousClose: 0 }).changePct).toBe(5)
+  })
+
   it('실시간 시세가 없으면 목록 값을 쓴다', () => {
     expect(resolveQuote(stock('A'), undefined)).toEqual({ price: 10, changePct: 1 })
   })
