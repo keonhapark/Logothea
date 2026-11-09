@@ -24,7 +24,7 @@ public interface StockRepository extends JpaRepository<Stock, Long> {
             SELECT s, sm FROM Stock s
             LEFT JOIN StockMeta sm ON sm.stock.id = s.id
             WHERE s.active = true
-            ORDER BY COALESCE(sm.marketCapUsd, 0) DESC
+            ORDER BY COALESCE(sm.marketCapUsd, 0) DESC, s.id ASC
             """)
     List<Object[]> findAllActiveWithMetaSorted();
 }
