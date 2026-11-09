@@ -118,7 +118,15 @@ export default function TranscriptStream({
           </p>
         ) : (
           <ol role="log" aria-label="자막" className={`flex flex-col ${compact ? 'gap-3 px-5 pb-6' : 'gap-5 px-7 pb-10'}`}>
-            {segments.map((seg) => {
+            {segments.map((seg, i) => {
+              // 같은 사람이 이어 말하면 이름을 다시 쓰지 않고 앞 발언에 붙여 한 덩어리로 읽힌다.
+              // 앞 발언 밑에 대조 · 번역이 붙어 있으면 그 아래로 당기지 않는다(카드에 딸린 글처럼 보인다).
+              const prev = segments[i - 1]
+              const continued = !!seg.speaker && seg.speaker === prev?.speaker
+              const prevHasExtra =
+                prev != null &&
+                ((diffsBySequence.get(prev.sequence)?.length ?? 0) > 0 || (showTranslation && translations.has(prev.sequence)))
+              const pullUp = continued && !prevHasExtra
               const diffs = diffsBySequence.get(seg.sequence)
               const translation = showTranslation ? translations.get(seg.sequence) : undefined
               const isLatest = isLive && seg.sequence === latestSeq
@@ -127,23 +135,25 @@ export default function TranscriptStream({
                   key={`${seg.callId}-${seg.sequence}`}
                   data-seq={seg.sequence}
                   className={`group flex flex-col gap-1.5 rounded-[14px] transition-colors duration-500 ${
-                    flash === seg.sequence ? 'bg-wash/[0.06]' : ''
-                  }`}
+                    pullUp ? (compact ? '-mt-1.5' : '-mt-2.5') : ''
+                  } ${flash === seg.sequence ? 'bg-wash/[0.06]' : ''}`}
                 >
                   <div className="flex items-center gap-2 text-[11.5px] text-ink-3">
                     <span className="num">{formatCallClock(seg.startMs)}</span>
                     {seg.speaker &&
-                      (onSpeakerClick ? (
+                      (continued ? (
+                        <span className="sr-only">{seg.speaker}</span>
+                      ) : onSpeakerClick ? (
                         <button
                           type="button"
                           onClick={() => onSpeakerClick(seg.speaker as string)}
-                          className="hover:text-ink-1 underline decoration-dotted underline-offset-2"
+                          className="text-[12.5px] font-semibold text-ink-1 underline decoration-dotted underline-offset-2 hover:decoration-solid"
                           aria-label={`${seg.speaker} 발화자 프로필 열기`}
                         >
                           {seg.speaker}
                         </button>
                       ) : (
-                        <span>{seg.speaker}</span>
+                        <span className="text-[12.5px] font-semibold text-ink-1">{seg.speaker}</span>
                       ))}
                     {onAskAbout && (
                       <button

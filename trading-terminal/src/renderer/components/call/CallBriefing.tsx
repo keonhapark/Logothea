@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { StockDetailResponsePayload } from '../../../lib/types/stockDetail'
-import { countdownParts } from '../../lib/callScreen'
+import { countdownParts, epsBulletDomain, epsBulletRatio } from '../../lib/callScreen'
 import { formatDirectPercent, formatEps, formatRevenue } from '../../lib/companyDetailFormatters'
 import ScrollEdge from './ScrollEdge'
 import { ComingSoon, EmptyState, LoadingBlock } from '../common/StateView'
@@ -23,6 +23,7 @@ export default function CallBriefing({ detail, loading, error, topInset }: CallB
   const next = detail?.nextEarning ?? null
   // 최근 분기부터. 응답 순서에 기대지 않고 발표 시각으로 정렬한다.
   const history = [...(detail?.earningsHistory ?? [])].sort((a, b) => b.announcedAt - a.announcedAt).slice(0, 4)
+  const epsDomain = epsBulletDomain(history.flatMap((row) => [row.epsEstimate, row.epsActual]))
 
   return (
     <section className="cloud relative h-full rounded-[28px] overflow-hidden" aria-label="시작 전 브리핑">
@@ -60,9 +61,7 @@ export default function CallBriefing({ detail, loading, error, topInset }: CallB
                         <li key={`${row.fiscalPeriodLabel}-${row.announcedAt}`} className="flex items-baseline justify-between gap-3">
                           <span className="text-ink-2">{row.fiscalPeriodLabel}</span>
                           <span className="flex items-baseline gap-3">
-                            <span className="tabular-nums text-[12px] text-ink-3">
-                              EPS {formatEps(row.epsEstimate)} → {formatEps(row.epsActual)}
-                            </span>
+                            <EpsBullet estimate={row.epsEstimate} actual={row.epsActual} domain={epsDomain} />
                             <Reaction value={row.priceReactionPercent} />
                           </span>
                         </li>
@@ -131,6 +130,43 @@ function Block({ title, children }: { title: string; children: React.ReactNode }
       <span className="text-[13px] font-semibold text-ink-2">{title}</span>
       {children}
     </div>
+  )
+}
+
+/**
+ * EPS 예상 대비 실제 — 막대는 실제, 세로 금은 예상이다. 넘었으면 ok, 못 미쳤으면 danger 색.
+ * 줄마다 같은 눈금(domain)을 써서 분기끼리 견줄 수 있다. 둘 중 하나라도 없으면 글로 보여 준다.
+ */
+function EpsBullet({
+  estimate,
+  actual,
+  domain,
+}: {
+  estimate: number | null
+  actual: number | null
+  domain: readonly [number, number] | null
+}) {
+  const label = `EPS 예상 ${formatEps(estimate)} · 실제 ${formatEps(actual)}`
+  if (estimate == null || actual == null || !Number.isFinite(estimate) || !Number.isFinite(actual) || domain == null) {
+    return (
+      <span className="tabular-nums text-[12px] text-ink-3">
+        EPS {formatEps(estimate)} → {formatEps(actual)}
+      </span>
+    )
+  }
+  const W = 100
+  const beat = actual >= estimate
+  const fill = epsBulletRatio(actual, domain) * W
+  const tick = epsBulletRatio(estimate, domain) * W
+  return (
+    <span className="inline-flex items-center gap-2" role="img" aria-label={label} title={label}>
+      <svg width={W} height={12} viewBox={`0 0 ${W} 12`} className="overflow-visible" aria-hidden="true">
+        <rect x={0} y={4} width={W} height={4} rx={2} fill="rgb(var(--ink-rgb) / 0.12)" />
+        <rect x={0} y={3} width={fill} height={6} rx={3} fill={beat ? 'var(--ok)' : 'var(--danger)'} />
+        <rect x={Math.min(W - 2, Math.max(0, tick - 1))} y={-1} width={2} height={14} fill="var(--ink-1)" />
+      </svg>
+      <span className="tabular-nums text-[12px] text-ink-2">{formatEps(actual)}</span>
+    </span>
   )
 }
 

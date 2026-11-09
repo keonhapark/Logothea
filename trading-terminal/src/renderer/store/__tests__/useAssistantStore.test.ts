@@ -344,3 +344,29 @@ describe('useAssistantStore', () => {
     })
   })
 })
+
+describe('질문 초안', () => {
+  beforeEach(() => useAssistantStore.setState({ drafts: {} }))
+
+  it('콜마다 따로 남는다', () => {
+    const { setDraft } = useAssistantStore.getState()
+    setDraft('call-1', '가이던스 근거는?')
+    setDraft('call-2', '마진은?')
+    expect(useAssistantStore.getState().drafts).toEqual({ 'call-1': '가이던스 근거는?', 'call-2': '마진은?' })
+  })
+
+  it('빈 글이 되면 그 콜의 초안을 지운다', () => {
+    const { setDraft } = useAssistantStore.getState()
+    setDraft('call-1', '가이던스')
+    setDraft('call-1', '')
+    expect(useAssistantStore.getState().drafts).toEqual({})
+  })
+
+  it('대화를 새로 열거나 지워도 초안은 남는다', () => {
+    const { setDraft, open, reset } = useAssistantStore.getState()
+    setDraft('call-1', '가이던스')
+    open({ ticker: 'WMT', callId: 'call-1', anchorSequence: 3 })
+    reset()
+    expect(useAssistantStore.getState().drafts['call-1']).toBe('가이던스')
+  })
+})
