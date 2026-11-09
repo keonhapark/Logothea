@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import type { TranscriptSegment } from '../../store/useTranscriptStore'
 import type { HighlightedTranslation } from '../../hooks/useTranscriptTranslation'
 import type { GlossaryStatus } from '../../store/useGlossaryStore'
@@ -27,6 +27,8 @@ interface TranscriptStreamProps {
   glossaryStatus: GlossaryStatus
   /** 이 발언을 범위로 질의응답을 연다. 없으면 버튼을 두지 않는다. */
   onAskAbout?: (sequence: number) => void
+  /** 머리줄 아래에 붙는 가로 시간축. 스크롤하면 콜 바 바로 아래에 멈춰 있다. */
+  timeline?: ReactNode
 }
 
 /**
@@ -50,6 +52,7 @@ export default function TranscriptStream({
   onShowTranslationChange,
   glossaryStatus,
   onAskAbout,
+  timeline,
 }: TranscriptStreamProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const [stuck, setStuck] = useState(true)
@@ -110,6 +113,11 @@ export default function TranscriptStream({
         </div>
         {showTranslation && glossaryStatus === 'failed' && translations.size > 0 && !compact && (
           <p className="px-7 -mt-1 pb-2 text-[12px] text-ink-3">용어 설명을 불러오지 못해 번역만 보여 줍니다.</p>
+        )}
+        {timeline && (
+          <div className="sticky z-[2] px-7 pt-1 pb-3 mb-1" style={{ top: 0, background: 'var(--cloud)' }}>
+            {timeline}
+          </div>
         )}
 
         {segments.length === 0 ? (

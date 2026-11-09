@@ -31,8 +31,8 @@ interface OrderSheetProps {
   /** KIS 계좌인데 키가 없으면 false. 이때는 입력 대신 키 등록 안내를 보인다. */
   hasKey: boolean
   onOpenSettings: () => void
-  /** 전송. 성공 · 실패 기록은 호출 측이 남긴다. */
-  onSubmit: (payload: OrderSubmitPayload) => Promise<void>
+  /** 전송. 성공 · 실패 기록은 호출 측이 남기고, 남긴 기록을 돌려준다(영수증에 쓴다). */
+  onSubmit: (payload: OrderSubmitPayload) => Promise<SessionOrder | null>
   submitting: boolean
   orders: readonly SessionOrder[]
   onRefreshOrders: () => void
@@ -110,14 +110,68 @@ function OpenSheet(props: OrderSheetProps) {
     }
   }, [onClose])
 
+  // 머리 부분을 잡고 끌어 옮긴다. 열 때마다 제자리(콜 바 아래 오른쪽)에서 시작한다.
+  // 들어오는 애니메이션이 transform 을 쓰므로 위치는 translate 로 따로 준다.
+  const [offset, setOffset] = useState({ x: 0, y: 0 })
+  const stopDrag = useRef<(() => void) | null>(null)
+  useEffect(() => () => stopDrag.current?.(), [])
+  function startDrag(e: React.PointerEvent<HTMLDivElement>) {
+    const target = e.target as Element
+    if (e.button !== 0 || !target.closest('header') || target.closest('button, input, a')) return
+    const el = ref.current
+    const parent = el?.offsetParent as HTMLElement | null
+    if (!el || !parent) return
+    e.preventDefault()
+    // 포인터를 붙잡아 창 밖에서 놓아도 끝이 온다.
+    el.setPointerCapture(e.pointerId)
+    const start = { px: e.clientX, py: e.clientY, x: offset.x, y: offset.y }
+    const r = el.getBoundingClientRect()
+    const pr = parent.getBoundingClientRect()
+    const MARGIN = 12
+    // 끌기 시작한 순간의 시트 자리에서 부모 판 안쪽까지만 움직인다.
+    const lim = {
+      minX: start.x + (pr.left + MARGIN - r.left),
+      maxX: start.x + (pr.right - MARGIN - r.right),
+      // 콜 바(위쪽 topInset)는 덮지 않는다 — 콜 바의 `주문` 버튼으로 닫을 수 있어야 한다.
+      minY: start.y + (pr.top + topInset - r.top),
+      maxY: start.y + (pr.bottom - MARGIN - r.bottom),
+    }
+    const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), Math.max(lo, hi))
+    const onMove = (ev: PointerEvent) => {
+      if (ev.buttons === 0) return onUp()
+      setOffset({
+        x: clamp(start.x + ev.clientX - start.px, lim.minX, lim.maxX),
+        y: clamp(start.y + ev.clientY - start.py, lim.minY, lim.maxY),
+      })
+    }
+    const onUp = () => {
+      el.removeEventListener('pointermove', onMove)
+      el.removeEventListener('pointerup', onUp)
+      el.removeEventListener('pointercancel', onUp)
+      el.removeEventListener('lostpointercapture', onUp)
+      stopDrag.current = null
+    }
+    el.addEventListener('pointermove', onMove)
+    el.addEventListener('pointerup', onUp)
+    el.addEventListener('pointercancel', onUp)
+    el.addEventListener('lostpointercapture', onUp)
+    stopDrag.current = onUp
+  }
+
   return (
     <div
       ref={ref}
       role="dialog"
       aria-modal="false"
       aria-labelledby="order-sheet-title"
-      className="read absolute right-3 bottom-3 z-30 w-[400px] rounded-[30px] flex flex-col overflow-hidden animate-slide-in-top [-webkit-app-region:no-drag]"
-      style={{ top: topInset }}
+      onPointerDown={startDrag}
+      className="read absolute right-3 z-30 w-[400px] rounded-[30px] flex flex-col overflow-hidden animate-slide-in-top [-webkit-app-region:no-drag]"
+      style={{
+        top: topInset,
+        translate: `${offset.x}px ${offset.y}px`,
+        // 아래로 옮긴 만큼 최대 높이를 줄여 창 밖으로 나가지 않게 한다.
+        maxHeight: `calc(100% - ${topInset + 12 + Math.max(0, offset.y)}px)`,
+      }}
     >
       <SheetBody {...props} />
     </div>
@@ -171,12 +225,66 @@ function SheetBody({
     !submitting
   const needsKey = account !== null && account !== 'SELF_PAPER' && !hasKey
 
+  // 보내기 반응: 링이 차오르고(run) → 접수되면 닫히며 체크(ok) → 영수증이 올라온다.
+  const [sendPhase, setSendPhase] = useState<'idle' | 'run' | 'ok'>('idle')
+  const [receipt, setReceipt] = useState<{ order: SessionOrder; price: number | null } | null>(null)
+  const [receiptIn, setReceiptIn] = useState(false)
+  const timers = useRef<number[]>([])
+  const mounted = useRef(true)
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+      timers.current.forEach((t) => window.clearTimeout(t))
+    }
+  }, [])
+
   async function send() {
     // 확인 화면에 있는 동안 예수금 · 보유 · 가격이 바뀌었을 수 있다. 보내기 직전에 다시 본다.
-    if (!canReview) return
-    await onSubmit({ side, qty, price: type === 'IMMEDIATE' ? null : unitPrice })
-    setConfirming(false)
+    if (!canReview || sendPhase !== 'idle') return
+    const sentPrice = unitPrice
+    setSendPhase('run')
+    let order: SessionOrder | null = null
+    try {
+      order = await onSubmit({ side, qty, price: type === 'IMMEDIATE' ? null : unitPrice })
+    } catch {
+      order = null
+    }
+    // 보내는 사이 시트가 닫혔으면 여기서 멈춘다. 주문 결과는 호출 측이 목록에 남긴다.
+    if (!mounted.current) return
+    if (!order || order.status === 'FAILED') {
+      // 실패는 호출 측이 토스트로 알리고 주문 목록에 남긴다. 입력 화면으로 돌아간다.
+      setSendPhase('idle')
+      setConfirming(false)
+      return
+    }
+    const done = order
+    setSendPhase('ok')
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    timers.current.push(
+      window.setTimeout(() => {
+        setReceipt({ order: done, price: sentPrice })
+        requestAnimationFrame(() => requestAnimationFrame(() => setReceiptIn(true)))
+      }, reduce ? 0 : 900),
+    )
   }
+
+  function closeReceipt() {
+    setReceiptIn(false)
+    setReceipt(null)
+    setSendPhase('idle')
+    setConfirming(false)
+    setQty(1)
+  }
+
+  const receiptTitleRef = useRef<HTMLSpanElement>(null)
+  // 영수증이 덮은 동안 아래 입력에 Tab 이 닿지 않게 한다(React 18 타입에 inert 가 없어 직접 단다).
+  const bodyRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    bodyRef.current?.toggleAttribute('inert', receipt != null)
+    // inert 가 붙으면 보내기 버튼에 있던 포커스가 빠진다. 바로 영수증 제목으로 옮긴다.
+    if (receipt) receiptTitleRef.current?.focus({ preventScroll: true })
+  }, [receipt])
 
   // 단계가 바뀌면 누른 버튼이 사라진다. 포커스를 새 단계의 제목으로 옮긴다.
   const titleRef = useRef<HTMLSpanElement>(null)
@@ -191,7 +299,7 @@ function SheetBody({
 
   return (
     <>
-      <header className="px-6 pt-5 pb-4 flex items-start justify-between gap-3">
+      <header className="px-6 pt-5 pb-4 flex items-start justify-between gap-3 cursor-grab active:cursor-grabbing select-none" title="끌어서 옮기기">
         <div className="flex flex-col gap-1">
           <span className="text-[12px] text-ink-3">
             <span className="num text-ink-1 font-semibold">{ticker}</span> 주문
@@ -212,7 +320,7 @@ function SheetBody({
         </button>
       </header>
 
-      <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-6 flex flex-col gap-5">
+      <div className={`order-body min-h-0 overflow-y-auto px-6 pb-6 flex flex-col gap-5 ${receipt ? 'is-away' : ''}`} ref={bodyRef}>
         {needsKey ? (
           <div className="flex flex-col gap-3 py-4">
             <p className="text-[14px] text-ink-1 leading-relaxed">KIS 키를 등록하면 이 자리에서 주문할 수 있습니다.</p>
@@ -245,17 +353,42 @@ function SheetBody({
               <dd className="tabular-nums text-right text-ink-1 font-semibold">{total != null ? usd(total) : '—'}</dd>
             </dl>
             <div className="flex gap-2 pt-2">
-              <button type="button" className="gbtn flex-1" onClick={() => setConfirming(false)} disabled={submitting}>
-                취소
-              </button>
               <button
                 type="button"
-                className={`gbtn flex-1 ${account === 'KIS_REAL' ? 'gbtn-porphyra' : 'gbtn-lapis'}`}
-                onClick={() => void send()}
-                disabled={!canReview}
+                className={`gbtn send-cancel flex-1 ${sendPhase !== 'idle' ? 'is-gone' : ''}`}
+                onClick={() => setConfirming(false)}
+                disabled={submitting || sendPhase !== 'idle'}
               >
-                {submitting ? '보내는 중' : '주문 보내기'}
+                취소
               </button>
+              <div className="relative flex-1 flex justify-center">
+                <button
+                  type="button"
+                  className={`gbtn send-btn ${account === 'KIS_REAL' ? 'gbtn-porphyra' : 'gbtn-lapis'} ${
+                    sendPhase === 'run' ? 'is-run' : sendPhase === 'ok' ? 'is-ok' : ''
+                  }`}
+                  onClick={() => void send()}
+                  disabled={sendPhase === 'idle' && !canReview}
+                  aria-label={sendPhase === 'idle' ? undefined : sendPhase === 'run' ? '주문을 보내는 중' : '주문 접수됨'}
+                >
+                  {sendPhase === 'idle' ? (
+                    '주문 보내기'
+                  ) : sendPhase === 'ok' ? (
+                    <svg className="send-check w-[18px] h-[18px]" viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M5 12.5l4.5 4.5L19 7.5" />
+                    </svg>
+                  ) : null}
+                </button>
+                <svg
+                  className={`send-ring ${sendPhase !== 'idle' ? 'is-on' : ''} ${sendPhase === 'ok' ? 'is-done' : ''}`}
+                  viewBox="0 0 54 54"
+                  aria-hidden="true"
+                  style={{ ['--p' as string]: sendPhase === 'run' ? 0.85 : sendPhase === 'ok' ? 1 : 0 }}
+                >
+                  <circle className="t" cx="27" cy="27" r="25" />
+                  <circle className="p" cx="27" cy="27" r="25" pathLength={100} />
+                </svg>
+              </div>
             </div>
           </div>
         ) : (
@@ -334,6 +467,102 @@ function SheetBody({
           <SessionOrderList orders={orders} onRefresh={onRefreshOrders} refreshing={refreshingOrders} />
         </div>
       </div>
+
+      <p className="sr-only" role="status" aria-live="polite">
+        {sendPhase === 'run' ? '주문을 보내는 중입니다' : sendPhase === 'ok' ? '주문이 접수되었습니다' : ''}
+      </p>
+
+      {receipt && (
+        <OrderReceipt
+          order={receipt.order}
+          sentPrice={receipt.price}
+          ticker={ticker}
+          accountTitle={meta?.title ?? ''}
+          shown={receiptIn}
+          titleRef={receiptTitleRef}
+          onClose={closeReceipt}
+        />
+      )}
     </>
+  )
+}
+
+function clock(ms: number): string {
+  const d = new Date(ms)
+  return [d.getHours(), d.getMinutes(), d.getSeconds()].map((n) => String(n).padStart(2, '0')).join(':')
+}
+
+/**
+ * 접수 영수증 — 시트 틀은 유리 그대로 두고, 영수증만 클레이(작은 구름)로 아래에서 올라온다.
+ * 입력 화면 대신 자리를 차지해 시트 높이가 영수증에 맞춰진다.
+ */
+function OrderReceipt({
+  order,
+  sentPrice,
+  ticker,
+  accountTitle,
+  shown,
+  titleRef,
+  onClose,
+}: {
+  order: SessionOrder
+  /** 보낸 단가. 즉시 체결도 버퍼가 얹힌 지정가로 나간다. */
+  sentPrice: number | null
+  ticker: string
+  accountTitle: string
+  shown: boolean
+  titleRef: React.RefObject<HTMLSpanElement>
+  onClose: () => void
+}) {
+  const executed = order.status === 'EXECUTED'
+  const price = executed ? order.executedPrice : order.requestedPrice ?? sentPrice
+  return (
+    <div
+      className={`receipt cloud-s shrink-0 mx-4 mb-4 rounded-[24px] px-6 pt-6 pb-5 flex flex-col ${shown ? 'is-in' : ''}`}
+      role="group"
+      aria-labelledby="order-receipt-title"
+    >
+      <span
+        className="mx-auto mb-3 grid place-items-center w-12 h-12 rounded-full"
+        style={{ background: 'var(--lapis)', color: 'var(--on-lapis)', boxShadow: '0 0 0 7px rgb(var(--lapis-rgb) / 0.14)' }}
+        aria-hidden="true"
+      >
+        <svg viewBox="0 0 24 24" className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M5 12.5l4.5 4.5L19 7.5" />
+        </svg>
+      </span>
+      <span id="order-receipt-title" ref={titleRef} tabIndex={-1} className="text-center text-[18px] font-bold text-ink-1 outline-none">
+        {executed ? '체결되었습니다' : '주문을 접수했습니다'}
+      </span>
+      <span className="text-center text-[12.5px] text-ink-3 mt-1">
+        {accountTitle}
+        {!executed && ' · 체결되면 알려 드립니다'}
+      </span>
+      <div className="receipt-tear my-4" aria-hidden="true" />
+      <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-[13.5px]">
+        <dt className="text-ink-3">종목</dt>
+        <dd className="num text-right text-ink-1 font-semibold">{ticker}</dd>
+        <dt className="text-ink-3">방향</dt>
+        <dd className="text-right font-semibold" style={{ color: order.side === 'BUY' ? 'var(--up)' : 'var(--down)' }}>
+          {order.side === 'BUY' ? '매수' : '매도'}
+        </dd>
+        <dt className="text-ink-3">수량</dt>
+        <dd className="tabular-nums text-right text-ink-1">
+          {(executed ? order.executedQty : order.qty).toLocaleString()}주
+        </dd>
+        <dt className="text-ink-3">{executed ? '체결가' : '가격'}</dt>
+        <dd className="tabular-nums text-right text-ink-1">
+          {price != null ? usd(price) : '—'}
+          {!executed && order.requestedPrice == null && <span className="text-ink-3 text-[12px]"> 지정가 (즉시 체결)</span>}
+        </dd>
+        <dt className="text-ink-3">주문번호</dt>
+        <dd className="num text-right text-ink-1">{order.brokerOrderId ?? '—'}</dd>
+        <dt className="text-ink-3">시각</dt>
+        <dd className="tabular-nums text-right text-ink-2">{clock(order.placedAt)}</dd>
+      </dl>
+      <button type="button" className="gbtn w-full mt-5" onClick={onClose}>
+        확인
+      </button>
+    </div>
   )
 }

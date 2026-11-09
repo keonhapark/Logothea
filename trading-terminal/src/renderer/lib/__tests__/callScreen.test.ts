@@ -10,6 +10,7 @@ import {
   groupDiffsBySequence,
   isProminentDiff,
   maxOrderQty,
+  timelineMarks,
   translationsByLastSequence,
 } from '../callScreen'
 import type { TranscriptSegment } from '../../store/useTranscriptStore'
@@ -204,5 +205,51 @@ describe('epsBulletRatio', () => {
     expect(epsBulletRatio(-5, [0, 1])).toBe(0)
     expect(epsBulletRatio(5, [0, 1])).toBe(1)
     expect(epsBulletRatio(0.25, [0, 1])).toBe(0.25)
+  })
+})
+
+describe('timelineMarks', () => {
+  it('자막이 없으면 점도 축 길이도 없다', () => {
+    expect(timelineMarks([], [diff({ sequence: 1 })])).toEqual({ totalMs: 0, marks: [] })
+  })
+
+  it('축은 마지막 발언 끝까지이고, 점은 그 발언의 시작 시각 비율에 놓인다', () => {
+    const segs = [seg(0), seg(1), seg(2), seg(3)] // 마지막 끝 = 59000
+    const { totalMs, marks } = timelineMarks(segs, [diff({ sequence: 2 })])
+    expect(totalMs).toBe(59000)
+    expect(marks).toHaveLength(1)
+    expect(marks[0].startMs).toBe(30000)
+    expect(marks[0].ratio).toBeCloseTo(30000 / 59000)
+  })
+
+  it('첫 발언의 대조는 왼쪽 끝(0)에 놓인다', () => {
+    const { marks } = timelineMarks([seg(0), seg(1)], [diff({ sequence: 0 })])
+    expect(marks[0].ratio).toBe(0)
+  })
+
+  it('보이는 자막에 없는 발언의 대조는 찍지 않는다', () => {
+    const { marks } = timelineMarks([seg(0), seg(1)], [diff({ sequence: 1 }), diff({ sequence: 7 })])
+    expect(marks.map((m) => m.sequence)).toEqual([1])
+  })
+
+  it('같은 발언의 대조는 한 점으로 묶고 도착 순서를 지킨다', () => {
+    const a = diff({ sequence: 1, topic: 'margin' })
+    const b = diff({ sequence: 1, topic: 'demand' })
+    const { marks } = timelineMarks([seg(0), seg(1)], [a, b])
+    expect(marks).toHaveLength(1)
+    expect(marks[0].items).toEqual([a, b])
+    expect(marks[0].lead).toBe(a)
+  })
+
+  it('묶인 점의 대표는 후퇴 · 고위험 항목이다', () => {
+    const a = diff({ sequence: 1, changeType: 'improved' })
+    const b = diff({ sequence: 1, changeType: 'weakened' })
+    const { marks } = timelineMarks([seg(0), seg(1)], [a, b])
+    expect(marks[0].lead).toBe(b)
+  })
+
+  it('점은 도착 순서가 아니라 시각 순으로 놓인다', () => {
+    const { marks } = timelineMarks([seg(0), seg(1), seg(2)], [diff({ sequence: 2 }), diff({ sequence: 0 })])
+    expect(marks.map((m) => m.sequence)).toEqual([0, 2])
   })
 })

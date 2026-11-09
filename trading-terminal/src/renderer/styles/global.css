@@ -507,3 +507,76 @@
     backdrop-filter: none;
   }
 }
+
+@layer components {
+  /* ── 주문 보내기 (W2) ─────────────────────────────────────────────────
+     ring-draw-check(ui-shelf)의 방식. 보내면 버튼이 동그라미로 줄고 라피스 링이 차오른다. 접수되면
+     링이 닫히며 체크가 그려지고, 클레이 영수증이 시트 아래에서 올라온다. 시트 틀은 읽는 유리 그대로다. */
+  .send-cancel,
+  .send-btn {
+    height: 38px;
+    transition:
+      flex-basis 300ms var(--ease),
+      flex-grow 300ms var(--ease),
+      width 300ms var(--ease),
+      padding 300ms var(--ease),
+      transform 220ms var(--spring),
+      filter 200ms var(--ease),
+      opacity 200ms;
+  }
+  .send-btn { width: 100%; }
+  .send-cancel.is-gone { flex: 0 0 0; width: 0; padding: 0; opacity: 0; pointer-events: none; margin-right: -8px; }
+  .send-btn.is-run,
+  .send-btn.is-ok { width: 38px; padding: 0; pointer-events: none; }
+  .send-btn.is-ok { background: var(--lapis); color: var(--on-lapis); }
+  .send-ring {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 54px;
+    height: 54px;
+    margin: -27px 0 0 -27px;
+    transform: rotate(-90deg);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 250ms;
+  }
+  .send-ring.is-on { opacity: 1; transition-delay: 200ms; }
+  .send-ring circle { fill: none; stroke-width: 3; stroke-linecap: round; }
+  .send-ring .t { stroke: rgb(var(--ink-rgb) / 0.1); }
+  .send-ring .p {
+    stroke: var(--lapis);
+    stroke-dasharray: 100;
+    stroke-dashoffset: calc(100 - var(--p, 0) * 100);
+    transition: stroke-dashoffset 2.6s cubic-bezier(0.15, 0.7, 0.3, 1);
+  }
+  .send-ring.is-done .p { transition-duration: 350ms; }
+  .send-check path {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2.4;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-dasharray: 20;
+    stroke-dashoffset: 20;
+    animation: login-check 0.4s var(--ease) 0.2s forwards;
+  }
+  .order-body { transition: opacity 300ms, transform 450ms var(--ease); }
+  /* 영수증이 오면 입력 화면은 자리를 내주고(겹쳐 둔 채) 사라진다. 시트 높이는 영수증에 맞춰진다 */
+  .order-body.is-away { position: absolute; left: 0; right: 0; opacity: 0; transform: translateY(-16px); pointer-events: none; }
+  .receipt {
+    transform: translateY(calc(100% + 16px));
+    transition: transform 600ms var(--spring);
+  }
+  .receipt.is-in { transform: none; }
+  .receipt-tear {
+    border-top: 1.5px dashed rgb(var(--ink-rgb) / 0.14);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .send-ring .p { transition-duration: 400ms; }
+    .receipt { transition: opacity 200ms; transform: none; opacity: 0; }
+    .receipt.is-in { opacity: 1; }
+    .order-body { transition: opacity 200ms; }
+    .order-body.is-away { transform: none; }
+  }
+}
