@@ -657,12 +657,21 @@ Cloudflare 는 도메인을 원가로 판매하므로 등록 대행 마진이 �
 
 ### 메모리 제한 설정
 
-t3.micro(1GB) 시절에 맞춘 값들이고, t3.small 로 올린 뒤에도 그대로 두었습니다. 지금 값으로 충분히 돌아갑니다.
+t3.micro(1GB) 시절에 맞춘 값들이고, t3.small 로 올린 뒤에도 대부분 그대로 두었습니다.
+
+JVM 은 두 가지를 바꿨습니다(2026-11-09).
+
+- 메타스페이스 상한을 128MB 에서 192MB 로 올렸습니다. 백엔드는 기동 직후 메타스페이스를 약 107MB 쓰고,
+  128MB 상한에서는 2026-10-26 배포 후 3일 만에 `OutOfMemoryError: Metaspace` 가 났습니다. 운영에서 무엇이 약
+  21MB 를 더 늘렸는지는 확인하지 못했습니다. 재배포 후 증가 추세를 보고 192MB 가 충분한지 판단합니다.
+- `-XX:+ExitOnOutOfMemoryError` 를 넣었습니다. 이전에는 OOM 뒤에도 JVM 이 살아 있어 systemd 의
+  `Restart=always` 가 동작하지 않았고, 8일 동안 헬스체크에 응답하지 못했습니다. 이제 OOM 이 나면 프로세스가
+  끝나고 10초 뒤 다시 뜹니다.
 
 | 대상 | 설정 |
 |---|---|
 | 스왑 | `/swapfile` 2GB, fstab 등록 |
-| JVM | `-Xms128m -Xmx384m -XX:MaxMetaspaceSize=128m -XX:+UseSerialGC -Xss512k` |
+| JVM | `-Xms128m -Xmx384m -XX:MaxMetaspaceSize=192m -XX:+UseSerialGC -Xss512k -XX:+ExitOnOutOfMemoryError` |
 | MySQL | buffer pool 64M, performance_schema OFF, max_connections 30, mem_limit 300m |
 | Redis | maxmemory 48mb, allkeys-lru, RDB 저장 끔, mem_limit 64m |
 | PostgreSQL | shared_buffers 32M, max_connections 20, mem_limit 200m |
