@@ -16,6 +16,8 @@ import Modal from '../components/common/Modal'
 import { ComingSoon } from '../components/common/StateView'
 import { showIpcErrorToast } from '../components/common/Toast'
 import { notifyComingSoon } from '../components/auth/notifyComingSoon'
+import { getThemeChoice, setThemeChoice } from '../lib/theme'
+import { type ThemeChoice } from '../../lib/theme'
 
 /**
  * 키 삭제 시 분기 결정 helper (테스트 친화적 순수 함수).
@@ -525,19 +527,41 @@ function ConfirmModal({
 }
 
 /* -------------------------------------------------------------------------- */
-/* AppSettingsPanel — 앱 설정 자리. 아직 동작하는 항목이 없다.                   */
+/* AppSettingsPanel — 앱 설정. 동작하는 항목은 테마뿐이고 나머지는 준비 중이다.  */
 /* -------------------------------------------------------------------------- */
 const APP_SETTINGS: { title: string; note: string }[] = [
   { title: '알림', note: '콜 시작 · 체결 알림을 고르는 기능은 준비 중입니다' },
-  { title: '테마', note: '지금은 어두운 테마만 있습니다' },
   { title: '언어', note: '지금은 한국어만 있습니다' },
   { title: '자동 로그인', note: '로그인 정보를 보관하는 방식을 정한 뒤 추가합니다' },
 ]
 
+const THEME_ITEMS: { id: ThemeChoice; label: string }[] = [
+  { id: 'system', label: '시스템' },
+  { id: 'light', label: '라이트' },
+  { id: 'dark', label: '다크' },
+]
+
 function AppSettingsPanel() {
+  const [theme, setTheme] = useState<ThemeChoice>(getThemeChoice)
+
+  const changeTheme = (next: ThemeChoice) => {
+    if (next === theme) return
+    setTheme(next)
+    void setThemeChoice(next)
+  }
+
   return (
     <section className="cloud rounded-[var(--radius-panel)] p-6 flex flex-col gap-4">
       <h2 className="on-glass text-ink-1 text-[16px] font-semibold">앱 설정</h2>
+      <div className="flex flex-col gap-2.5">
+        <span id="theme-label" className="text-ink-2 text-[12.5px] font-medium">테마</span>
+        <div role="group" aria-labelledby="theme-label" aria-describedby="theme-note">
+          <SegmentedControl items={THEME_ITEMS} activeId={theme} onChange={changeTheme} />
+        </div>
+        <p id="theme-note" className="text-ink-3 text-[12.5px]">
+          {theme === 'system' ? '운영체제의 밝은 화면 · 어두운 화면 설정을 따릅니다' : '운영체제 설정과 관계없이 이 테마로 보입니다'}
+        </p>
+      </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {APP_SETTINGS.map((it) => (
           <ComingSoon key={it.title} title={it.title} note={it.note} className="py-6 px-4" />

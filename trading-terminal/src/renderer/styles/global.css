@@ -319,6 +319,17 @@
   100% { background-position: -100% 0; }
 }
 
+/*
+ * 테마를 바꾸는 순간에는 색 transition 을 끈다(lib/theme.ts). 요소마다 색이 따로 늦게 바뀌지 않게.
+ * 자리 이동(transform · width)은 남긴다 — 테마를 고른 전환 손잡이가 그 순간 미끄러지는 중이다.
+ */
+.theme-switching,
+.theme-switching *,
+.theme-switching *::before,
+.theme-switching *::after {
+  transition-property: transform, width !important;
+}
+
 /* 움직임 줄이기 · 투명도 줄이기 설정을 따른다 */
 @media (prefers-reduced-motion: reduce) {
   *,
