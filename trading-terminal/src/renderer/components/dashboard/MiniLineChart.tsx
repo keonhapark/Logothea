@@ -15,9 +15,9 @@ interface MiniLineChartProps {
 }
 
 const COLOR_MAP = {
-  accent: { line: 'var(--up)', area: 'rgba(var(--up-rgb),0.1)', dot: 'var(--up)' },
-  sell: { line: 'var(--down)', area: 'rgba(var(--down-rgb),0.08)', dot: 'var(--down)' },
-  neutral: { line: 'var(--ink-3)', area: 'rgba(var(--ink-rgb),0.08)', dot: 'var(--ink-3)' },
+  accent: { line: 'var(--up)', area: 'rgb(var(--up-rgb) / 0.1)', dot: 'var(--up)' },
+  sell: { line: 'var(--down)', area: 'rgb(var(--down-rgb) / 0.08)', dot: 'var(--down)' },
+  neutral: { line: 'var(--ink-3)', area: 'rgb(var(--ink-rgb) / 0.08)', dot: 'var(--ink-3)' },
 }
 
 /**
