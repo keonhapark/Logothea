@@ -8,7 +8,8 @@
  *  - 완성 값 `--{역할}`: 바로 쓰는 색. 테마마다 투명도가 다른 글자 · 선은 투명도를 `--a-*` 로 따로 둔다.
  * `rgba(var(--x-rgb), a)` 처럼 쉼표로 섞어 쓰면 값이 무효가 되어 조용히 투명해진다. 늘 `rgb(… / a)` 로 쓴다.
  *
- * 지금은 다크 한 벌이다. 라이트는 `:root[data-theme="light"]` 블록이 채널과 재질 값만 덮어쓴다.
+ * `:root` 가 다크이고, 라이트는 `:root[data-theme="light"]` 블록이 채널과 재질 값만 덮어쓴다.
+ * 테마는 `<html data-theme>` 으로 고른다(public/theme-boot.js · lib/theme.ts).
  */
 @font-face {
   font-family: 'Pretendard Variable';
@@ -193,8 +194,9 @@
 
   --ink-rgb: 27 28 32;
   --a-ink-2: 0.78;
-  --a-ink-3: 0.58;
-  --a-ink-4: 0.42;
+  /* 글자 대비: ink-3 은 바탕 · 구름 위 4.5:1 이상(AA), ink-4 는 다크와 같은 3.3:1 남짓 */
+  --a-ink-3: 0.66;
+  --a-ink-4: 0.52;
   --a-line: 0.09;
   --a-line-strong: 0.14;
 
@@ -205,15 +207,16 @@
   --lapis-rgb: 52 98 226;
   --olive-rgb: 112 142 22;
   --porphyra-rgb: 186 52 146;
-  --olive-ink-rgb: 93 118 18;
+  --olive-ink-rgb: 88 112 17;
   --porphyra-ink-rgb: 176 48 127;
 
-  --up-rgb: 209 52 59;
-  --down-rgb: 40 98 214;
+  /* 글자로 쓰는 상태 색은 바탕 · 구름 위 4.5:1 이상(AA) */
+  --up-rgb: 192 48 54;
+  --down-rgb: 40 97 212;
 
-  --ok-rgb: 93 118 18;
-  --danger-rgb: 196 81 42;
-  --caution-rgb: 158 108 16;
+  --ok-rgb: 88 112 17;
+  --danger-rgb: 174 72 37;
+  --caution-rgb: 139 95 14;
 
   --wash-rgb: 27 28 32;
   --edge-rgb: 27 28 32;

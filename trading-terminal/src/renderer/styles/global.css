@@ -319,6 +319,12 @@
   100% { background-position: -100% 0; }
 }
 
+/* 테마별 그림(로그인 화면 로고처럼 바탕에 따라 파일이 다른 것). 보이지 않는 쪽은 접근성 트리에서도 빠진다 */
+:root[data-theme='light'] .theme-dark-only,
+:root:not([data-theme='light']) .theme-light-only {
+  display: none;
+}
+
 /*
  * 테마를 바꾸는 순간에는 색 transition 을 끈다(lib/theme.ts). 요소마다 색이 따로 늦게 바뀌지 않게.
  * 자리 이동(transform · width)은 남긴다 — 테마를 고른 전환 손잡이가 그 순간 미끄러지는 중이다.
