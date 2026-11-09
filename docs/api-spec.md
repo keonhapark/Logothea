@@ -788,7 +788,7 @@ Redis `trading-signals` 수신을 계기로 발행하던 토픽입니다. #127 �
 
 | Method | Endpoint | 인증 | 호출 | 설명 |
 | :----- | :------- | :--: | :--- | :--- |
-| GET | `/api/v1/stocks/sp500` | 불필요 | 터미널 | S&P 500 종목 목록 `[{ticker, companyName, sector, marketCapUsd, currentPrice, changePercent}]`. 뒤의 세 값은 `null` 일 수 있습니다 |
+| GET | `/api/v1/stocks/sp500` | 불필요 | 터미널 | S&P 500 종목 목록 `[{ticker, companyName, sector, marketCapUsd, marketCapRank, currentPrice, previousClose, changePercent}]`. 시가총액 내림차순입니다. `marketCapRank` 는 시가총액이 있는 종목 가운데 1부터 매긴 순위입니다. `marketCapUsd` · `marketCapRank` · `currentPrice` · `previousClose` · `changePercent` 는 데이터가 없으면 `null` 입니다(0 이 아닙니다). 시가총액 상위 100개는 Finnhub 시세로 현재가와 전일종가를 채웁니다 |
 | GET | `/api/v1/stocks/prices` | 불필요 | 터미널 | backend 캐시의 종목 시세. 형식은 4.10 과 같습니다 |
 | GET | `/api/v1/stocks/{ticker}/detail` | 필요 | 터미널 | 종목 상세 (아래) |
 

@@ -13,6 +13,7 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Set;
 
 @Slf4j
 @Service
@@ -26,6 +27,9 @@ public class FinnhubWebSocketManager {
     private final StockPriceCache priceCache;
     private final StockRepository stockRepository;
     private final ObjectMapper objectMapper;
+
+    /** 기동 시 구독을 맡긴 종목. 순위가 바뀌어도 재기동 전까지 그대로다. */
+    private volatile Set<String> subscribedTickers = Set.of();
 
     @Async
     @EventListener(ApplicationReadyEvent.class)
@@ -41,6 +45,9 @@ public class FinnhubWebSocketManager {
             log.warn("[FinnhubWS] 활성 종목 없음 — 구독 중단");
             return;
         }
+
+        // 키 수 × 50 개로 잘라 왔으므로 전부 어느 키엔가 배정된다.
+        subscribedTickers = Set.copyOf(topTickers);
 
         for (int i = 0; i < activeKeys.size(); i++) {
             int from = i * SYMBOLS_PER_KEY;
@@ -60,6 +67,14 @@ public class FinnhubWebSocketManager {
             log.info("[FinnhubWS] 키 {} — {}~{}위 {}개 종목 구독 스레드 시작",
                     label, from + 1, to, slice.size());
         }
+    }
+
+    /**
+     * 실시간 구독을 맡긴 종목. {@link QuoteRefreshScheduler} 가 장중 REST 갱신에서 이 종목들을 뺀다.
+     * 연결이 끊겨 재연결 중인 상태도 구독으로 센다.
+     */
+    public Set<String> subscribedTickers() {
+        return subscribedTickers;
     }
 
     private List<String> loadTopTickers(int limit) {
