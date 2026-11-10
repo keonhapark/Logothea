@@ -133,13 +133,17 @@ data_pipeline 자막은 분석하지 않습니다(AI Engine 의 팩트체크 버
 | 엔드포인트 | `/ws-native`(native WebSocket, 터미널), `/ws`(SockJS, 웹) |
 | broker prefix | `/topic`, `/queue`. 앱 prefix `/app` 과 사용자 prefix `/user` 는 설정만 있고 쓰지 않습니다 |
 | 인증 | CONNECT 프레임의 `Authorization: Bearer {accessToken}` 을 `StompJwtChannelInterceptor` 가 검증합니다 |
+| heart-beat | 서버는 `10000,10000`(밀리초)을 제안합니다. 실제 간격은 클라이언트가 CONNECT 에 보낸 값과 협상해 정해지고, 클라이언트가 `0,0` 을 보내면 꺼집니다. 터미널과 웹은 `10000,10000` 을 보냅니다 |
 
 - 인증에 실패하면 ERROR 프레임(`STOMP 인증 실패`)으로 끊습니다. 터미널은 이 문구를 보면 access token 을 한 번
   갱신해 다시 연결하므로, 문구도 계약에 포함됩니다.
 - CONNECT 없이 보낸 SUBSCRIBE 와, 인증된 세션의 클라이언트 SEND 는 모두 거부합니다. STOMP 는 서버에서
   클라이언트로만 흐릅니다.
-- 토픽별 권한 구분은 없습니다. 로그인한 사용자는 모든 토픽을 구독할 수 있고, 로그인하지 않으면 어떤 토픽도
-  구독할 수 없습니다.
+- 로그인한 사용자는 토픽별 권한 구분 없이 모든 토픽을 구독할 수 있고, 토큰이 없으면 어떤 토픽도 구독할 수 없습니다.
+- 게스트 토큰(7.1.1)으로 연결한 세션은 `/topic/transcript/{ticker}`, `/topic/factcheck/{ticker}`,
+  `/topic/transcript-diff/{ticker}`, `/topic/transcript-translation/{ticker}`, `/topic/evaluation/{ticker}`,
+  `/topic/market/indices`, `/topic/prices` 만 구독할 수 있습니다. `{ticker}` 는 `^[A-Z0-9.-]{1,10}$` 이고 와일드카드는
+  받지 않습니다. 그 밖의 목적지(`/user/**`, `/queue/**` 포함)는 ERROR 프레임(`허용되지 않는 STOMP 프레임`)으로 끊습니다.
 
 | 목적지 | 발행 클래스 | 절 | 구독 |
 |---|---|---|---|
@@ -507,6 +511,7 @@ Redis `trading-signals` 수신을 계기로 발행하던 토픽입니다. #127 �
 | POST | `/api/v1/auth/refresh` | 쿠키 | 터미널, 웹 | access token 재발급과 refresh token 회전 |
 | POST | `/api/v1/auth/logout` | 쿠키 | 터미널, 웹 | refresh token 폐기 |
 | POST | `/api/v1/auth/oauth/callback` | 불필요 | 터미널, 웹 | Google · Kakao 로그인 |
+| POST | `/api/v1/guest/token` | 불필요 | 전시 웹 | 게스트 토큰 발급 (7.1.1) |
 
 - **signup:** 요청 `{email, password, nickname}`. `email` 은 이메일 형식이고 `.local` · `.invalid` · `.test` · `.example`
   도메인은 받지 않습니다. `password` 는 8자 이상, `nickname` 은 50자 이하입니다. 성공은 201 `{"userId": N}`, 이메일
@@ -522,6 +527,39 @@ Redis `trading-signals` 수신을 계기로 발행하던 토픽입니다. #127 �
 - **oauth/callback:** 요청 `{code, redirect_uri, provider, code_verifier}`. `provider` 는 `GOOGLE` · `KAKAO`(대소문자
   무관), `code_verifier` 는 PKCE 를 쓸 때만 보냅니다. 성공은 login 과 같습니다. provider 가 틀리면 400, 코드 교환에
   실패하면 401, 그 밖의 오류는 500 이며 모두 본문이 없습니다.
+
+#### 7.1.1. 게스트 토큰 (`POST /api/v1/guest/token`)
+
+전시용 모바일 웹(`demo.logothea.com`) 관람객이 로그인 없이 쓰는 토큰입니다. 본문 없이 부릅니다.
+
+```json
+{ "access_token": "eyJ...", "expires_in": 3600 }
+```
+
+- 쿠키와 refresh token 은 없습니다. 만료되면 이 API 를 다시 부릅니다. 토큰마다 새 게스트 식별자를 만들고 users 행은
+  만들지 않습니다.
+- REST 는 `Authorization: Bearer`, STOMP 는 CONNECT 의 `Authorization` 헤더로 사용자 토큰과 같이 보냅니다.
+- 게스트가 부를 수 있는 REST 는 `GET /api/v1/glossary`, `GET /api/v1/demo/earnings-call/status` · `speakers`,
+  `GET /api/v1/earnings-calendar/terminal-timeline`, `GET /api/v1/stocks/{ticker}/detail`(저장된 S&P 500 종목만),
+  `POST /api/v1/assistant/ask`(게스트 한도, 7.10)와 인증 없이 열린 경로(8.1)뿐입니다. 그 밖은 403 입니다.
+  구독 범위는 4장 머리말에 있습니다.
+
+| 상태 | 의미 |
+|---|---|
+| 200 | 발급 |
+| 404 | 서버에서 게스트 발급이 꺼져 있음(`app.guest.enabled=false`, 기본값). 본문 없음 |
+| 429 | 클라이언트 IP 하나당 1분 발급 수 초과. `{"error": "...", "code": "guest_rate_limited"}` |
+| 503 | 한도 저장소(Redis) 장애. `{"error": "...", "code": "guest_unavailable"}` |
+
+- 클라이언트 IP 는 `CF-Connecting-IP` 헤더(Cloudflare 가 채움)로 셉니다. 전시장처럼 관람객이 같은 IP 를 쓰면 한도를
+  함께 씁니다.
+- 게스트 발급을 끄면 이미 나간 게스트 토큰도 거부합니다(REST 401, STOMP CONNECT 는 `STOMP 인증 실패`, 연결된 게스트
+  세션의 새 SUBSCRIBE 는 `허용되지 않는 STOMP 프레임`).
+- 게스트를 쓰는 출처는 `app.cors.guest-origins` 로 허용하며, 쿠키 없는 CORS(`Access-Control-Allow-Credentials` 없음)를
+  받습니다. 요청에 쿠키를 싣지 않습니다(`credentials: 'omit'`).
+- 게스트의 종목 상세는 외부 API 를 부르지 않고 저장된 데이터만 읽습니다. 빠진 항목은 비어 있고 `partial` 로 표시됩니다.
+- **관련 설정:** `app.guest.enabled`, `app.guest.token-ttl-seconds`(기본 3600), `app.guest.issue-per-minute`(기본 20),
+  `app.cors.guest-origins`.
 
 ### 7.2. 사용자 (Users)
 
@@ -756,7 +794,7 @@ Redis `trading-signals` 수신을 계기로 발행하던 토픽입니다. #127 �
 
 | Method | Endpoint | 인증 | 호출 | 설명 |
 | :----- | :------- | :--: | :--- | :--- |
-| POST | `/api/v1/assistant/ask` | 필요 | 터미널 | 어닝콜 질문을 보내고 답을 SSE 로 받습니다 |
+| POST | `/api/v1/assistant/ask` | 필요 (게스트 허용) | 터미널, 전시 웹 | 어닝콜 질문을 보내고 답을 SSE 로 받습니다 |
 
 ```json
 { "ticker": "WMT", "call_id": "demo-wmt-q2fy27-1787227200000-1", "as_of_sequence": 17,
@@ -783,7 +821,7 @@ Redis `trading-signals` 수신을 계기로 발행하던 토픽입니다. #127 �
 | 401 | | JWT 없음 · 만료 |
 | 404 | `segments_not_found` | 이 콜의 저장된 자막이 없음 |
 | 409 | `assistant_busy` | 같은 사용자의 이전 질문 답변이 진행 중 |
-| 429 | `daily_limit_exceeded` | 하루 질문 수(기본 50, 한국 시간 자정 초기화) 초과. `reset_at` 에 다음 초기화 시각(UTC ISO-8601) |
+| 429 | `daily_limit_exceeded` | 하루 질문 수(기본 50, 한국 시간 자정 초기화) 초과. 게스트는 아래 두 한도 중 하나라도 넘으면 같은 응답입니다. `reset_at` 에 다음 초기화 시각(UTC ISO-8601) |
 | 503 | `assistant_overloaded` / `assistant_unavailable` | 중계가 가득 참 / 자막 · 한도 저장소(Redis) 장애 |
 
 - 처리 순서는 요청 검증 → 질문 시점 확정(404 · 400) → 동시 질문 잠금(409) → 하루 횟수 차감(429) → 중계 시작입니다.
@@ -792,7 +830,11 @@ Redis `trading-signals` 수신을 계기로 발행하던 토픽입니다. #127 �
 - 사용자가 연결을 끊으면 backend 는 다음 전송 시점이나 2초마다 보내는 keep-alive 주석으로 몇 초 안에 알아채고
   질의응답 서비스 연결을 닫습니다. 질의응답 서비스는 진행 중인 생성을 멈춥니다.
 - 스트림에는 2초마다 SSE 주석 줄(`:`)이 섞여 나오며 클라이언트는 무시합니다.
-- **관련 설정:** `app.assistant.base-url`, `app.assistant.daily-limit`, `app.assistant.stream-timeout-seconds`.
+- **게스트 한도.** 게스트는 토큰 하나당 질문 수(기본 5)와 모든 게스트를 합친 하루 질문 수(기본 500)를 둘 다 통과해야
+  합니다. 토큰을 다시 받으면 토큰당 횟수는 새로 시작하므로, 비용 상한은 합산 한도입니다. 동시 질문 잠금(409)은 토큰
+  단위입니다.
+- **관련 설정:** `app.assistant.base-url`, `app.assistant.daily-limit`, `app.assistant.stream-timeout-seconds`,
+  `app.guest.assistant-per-guest`, `app.guest.assistant-daily-total`.
 
 ### 7.11. 종목 (Stocks)
 
@@ -800,7 +842,7 @@ Redis `trading-signals` 수신을 계기로 발행하던 토픽입니다. #127 �
 | :----- | :------- | :--: | :--- | :--- |
 | GET | `/api/v1/stocks/sp500` | 불필요 | 터미널 | S&P 500 종목 목록 `[{ticker, companyName, sector, marketCapUsd, marketCapRank, currentPrice, previousClose, changePercent}]`. 시가총액 내림차순입니다. `marketCapRank` 는 시가총액이 있는 종목 가운데 1부터 매긴 순위입니다. `marketCapUsd` · `marketCapRank` · `currentPrice` · `previousClose` · `changePercent` 는 데이터가 없으면 `null` 입니다(0 이 아닙니다). 시가총액 상위 100개는 Finnhub 시세로 현재가와 전일종가를 채웁니다 |
 | GET | `/api/v1/stocks/prices` | 불필요 | 터미널 | backend 캐시의 종목 시세. 형식은 4.10 과 같습니다 |
-| GET | `/api/v1/stocks/{ticker}/detail` | 필요 | 터미널 | 종목 상세 (아래) |
+| GET | `/api/v1/stocks/{ticker}/detail` | 필요 (게스트 허용) | 터미널, 전시 웹 | 종목 상세 (아래) |
 
 **`GET /api/v1/stocks/{ticker}/detail`** 은 `ticker` 가 `^[A-Z0-9.-]{1,10}$` 이어야 합니다. 키는 camelCase 입니다.
 
@@ -819,6 +861,7 @@ Redis `trading-signals` 수신을 계기로 발행하던 토픽입니다. #127 �
 |---|---|
 | 200 | 성공 |
 | 400 | `{"error": "invalid ticker"}` |
+| 404 | 게스트가 저장된 활성 종목(S&P 500)이 아닌 종목을 조회함. `{"error": "stock not available"}`. 처음 보는 종목은 외부 API 를 부르므로 게스트에게 열지 않습니다 |
 | 503 | `{"error": "stock detail unavailable — external sync failed"}` |
 | 500 | `{"error": "internal error"}` |
 
@@ -839,13 +882,16 @@ Redis `trading-signals` 수신을 계기로 발행하던 토픽입니다. #127 �
   클라이언트 코드가 직접 다루지 않습니다. 터미널은 응답의 `Set-Cookie` 에서 값을 꺼내 main 프로세스 메모리에 두고
   갱신할 때 `Cookie` 헤더로 보냅니다.
 - STOMP 는 CONNECT 프레임의 `Authorization` 헤더로 보냅니다(4장 머리말).
-- 인증 없이 열린 경로는 `/api/v1/auth/**`, `/api/v1/market/indices`, `/api/v1/stocks/sp500`, `/api/v1/stocks/prices`,
-  `/ws/**`, `/ws-native/**`, `/actuator/health`, `/api/v1/dev/**` 입니다. `/api/v1/internal/**` 은 JWT 대신 8.3 의
+- 인증 없이 열린 경로는 `/api/v1/auth/**`, `POST /api/v1/guest/token`, `/api/v1/market/indices`, `/api/v1/stocks/sp500`,
+  `/api/v1/stocks/prices`, `/ws/**`, `/ws-native/**`, `/actuator/health`, `/api/v1/dev/**` 입니다. `/api/v1/internal/**` 은 JWT 대신 8.3 의
   시크릿으로 검사합니다.
 
-### 8.2. 요금제별 접근 제어
+### 8.2. 역할별 접근 제어
 
-없습니다. 사용자에게 `role`(`FREE` · `PRO`) 필드는 있지만 모든 로그인 사용자가 같은 권한(`ROLE_USER`)을 받고, 역할을
+로그인 사용자는 모두 `ROLE_USER`, 게스트 토큰(7.1.1)은 `ROLE_GUEST` 를 받습니다. 게스트는 허용 목록(7.1.1, 4장
+머리말)에 있는 경로만 쓰고 그 밖은 403 입니다. 새 엔드포인트는 기본으로 `ROLE_USER` 전용입니다.
+
+요금제별 구분은 없습니다. 사용자에게 `role`(`FREE` · `PRO`) 필드는 있지만 모든 로그인 사용자가 같은 권한을 받고, 역할을
 바꾸는 경로도 없습니다. 예전 계약의 "`action` 신호와 Trading Terminal 은 PRO 전용" 규칙은 매매 신호 경로와 함께
 없어졌습니다. 접근 제어를 넣게 되면 이 절에 규칙을 적습니다.
 

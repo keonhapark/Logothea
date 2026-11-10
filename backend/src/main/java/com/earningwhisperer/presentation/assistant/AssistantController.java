@@ -5,6 +5,8 @@ import com.earningwhisperer.domain.assistant.AssistantAskService;
 import com.earningwhisperer.domain.assistant.AssistantAskService.PreparedAsk;
 import com.earningwhisperer.domain.assistant.AssistantQuota;
 import com.earningwhisperer.global.config.AssistantProperties;
+import com.earningwhisperer.global.config.GuestProperties;
+import com.earningwhisperer.infrastructure.security.GuestPrincipal;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataAccessException;
@@ -41,17 +43,22 @@ public class AssistantController {
     // 중계가 비정상 종료해도 잠금이 영구히 남지 않도록, 스트림 상한보다 조금 길게 둔다.
     private static final Duration LOCK_MARGIN = Duration.ofSeconds(10);
 
+    /** 모든 게스트를 합친 하루 횟수를 세는 키. 사용자 ID(숫자) · 게스트 키(guest:)와 겹치지 않는다. */
+    static final String GUEST_TOTAL_KEY = "guest-total";
+
     private final AssistantAskService askService;
     private final AssistantQuota quota;
     private final AssistantRelay relay;
     private final AssistantProperties properties;
+    private final GuestProperties guestProperties;
 
     public AssistantController(AssistantAskService askService, AssistantQuota quota, AssistantRelay relay,
-                               AssistantProperties properties) {
+                               AssistantProperties properties, GuestProperties guestProperties) {
         this.askService = askService;
         this.quota = quota;
         this.relay = relay;
         this.properties = properties;
+        this.guestProperties = guestProperties;
     }
 
     // 반환 타입을 Object 로 두는 이유: ResponseEntity<?> 는 제네릭이 풀리지 않아 SseEmitter 가 비동기 핸들러가 아닌
@@ -59,7 +66,9 @@ public class AssistantController {
     // 실패는 ResponseEntity 로 반환한다.
     @PostMapping("/ask")
     public Object ask(@Valid @RequestBody AssistantAskRequest body, Authentication authentication) {
-        Long userId = (Long) authentication.getPrincipal();
+        Object principal = authentication.getPrincipal();
+        boolean guest = principal instanceof GuestPrincipal;
+        String userId = guest ? ((GuestPrincipal) principal).key() : String.valueOf((Long) principal);
         PreparedAsk prepared;
         try {
             prepared = askService.prepare(body.toCommand(userId));
@@ -84,7 +93,7 @@ public class AssistantController {
             }
             locked = true;
             LocalDate today = LocalDate.now(QUOTA_ZONE);
-            if (!quota.tryConsumeDaily(userId, today, properties.dailyLimit())) {
+            if (!consumeDaily(userId, guest, today)) {
                 Map<String, Object> payload = body("daily_limit_exceeded", "오늘 질문 횟수를 모두 썼습니다.");
                 payload.put("reset_at", today.plusDays(1).atStartOfDay(QUOTA_ZONE).toInstant().toString());
                 return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).contentType(MediaType.APPLICATION_JSON).body(payload);
@@ -106,7 +115,20 @@ public class AssistantController {
         }
     }
 
-    private void releaseQuietly(Long userId) {
+    /**
+     * 사용자는 하루 한도 하나, 게스트는 토큰 하나당 한도와 게스트 전체 하루 한도를 둘 다 통과해야 한다.
+     * 게스트 토큰은 다시 받으면 새 식별자가 되므로 토큰당 한도만으로는 비용을 막지 못한다. 합산 한도가 실제 상한이다.
+     * 게스트 토큰 수명이 하루보다 짧아 토큰당 한도도 날짜 키에 둔다.
+     */
+    private boolean consumeDaily(String userId, boolean guest, LocalDate today) {
+        if (!guest) {
+            return quota.tryConsumeDaily(userId, today, properties.dailyLimit());
+        }
+        return quota.tryConsumeDaily(userId, today, guestProperties.assistantPerGuest())
+                && quota.tryConsumeDaily(GUEST_TOTAL_KEY, today, guestProperties.assistantDailyTotal());
+    }
+
+    private void releaseQuietly(String userId) {
         try {
             quota.unlock(userId);
         } catch (RuntimeException e) {

@@ -72,7 +72,7 @@ public class AssistantStreamClient {
 
     private String toJson(PreparedAsk ask) {
         Map<String, Object> body = new LinkedHashMap<>();
-        body.put("user_id", String.valueOf(ask.userId()));
+        body.put("user_id", ask.userId());
         body.put("ticker", ask.ticker());
         body.put("call_id", ask.callId());
         body.put("as_of_sequence", ask.asOfSequence());

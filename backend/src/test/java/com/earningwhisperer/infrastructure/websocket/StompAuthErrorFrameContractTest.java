@@ -84,7 +84,7 @@ class StompAuthErrorFrameContractTest {
     /** CONNECT 를 흘리고 소켓으로 나간 프레임을 돌려준다. */
     private List<String> handle(String frame) {
         ExecutorSubscribableChannel inbound = new ExecutorSubscribableChannel();
-        inbound.addInterceptor(new StompJwtChannelInterceptor(jwtProvider));
+        inbound.addInterceptor(new StompJwtChannelInterceptor(jwtProvider, null));
 
         StompSubProtocolHandler handler = new StompSubProtocolHandler();
         RecordingSession session = new RecordingSession();

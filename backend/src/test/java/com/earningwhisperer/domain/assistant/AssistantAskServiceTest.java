@@ -31,7 +31,7 @@ class AssistantAskServiceTest {
     }
 
     private static AskCommand command(int asOf, Integer anchor, String suggested) {
-        return new AskCommand(7L, "wmt", "call-1", asOf, anchor, "가이던스가 바뀌었어?", suggested,
+        return new AskCommand("7", "wmt", "call-1", asOf, anchor, "가이던스가 바뀌었어?", suggested,
                 List.of(new HistoryTurn("user", "앞 질문")));
     }
 
@@ -47,7 +47,7 @@ class AssistantAskServiceTest {
         assertThat(prepared.ticker()).isEqualTo("WMT");
         assertThat(prepared.anchorSequence()).isEqualTo(2);
         assertThat(prepared.callEnded()).isFalse();
-        assertThat(prepared.userId()).isEqualTo(7L);
+        assertThat(prepared.userId()).isEqualTo("7");
         assertThat(prepared.history()).containsExactly(new HistoryTurn("user", "앞 질문"));
     }
 
@@ -65,7 +65,7 @@ class AssistantAskServiceTest {
     @DisplayName("요청 ticker 가 저장된 콜의 ticker 와 다르면 TICKER_MISMATCH")
     void tickerMismatch() {
         when(segmentStore.findUntil("call-1", 3)).thenReturn(List.of(segment(1, false)));
-        AskCommand other = new AskCommand(7L, "NVDA", "call-1", 3, null, "q", null, List.of());
+        AskCommand other = new AskCommand("7", "NVDA", "call-1", 3, null, "q", null, List.of());
 
         assertThatThrownBy(() -> service.prepare(other))
                 .isInstanceOf(AssistantAskException.class)

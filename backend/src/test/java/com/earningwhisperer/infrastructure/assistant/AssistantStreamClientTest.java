@@ -58,7 +58,7 @@ class AssistantStreamClientTest {
     }
 
     private static PreparedAsk ask() {
-        return new PreparedAsk(7L, "WMT", "call-1", 17, 1_787_227_218L, null, true, "요약해 줘", "summary",
+        return new PreparedAsk("7", "WMT", "call-1", 17, 1_787_227_218L, null, true, "요약해 줘", "summary",
                 List.of(new HistoryTurn("user", "앞 질문")));
     }
 
