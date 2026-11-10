@@ -206,6 +206,8 @@ describe('createStompBridge', () => {
     s.clients[0].config.onStompError(STOMP_AUTH_ERROR)
     await flush()
     expect(refresh).toHaveBeenCalledTimes(1)
+    // 거부된 토큰(연결에 쓴 것)을 알린다
+    expect(refresh).toHaveBeenCalledWith('old')
     expect(s.clients).toHaveLength(2)
     expect(s.clients[1].config.token).toBe('new')
     expect(s.pending()).toHaveLength(0)

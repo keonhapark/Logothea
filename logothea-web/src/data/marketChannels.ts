@@ -26,6 +26,8 @@ import type { StompBridge } from './stomp'
  */
 
 export const TIMELINE_POLL_MS = 5 * 60 * 1000
+/** 웹 전용 채널: 어닝콜 일정을 지금 다시 받아 EARNINGS_TIMELINE_UPDATE 로 민다. */
+export const REFRESH_TIMELINE = 'web:earnings-timeline:refresh'
 export const TIMELINE_DAYS = 90
 const SP500_CACHE_MS = 5 * 60 * 1000
 const DETAIL_TTL_MS = 30_000
@@ -72,6 +74,14 @@ export function registerMarketChannels(registry: ChannelRegistry, deps: MarketCh
     } catch (e) {
       console.warn('[market] 어닝콜 일정 조회 실패:', e)
       return EMPTY_TIMELINE
+    }
+  })
+  // 연결이 되살아났을 때 바로 한 번 받아 민다(게스트 토큰 장애 동안 비어 있던 일정을 채운다). 실패하면 아무것도 보내지 않는다
+  registry.handle(REFRESH_TIMELINE, async () => {
+    try {
+      registry.emit(IPC_CHANNELS.EARNINGS_TIMELINE_UPDATE, await fetchTimeline())
+    } catch (e) {
+      console.warn('[market] 어닝콜 일정 다시 받기 실패:', e)
     }
   })
   // 폴링이 실패하면 아무것도 보내지 않는다. 빈 일정을 보내면 화면이 받아 둔 일정을 지운다(터미널 start() 와 같음).

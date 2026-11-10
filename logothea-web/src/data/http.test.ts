@@ -47,6 +47,8 @@ describe('createHttpClient', () => {
     const { fetch, http } = setup([json(401, {}), json(200, { ok: 1 })], { refresh })
     await expect(http.getJson('/x')).resolves.toEqual({ ok: 1 })
     expect(refresh).toHaveBeenCalledTimes(1)
+    // 거부된 토큰을 알려 다른 요청이 이미 받은 새 토큰을 쓰게 한다
+    expect(refresh).toHaveBeenCalledWith('tok')
     expect(headersOf(fetch.mock.calls[1] as unknown[]).Authorization).toBe('Bearer new')
   })
 
@@ -100,5 +102,28 @@ describe('createHttpClient', () => {
       },
     })
     await expect(http.getJson('/x')).rejects.toMatchObject({ code: 'NETWORK' })
+  })
+
+  it('토큰을 받지 못해도 인증이 필요 없는 경로는 토큰 없이 보내 받는다', async () => {
+    const { fetch, http } = setup([json(200, [{ symbol: 'SPX' }])], {
+      getAccessToken: async () => {
+        throw new Error('게스트 발급 장애')
+      },
+    })
+    await expect(http.getJson('/api/v1/market/indices')).resolves.toEqual([{ symbol: 'SPX' }])
+    expect(headersOf(fetch.mock.calls[0] as unknown[]).Authorization).toBeUndefined()
+  })
+
+  it('토큰을 받지 못했는데 인증이 필요한 경로(401)면 갱신하지 않고 장애를 NETWORK 로 알린다', async () => {
+    const refresh = vi.fn(async () => 'new')
+    const { fetch, http } = setup([json(401, {})], {
+      getAccessToken: async () => {
+        throw new Error('게스트 발급 장애')
+      },
+      refresh,
+    })
+    await expect(http.getJson('/api/v1/glossary')).rejects.toMatchObject({ code: 'NETWORK' })
+    expect(refresh).not.toHaveBeenCalled()
+    expect(fetch).toHaveBeenCalledTimes(1)
   })
 })

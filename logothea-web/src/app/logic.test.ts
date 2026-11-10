@@ -108,3 +108,14 @@ describe('fetchBroadcastStatus', () => {
     await expect(fetchBroadcastStatus({ getJson } as never, 'WMT')).resolves.toBeNull()
   })
 })
+
+import { isGuestBlocked } from './guestStatus'
+
+describe('isGuestBlocked', () => {
+  it('토큰을 받지 못한 세 상태만 막힘으로 본다(개발 토큰 · 받기 전 · 받음은 아님)', () => {
+    expect(['disabled', 'rate_limited', 'unavailable'].every((s) => isGuestBlocked(s as never))).toBe(true)
+    expect(isGuestBlocked('ready')).toBe(false)
+    expect(isGuestBlocked('idle')).toBe(false)
+    expect(isGuestBlocked(null)).toBe(false)
+  })
+})
