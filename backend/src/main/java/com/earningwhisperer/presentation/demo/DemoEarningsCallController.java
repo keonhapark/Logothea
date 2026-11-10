@@ -1,5 +1,8 @@
 package com.earningwhisperer.presentation.demo;
 
+import java.util.regex.Pattern;
+import java.util.Optional;
+import com.earningwhisperer.infrastructure.broadcast.CallBroadcastStore;
 import com.earningwhisperer.infrastructure.demo.DemoEarningsCallScript;
 import com.earningwhisperer.infrastructure.demo.DemoEarningsCallService;
 import lombok.RequiredArgsConstructor;
@@ -29,7 +32,10 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class DemoEarningsCallController {
 
+    private static final Pattern TICKER_PATTERN = Pattern.compile("^[A-Z0-9.-]{1,10}$");
+
     private final DemoEarningsCallService service;
+    private final CallBroadcastStore broadcastStore;
 
     /**
      * 재생 시작. body 의 {@code ticker} 는 선택이며, 없으면 스크립트 기본 종목을 쓴다.
@@ -129,6 +135,32 @@ public class DemoEarningsCallController {
                         "analyst", s.analyst()
                 ))
                 .toList();
+        return ResponseEntity.ok(body);
+    }
+
+    /**
+     * 중간 입장 스냅샷 (api-spec 7.8). 그 종목의 가장 최근 회차에 발행한 자막 · 번역 · 팩트체크 · 대조 · 종합 판단을
+     * STOMP 메시지와 같은 모양으로 한 번에 준다. 클라이언트는 실시간 메시지와 같은 저장소에 흘려 넣고, 겹치는 것은
+     * {@code (call_id, sequence)} 로 버린다. 회차 사이에는 끝난 회차 전체와 종합 판단을 준다.
+     *
+     * <p>{@code running} 은 시연 재생 중인지다. 기록이 없으면 {@code call_id=null} 과 빈 목록이다.
+     */
+    @GetMapping("/snapshot")
+    public ResponseEntity<?> snapshot(@RequestParam String ticker) {
+        String normalized = ticker == null ? "" : ticker.trim().toUpperCase();
+        if (!TICKER_PATTERN.matcher(normalized).matches()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "invalid ticker"));
+        }
+        Optional<CallBroadcastStore.Snapshot> snapshot = broadcastStore.snapshot(normalized);
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("ticker", normalized);
+        body.put("call_id", snapshot.map(CallBroadcastStore.Snapshot::callId).orElse(null));
+        body.put("running", service.status(normalized).isPresent());
+        body.put("segments", snapshot.map(CallBroadcastStore.Snapshot::segments).orElse(List.of()));
+        body.put("translations", snapshot.map(CallBroadcastStore.Snapshot::translations).orElse(List.of()));
+        body.put("fact_checks", snapshot.map(CallBroadcastStore.Snapshot::factChecks).orElse(List.of()));
+        body.put("diffs", snapshot.map(CallBroadcastStore.Snapshot::diffs).orElse(List.of()));
+        body.put("evaluation", snapshot.map(CallBroadcastStore.Snapshot::evaluation).orElse(null));
         return ResponseEntity.ok(body);
     }
 

@@ -219,4 +219,87 @@ class CallAnalysisServiceTest {
         verify(client, never()).submitSentence(any());
         verify(client, times(1)).isFactCheckEnabled();
     }
+
+    /** reason 이 null 이면 주장 없음. */
+    private static LiveFactCheckModels.BatchResponse batch(String status, String reason) {
+        List<LiveFactCheckModels.Claim> claims = reason == null ? List.of() : List.of(new LiveFactCheckModels.Claim(
+                "c1", 0, "src", "claim", "FINANCIAL", "SUPPORTED", 0.8, "설명", reason, List.of(), 1, 1));
+        return new LiveFactCheckModels.BatchResponse("WMT", status, 0, 0, 2, claims, 0, true, true, List.of());
+    }
+
+    private static final CallAnalysisService.CallContext REPLAYABLE =
+            new CallAnalysisService.CallContext(List.of(), null, null, "WMT|script", 3);
+
+    private static TranscriptSegment demoSegment(String callId, int sequence) {
+        return new TranscriptSegment("WMT", callId, sequence, sequence * 6000L, sequence * 6000L + 6000L,
+                "sentence " + sequence, null, 1_787_227_200L + sequence, sequence == 2);
+    }
+
+    private void playRound(String callId) {
+        CallAnalysisService.CallHandle handle = service.open("WMT", callId, REPLAYABLE, "demo-call");
+        for (int i = 0; i < 3; i++) {
+            handle.submit(demoSegment(callId, i));
+        }
+        handle.close(2_000);
+    }
+
+    @Test
+    @DisplayName("응답 기억이 켜져 있으면 쓸 만한 팩트체크로 채워진 회차를 다음 회차에서 엔진 없이 새 callId 로 재생한다")
+    void replaysCompleteRecording() {
+        when(client.isResponseMemoEnabled()).thenReturn(true);
+        LiveFactCheckModels.BatchResponse buffering = batch("BUFFERING", null);
+        LiveFactCheckModels.BatchResponse completed = batch("COMPLETED", "supported_by_evidence");
+        when(client.submitSentence(any())).thenReturn(Optional.of(buffering), Optional.of(buffering), Optional.of(completed));
+
+        playRound("round-1");
+        verify(client, times(3)).submitSentence(any());
+        verify(factCheckPublisher).publish("WMT", "round-1", completed);
+
+        playRound("round-2");
+        verify(client, times(3)).submitSentence(any());
+        verify(factCheckPublisher).publish("WMT", "round-2", completed);
+    }
+
+    @Test
+    @DisplayName("녹화 중 한 문장이라도 실패하거나 LLM 실패 판정이면 다음 회차는 엔진으로 다시 보낸다")
+    void rerecordsIncompleteRound() {
+        when(client.isResponseMemoEnabled()).thenReturn(true);
+        LiveFactCheckModels.BatchResponse buffering = batch("BUFFERING", null);
+        LiveFactCheckModels.BatchResponse fallback = batch("COMPLETED", "llm_failed");
+        when(client.submitSentence(any())).thenReturn(Optional.of(buffering), Optional.empty(), Optional.of(fallback));
+
+        playRound("round-1");
+        playRound("round-2");
+
+        verify(client, times(6)).submitSentence(any());
+    }
+
+    @Test
+    @DisplayName("응답 기억이 꺼져 있으면 회차마다 엔진을 부른다")
+    void noReplayWhenMemoDisabled() {
+        LiveFactCheckModels.BatchResponse buffering = batch("BUFFERING", null);
+        when(client.submitSentence(any())).thenReturn(Optional.of(buffering));
+
+        playRound("round-1");
+        playRound("round-2");
+
+        verify(client, times(6)).submitSentence(any());
+    }
+
+    @Test
+    @DisplayName("다시 보여 줄 응답: 대기 · 검색 · LLM 실패가 없는 완료(근거 부족 포함) · 마지막 문장의 DISCARDED")
+    void replayableResponses() {
+        assertThat(CallAnalysisService.FactCheckRecording.replayable(
+                batch("COMPLETED", "insufficient_relevance"), false)).isTrue();
+        assertThat(CallAnalysisService.FactCheckRecording.replayable(batch("COMPLETED", "retrieval_failed"), false)).isFalse();
+        assertThat(CallAnalysisService.FactCheckRecording.replayable(
+                batch("COMPLETED", "invalid_llm_response"), false)).isFalse();
+        assertThat(CallAnalysisService.FactCheckRecording.replayable(batch("BUFFERING", null), false)).isTrue();
+        assertThat(CallAnalysisService.FactCheckRecording.replayable(batch("COMPLETED", "supported_by_evidence"), false)).isTrue();
+        assertThat(CallAnalysisService.FactCheckRecording.replayable(batch("COMPLETED", null), false)).isTrue();
+        assertThat(CallAnalysisService.FactCheckRecording.replayable(batch("COMPLETED", "llm_failed"), false)).isFalse();
+        assertThat(CallAnalysisService.FactCheckRecording.replayable(batch("REJECTED", null), false)).isFalse();
+        assertThat(CallAnalysisService.FactCheckRecording.replayable(batch("DISCARDED", null), false)).isFalse();
+        assertThat(CallAnalysisService.FactCheckRecording.replayable(batch("DISCARDED", null), true)).isTrue();
+    }
 }

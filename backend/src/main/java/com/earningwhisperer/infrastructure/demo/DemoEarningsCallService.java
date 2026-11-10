@@ -149,7 +149,8 @@ public class DemoEarningsCallService {
         DemoEarningsCallScript.AnalystQa qa = script.analystQa();
         created.analysis = callAnalysis.open(ticker, callId, new CallAnalysisService.CallContext(
                 script.relatedTickers() == null ? List.of() : script.relatedTickers(),
-                qa == null ? null : qa.question(), qa == null ? null : qa.answer()), "demo-call");
+                qa == null ? null : qa.question(), qa == null ? null : qa.answer(),
+                replayKey(ticker, script), script.segments().size()), "demo-call");
         try {
             created.playbackFuture = created.playback.submit(() -> runPlayback(created, script));
         } catch (RuntimeException e) {
@@ -241,6 +242,16 @@ public class DemoEarningsCallService {
             log.error("[DemoCall] 세그먼트를 하나도 발행하지 못하고 종료 - ticker={} call_id={} "
                     + "(스크립트 sequence 또는 인입 검증을 확인하세요)", session.ticker, session.callId);
         }
+    }
+
+    /**
+     * 같은 스크립트를 가리키는 키. 팩트체크 녹화를 다시 쓸지 판단하는 데 쓴다. 스크립트 내용이 바뀌면 달라진다.
+     */
+    static String replayKey(String ticker, DemoEarningsCallScript script) {
+        StringBuilder texts = new StringBuilder();
+        script.segments().forEach(segment -> texts.append(segment.sequence()).append('|').append(segment.text()).append('\n'));
+        return ticker + "|" + script.callStartedAt() + "|" + script.segments().size() + "|"
+                + Integer.toHexString(texts.toString().hashCode());
     }
 
     private static String normalizeKey(String ticker) {

@@ -73,6 +73,8 @@ ai-engine:
   translation-enabled: ${AI_ENGINE_TRANSLATION_ENABLED:true}
   # 번역 호출 읽기 타임아웃. 번역은 한 줄로 차례로 부르므로 공용 timeout-ms 보다 짧게 둔다.
   translation-timeout-ms: ${AI_ENGINE_TRANSLATION_TIMEOUT_MS:15000}
+  # 같은 요청의 AI 응답(팩트체크 · 대조 · 번역 · 종합 판단)을 기억해 다시 쓴다. 반복 방송에서 Gemini 호출을 첫 회차로 줄인다.
+  response-memo-enabled: ${AI_ENGINE_RESPONSE_MEMO_ENABLED:false}
 
 # 자막 번역 묶음 단위 (TranscriptTranslationService). 분당 Gemini 호출 수를 줄이려고 묶는다.
 transcript-translation:
@@ -89,6 +91,13 @@ demo:
     script-path: ${DEMO_SCRIPT_PATH:data/demo-earnings-call.json}
     # 세그먼트 발행 간격. 시연 길이는 세그먼트 수 x 이 값이다.
     interval-ms: ${DEMO_SEGMENT_INTERVAL_MS:6000}
+    loop:
+      # 전시용 반복 방송. 켜면 기동 직후부터 재생 → 종합 판단 → 쉬기 → 새 회차 재생을 계속한다.
+      enabled: ${DEMO_LOOP_ENABLED:false}
+      # 반복할 종목. 비우면 스크립트 기본 종목.
+      ticker: ${DEMO_LOOP_TICKER:}
+      # 재생이 끝난 뒤 다음 회차까지 쉬는 시간. 종합 판단이 나올 시간을 포함한다.
+      pause-ms: ${DEMO_LOOP_PAUSE_MS:180000}
 
 app:
   internal:
