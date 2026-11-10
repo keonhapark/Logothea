@@ -3,7 +3,7 @@ import type { ThemeChoice } from '@terminal/lib/theme'
 import { closeSheet, openSheet } from '../app/sheet'
 import { setThemeChoice, THEME_LABELS, useThemeChoice } from '../app/theme'
 import { usePrefs, type Prefs } from '../app/prefs'
-import { ABOUT, LOGIN_NOTICE, SOURCES, TEAM, memberLabel } from '../content/copy'
+import { ABOUT, LOGIN_NOTICE, SOURCES, TEAM } from '../content/copy'
 
 /** 내 정보. 로그인 카드(안내 시트) · 설정(테마 · 번역 · 용어 밑줄) · 정보(소개 · 팀 소개 · 출처 · 고지). */
 export default function Me() {
@@ -152,7 +152,7 @@ function Team() {
       {TEAM.map((group) => (
         <div key={group.role}>
           <dt>{group.role}</dt>
-          <dd>{group.members.map(memberLabel).join(' · ')}</dd>
+          <dd>{group.github.join(' · ')}</dd>
         </div>
       ))}
     </dl>
