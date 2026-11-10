@@ -120,6 +120,10 @@ public class AiEngineClient {
         this.translationEnabled = translationEnabled;
     }
 
+    /** 대조 응답의 일시적 실패 사유(ai-engine transcript_diff_service). 이 응답은 기억하지 않는다. */
+    static final java.util.Set<String> TRANSIENT_DIFF_WARNINGS =
+            java.util.Set.of("historical_transcript_diff_llm_failed", "key_statements_lookup_failed");
+
     /** 기억해 둘 응답 수 상한. 시연 스크립트 한 편(수십 세그먼트)의 수십 배라 넉넉하다. */
     static final int MEMO_MAX_ENTRIES = 2_000;
 
@@ -287,9 +291,10 @@ public class AiEngineClient {
      *         실패가 아니라 {@code available=false} 응답으로 온다.
      */
     public Optional<TranscriptDiffModels.DiffResponse> transcriptDiff(TranscriptDiffModels.DiffRequest request) {
-        // 대조 결과가 있거나 "주제 무관" 판정일 때만 기억한다. 직전 콜 근거 부족 같은 실패는 다음 회차에 다시 묻는다.
+        // 일시적 실패(LLM · 핵심 발언 조회 실패)만 빼고 기억한다. "근거 약함" · "주제 무관" · "직전 콜 없음" 은 같은
+        // 데이터면 회차마다 같은 결과라 다시 물어도 호출만 쓴다.
         return memoized(List.of("transcript-diff", request),
-                r -> r.hasItems() || (r.warnings() != null && r.warnings().contains("current_chunk_not_material")),
+                r -> r.warnings() == null || r.warnings().stream().noneMatch(TRANSIENT_DIFF_WARNINGS::contains),
                 () -> callTranscriptDiff(request));
     }
 
