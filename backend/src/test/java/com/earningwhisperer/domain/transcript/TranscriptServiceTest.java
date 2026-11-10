@@ -14,6 +14,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("TranscriptService")
@@ -100,5 +101,31 @@ class TranscriptServiceTest {
         assertThat(service.accept(segment(0))).isEqualTo(TranscriptSessionRegistry.Result.OK);
         verify(publisher).publish(segment(0));
         verify(translationService).submit(segment(0));
+    }
+
+    @Test
+    void duplicateDoesNotRepeatAnySideEffect() {
+        TranscriptService service = new TranscriptService(new TranscriptSessionRegistry(), publisher, translationService, segmentStore);
+        service.accept(segment(0));
+
+        assertThat(service.accept(segment(0))).isEqualTo(TranscriptSessionRegistry.Result.DUPLICATE);
+
+        verify(publisher).publish(segment(0));
+        verify(segmentStore).append(segment(0));
+        verify(translationService).submit(segment(0));
+        verifyNoMoreInteractions(publisher, segmentStore, translationService);
+    }
+
+    @Test
+    void emptyTerminalPublishesAndFlushesTranslationWithoutStoringTranscriptText() {
+        TranscriptService service = new TranscriptService(new TranscriptSessionRegistry(), publisher, translationService, segmentStore);
+        TranscriptSegment terminal = new TranscriptSegment("WMT", "call-1", 1, 1000, 1000, "", null, 2L, true);
+
+        assertThat(service.accept(terminal)).isEqualTo(TranscriptSessionRegistry.Result.OK);
+        assertThat(service.accept(terminal)).isEqualTo(TranscriptSessionRegistry.Result.DUPLICATE);
+
+        verify(publisher).publish(terminal);
+        verify(translationService).submit(terminal);
+        verifyNoMoreInteractions(publisher, segmentStore, translationService);
     }
 }

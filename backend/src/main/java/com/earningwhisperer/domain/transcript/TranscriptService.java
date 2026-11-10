@@ -33,15 +33,17 @@ public class TranscriptService {
     /**
      * 세그먼트 인입을 처리한다.
      *
-     * @return 레지스트리 검증 결과 (OK / SEQ_REGRESS / SESSION_ENDED)
+     * @return 레지스트리 검증 결과. DUPLICATE는 이미 수신한 요청이며 부수 효과를 반복하지 않는다.
      */
     public TranscriptSessionRegistry.Result accept(TranscriptSegment segment) {
         TranscriptSessionRegistry.Result result = registry.validateAndAccept(segment);
         if (result == TranscriptSessionRegistry.Result.OK) {
             publisher.publish(segment);
-            store(segment);
+            if (!(segment.isSessionEnd() && segment.text().isEmpty())) {
+                store(segment);
+            }
             submitForTranslation(segment);
-        } else {
+        } else if (result != TranscriptSessionRegistry.Result.DUPLICATE) {
             log.warn("[Transcript] 인입 거부 - ticker={} call_id={} sequence={} reason={}",
                     segment.ticker(), segment.callId(), segment.sequence(), result);
         }

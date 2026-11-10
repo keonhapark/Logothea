@@ -151,6 +151,29 @@ class TranscriptTranslationServiceTest {
     }
 
     @Test
+    void emptyTerminalFlushesOnlyPendingTextAndItsOldTimerCannotRepeatIt() {
+        TranscriptTranslationService service = service();
+        service.submit(segment(0, "One."));
+        service.submit(segment("demo-1", 1, "", true));
+        timers.forEach(Runnable::run);
+        runQueued();
+
+        assertThat(client.requests).hasSize(1);
+        assertThat(client.requests.get(0).text()).isEqualTo("One.");
+        assertThat(published.get(0).getSequences()).containsExactly(0);
+    }
+
+    @Test
+    void emptyTerminalWithoutPendingTextDoesNotRequestTranslation() {
+        TranscriptTranslationService service = service();
+        service.submit(segment("demo-1", 0, "", true));
+        runQueued();
+
+        assertThat(client.requests).isEmpty();
+        assertThat(timers).isEmpty();
+    }
+
+    @Test
     @DisplayName("붙이면 글자 수 상한을 넘을 때는 모은 것을 먼저 보낸다")
     void 글자_수_상한() {
         TranscriptTranslationService service = service();

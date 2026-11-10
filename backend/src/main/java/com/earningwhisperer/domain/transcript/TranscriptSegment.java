@@ -14,10 +14,10 @@ package com.earningwhisperer.domain.transcript;
  * @param sequence      세션 내 단조 증가 시퀀스 (Pipeline 기준)
  * @param startMs       세션 시작 기준 segment 시작 오프셋(ms)
  * @param endMs         세션 시작 기준 segment 종료 오프셋(ms)
- * @param text          stabilized 전사 텍스트 (비공백 보장)
+ * @param text          stabilized 전사 텍스트. 종료 제어(isSessionEnd=true)만 빈 문자열 허용.
  * @param speaker       발화자 라벨 (선택, null 허용)
  * @param timestamp     발행 시각 (Unix Epoch Second, UTC)
- * @param isSessionEnd  세션 종료 여부. true 이후 동일 callId 재발행 금지.
+ * @param isSessionEnd  세션 종료 여부. true 이후 새 sequence 금지; 동일 페이로드 재시도는 허용.
  */
 public record TranscriptSegment(
         String ticker,

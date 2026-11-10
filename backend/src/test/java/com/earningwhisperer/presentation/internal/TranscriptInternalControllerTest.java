@@ -84,6 +84,25 @@ class TranscriptInternalControllerTest {
     }
 
     @Test
+    void duplicateReturns202() throws Exception {
+        when(transcriptService.accept(any())).thenReturn(TranscriptSessionRegistry.Result.DUPLICATE);
+
+        mockMvc.perform(post(URL).header("X-Internal-Secret", SECRET)
+                        .contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsString(validBody())))
+                .andExpect(status().isAccepted());
+    }
+
+    @Test
+    void conflictingSequenceReturns409() throws Exception {
+        when(transcriptService.accept(any())).thenReturn(TranscriptSessionRegistry.Result.SEQUENCE_CONFLICT);
+
+        mockMvc.perform(post(URL).header("X-Internal-Secret", SECRET)
+                        .contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsString(validBody())))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error").exists());
+    }
+
+    @Test
     @DisplayName("필수 필드 누락(text) — 400")
     void 필수_누락_400() throws Exception {
         ObjectNode body = validBody();

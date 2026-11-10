@@ -12,6 +12,7 @@ import { create } from 'zustand'
  *  - 동일 callId 내 sequence 가 마지막 sequence 보다 작거나 같음 → 역행/중복 드롭.
  *    (백엔드는 sequence 단조 증가를 보장하므로 역행은 비정상 — 안전 가드.)
  *  - is_session_end=true 메시지 도착 후 동일 callId 의 추가 segment → 드롭.
+ *  - text 가 빈 is_session_end=true 메시지는 종료 신호만 반영하고 자막 목록에 넣지 않는다.
  *  - 새 callId 가 도착하면 이전 callId 의 segments 는 그대로 보존
  *    (앙코르콜/Q&A 분리 등 케이스 대비). 다만 endedCallIds 는 callId 단위.
  *  - ticker 별 독립 컨테이너 — ticker A 의 push 가 ticker B 의 segments 를 오염시키지 않는다.
@@ -165,7 +166,9 @@ export const useTranscriptStore = create<TranscriptState>((set) => ({
       }
 
       // 3) 새 segment 반영 — 불변성 유지를 위해 새 컨테이너로 교체.
-      const nextSegments = [...prev.segments, seg]
+      //    본문 없는 종료 신호(text "" + is_session_end)는 종료 표시만 하고 자막 목록에는 넣지 않는다.
+      const isEndControl = seg.isSessionEnd === true && seg.text.trim() === ''
+      const nextSegments = isEndControl ? prev.segments : [...prev.segments, seg]
       const nextLastSeqMap = new Map(prev.lastSequenceByCall)
       nextLastSeqMap.set(seg.callId, seg.sequence)
       const nextEndedCallIds = new Set(prev.endedCallIds)
