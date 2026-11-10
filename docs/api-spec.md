@@ -539,7 +539,7 @@ Redis `trading-signals` 수신을 계기로 발행하던 토픽입니다. #127 �
 - 쿠키와 refresh token 은 없습니다. 만료되면 이 API 를 다시 부릅니다. 토큰마다 새 게스트 식별자를 만들고 users 행은
   만들지 않습니다.
 - REST 는 `Authorization: Bearer`, STOMP 는 CONNECT 의 `Authorization` 헤더로 사용자 토큰과 같이 보냅니다.
-- 게스트가 부를 수 있는 REST 는 `GET /api/v1/glossary`, `GET /api/v1/demo/earnings-call/status` · `speakers`,
+- 게스트가 부를 수 있는 REST 는 `GET /api/v1/glossary`, `GET /api/v1/demo/earnings-call/status` · `speakers` · `snapshot`,
   `GET /api/v1/earnings-calendar/terminal-timeline`, `GET /api/v1/stocks/{ticker}/detail`(저장된 S&P 500 종목만),
   `POST /api/v1/assistant/ask`(게스트 한도, 7.10)와 인증 없이 열린 경로(8.1)뿐입니다. 그 밖은 403 입니다.
   구독 범위는 4장 머리말에 있습니다.
@@ -687,6 +687,7 @@ Redis `trading-signals` 수신을 계기로 발행하던 토픽입니다. #127 �
 | POST | `/api/v1/demo/earnings-call/stop` | 필요 | 터미널 | 재생 중지 |
 | GET | `/api/v1/demo/earnings-call/status?ticker=` | 필요 | 없음 | 진행 상황 조회. `ticker` 필수 |
 | GET | `/api/v1/demo/earnings-call/speakers` | 필요 | 터미널 | 콜 참가자 명부 |
+| GET | `/api/v1/demo/earnings-call/snapshot?ticker=` | 필요 (게스트 허용) | 전시 웹 | 중간 입장 스냅샷 (아래) |
 
 - **설명:** 시연에서 data_pipeline 의 STT 를 준비된 스크립트가 대신합니다. 재생한 세그먼트는 실제 인입 경로
   (`TranscriptService` 검증 → 4.5)를 그대로 지나고, 같은 세그먼트로 팩트체크(9.1 → 4.6)와 직전 콜 대조(9.11 → 4.9)를
@@ -747,9 +748,34 @@ Redis `trading-signals` 수신을 계기로 발행하던 토픽입니다. #127 �
   { "name": "Kate McShane", "match_key": "Kate McShane", "title": "Analyst", "affiliation": "Goldman Sachs", "analyst": true } ]
 ```
 
-- **관련 설정:** `demo.earnings-call.script-path`, `demo.earnings-call.interval-ms`, `ai-engine.base-url`,
-  `ai-engine.fact-check-enabled`, `ai-engine.timeout-ms`. `fact-check-enabled=false` 로 두면 AI Engine 없이 자막 재생만
-  합니다.
+- **snapshot 응답.** 그 종목의 가장 최근 회차에 발행한 메시지를 한 번에 줍니다. 각 원소는 STOMP 메시지와 같은
+  모양이라(`segments` 는 4.5, `translations` 는 4.8, `fact_checks` 는 4.6, `diffs` 는 4.9, `evaluation` 은 4.7) 실시간으로
+  받은 것처럼 같은 저장소에 넣고, 겹치는 것은 `(call_id, sequence)` 로 버리면 됩니다. `segments` 는 번호 순입니다.
+  회차가 끝난 뒤 다음 회차가 시작되기 전에는 끝난 회차 전체와 `evaluation` 을 줍니다. 새 회차의 첫 자막이 나오면 그
+  회차로 바뀝니다. `running` 은 시연 재생 중인지이며, 기록이 없으면 `call_id: null` 과 빈 목록입니다. 시연과
+  data_pipeline 회차 모두 남지만 backend 메모리에만 있어 재시작하면 비어 있습니다. `ticker` 형식이 틀리면 400 입니다.
+
+```json
+{ "ticker": "WMT", "call_id": "demo-wmt-q2fy27-1787227200000-3", "running": true,
+  "segments": [ { "ticker": "WMT", "call_id": "...", "sequence": 0, "start_ms": 0, "end_ms": 6000, "text": "...",
+                  "speaker": "CEO · John Furner", "timestamp": 1787227200, "is_session_end": false } ],
+  "translations": [ ... ], "fact_checks": [ ... ], "diffs": [ ... ], "evaluation": null }
+```
+
+- **반복 방송.** `demo.earnings-call.loop.enabled=true` 면 기동 직후부터 스크립트를 재생하고, 끝난 뒤
+  `loop.pause-ms`(기본 3분, 종합 판단 시간 포함) 쉬었다가 새 `call_id` 로 다시 재생하기를 계속합니다. 재생 중에 터미널이
+  start 하면 409 입니다. 누가 stop 해도 쉬는 시간이 지나면 다시 시작합니다. `ai-engine.response-memo-enabled=true`
+  를 함께 켜면 두 번째 회차부터 AI Engine 을 거의 부르지 않고 첫 회차 결과를 같은 세그먼트 시점에 새 `call_id` 로 다시
+  발행합니다.
+  - 팩트체크는 회차 단위로 녹화합니다. 엔진이 종목 버퍼(상태)를 가지므로, 한 회차의 모든 문장이 쓸 만한 응답(대기,
+    LLM 으로 확인한 판정, 주장 없는 완료)으로 채워졌을 때만 다음 회차를 통째로 재생하고, 하나라도 실패하거나 LLM
+    폴백이면 다음 회차를 다시 엔진으로 보내 새로 녹화합니다.
+  - 대조 · 번역 · 종합 판단 · 부가 정보는 같은 요청이면 다시 씁니다. 대조는 결과가 있거나 주제 무관 판정일 때만, 번역은
+    번역문이 있을 때만, 종합 판단은 판단 본문이 있을 때만 기억합니다. 종합 판단과 부가 정보는 가격을 키에서 빼므로
+    손절 계획의 가격 수준은 첫 회차 시세 기준입니다.
+- **관련 설정:** `demo.earnings-call.script-path`, `demo.earnings-call.interval-ms`, `demo.earnings-call.loop.*`,
+  `ai-engine.base-url`, `ai-engine.fact-check-enabled`, `ai-engine.timeout-ms`, `ai-engine.response-memo-enabled`.
+  `fact-check-enabled=false` 로 두면 AI Engine 없이 자막 재생만 합니다.
 
 ### 7.9. 어닝콜 용어 사전 (Glossary)
 

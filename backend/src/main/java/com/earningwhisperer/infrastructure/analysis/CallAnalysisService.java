@@ -96,10 +96,75 @@ public class CallAnalysisService {
         this.liveIdleTimeout = Duration.ofMinutes(Math.max(1, idleTimeoutMinutes));
     }
 
-    /** 종합 판단에 실을 회차 부가 정보. 시연은 스크립트에서, 실시간은 없음. */
-    public record CallContext(List<String> relatedTickers, String analystQuestion, String analystAnswer) {
-        public static final CallContext NONE = new CallContext(List.of(), null, null);
+    /**
+     * 회차 부가 정보. 시연은 스크립트에서, 실시간은 없음.
+     *
+     * @param replayKey        같은 스크립트를 가리키는 키. 있으면 팩트체크를 회차 단위로 녹화 · 재생한다(응답 기억이 켜졌을 때)
+     * @param expectedSegments 한 회차의 세그먼트 수. 녹화가 다 찼는지 판단한다
+     */
+    public record CallContext(List<String> relatedTickers, String analystQuestion, String analystAnswer,
+                              String replayKey, int expectedSegments) {
+        public static final CallContext NONE = new CallContext(List.of(), null, null, null, 0);
+
+        public CallContext(List<String> relatedTickers, String analystQuestion, String analystAnswer) {
+            this(relatedTickers, analystQuestion, analystAnswer, null, 0);
+        }
     }
+
+    /**
+     * 같은 스크립트 회차의 팩트체크 응답 녹화. 엔진은 종목 버퍼(상태)를 가져서, 일부 문장만 기억으로 대신하면 버퍼가
+     * 어긋나 이후 배치가 거부된다. 그래서 한 회차 전체가 쓸 만한 응답으로 채워졌을 때만 다음 회차를 통째로 재생하고,
+     * 하나라도 빠지거나 나쁘면 다음 회차는 다시 엔진으로 보내 새로 녹화한다.
+     */
+    static final class FactCheckRecording {
+        private final int expected;
+        private final Map<Integer, LiveFactCheckModels.BatchResponse> responses = new ConcurrentHashMap<>();
+        private volatile boolean failed;
+
+        FactCheckRecording(int expected) {
+            this.expected = expected;
+        }
+
+        void record(int sequence, boolean sessionEnd, java.util.Optional<LiveFactCheckModels.BatchResponse> response) {
+            if (response.isPresent() && replayable(response.get(), sessionEnd)) {
+                responses.put(sequence, response.get());
+            } else {
+                failed = true;
+            }
+        }
+
+        boolean isComplete() {
+            return !failed && responses.size() == expected;
+        }
+
+        java.util.Optional<LiveFactCheckModels.BatchResponse> get(int sequence) {
+            return java.util.Optional.ofNullable(responses.get(sequence));
+        }
+
+        /** 검색 · LLM 단계가 실패해 나온 판정. 회차마다 달라질 수 있어 다시 보여 주지 않는다. */
+        static final java.util.Set<String> TRANSIENT_FAILURE_REASONS =
+                java.util.Set.of("retrieval_failed", "llm_failed", "invalid_llm_response");
+
+        /**
+         * 다시 보여 줘도 되는 응답인지. 대기(BUFFERING)와, 주장마다 검색 · LLM 실패가 없는 완료는 쓴다. 근거가 없어
+         * 나온 "근거 부족" 판정은 회차마다 같으므로 쓴다. 거부(REJECTED)는 쓰지 않고, 마지막 문장의 DISCARDED 는 정상 종료다.
+         *
+         * <p>{@code verification_llm_used} 는 "근거가 하나라도 채택됐는지" 라 LLM 성공 여부를 가리지 못해 쓰지 않는다.
+         */
+        static boolean replayable(LiveFactCheckModels.BatchResponse response, boolean sessionEnd) {
+            if ("BUFFERING".equals(response.status())) {
+                return true;
+            }
+            if (response.isCompleted()) {
+                return !response.hasClaims() || response.claims().stream()
+                        .noneMatch(claim -> claim != null && TRANSIENT_FAILURE_REASONS.contains(claim.reasonCode()));
+            }
+            return sessionEnd && "DISCARDED".equals(response.status());
+        }
+    }
+
+    /** replayKey → 그 스크립트의 가장 최근 팩트체크 녹화. */
+    private final Map<String, FactCheckRecording> factCheckRecordings = new ConcurrentHashMap<>();
 
     /** 정상 종료 때 분석 큐를 비우며 기다려 줄 시간. AI Engine 타임아웃보다 넉넉히 둔다. */
     public long drainGraceMillis() {
@@ -214,6 +279,10 @@ public class CallAnalysisService {
         /** 종합 판단에 넘길 전문. 받아들인 순서대로 쌓는다. */
         private final List<String> texts = new ArrayList<>();
         private volatile long lastActivityMillis = System.currentTimeMillis();
+        /** 이 회차가 엔진 대신 재생할 녹화. null 이면 엔진을 부른다. */
+        private final FactCheckRecording replayFrom;
+        /** 이 회차가 엔진 응답을 남길 녹화. 재생 회차이거나 녹화 대상이 아니면 null. */
+        private final FactCheckRecording recordInto;
 
         private CallHandle(String ticker, String callId, CallContext context, String threadPrefix) {
             this.ticker = ticker;
@@ -221,6 +290,22 @@ public class CallAnalysisService {
             this.context = context;
             this.factCheck = singleThread(threadPrefix + "-fc-" + ticker);
             this.transcriptDiff = singleThread(threadPrefix + "-diff-" + ticker);
+            String replayKey = context.replayKey();
+            if (aiEngineClient.isResponseMemoEnabled() && replayKey != null && context.expectedSegments() > 0) {
+                FactCheckRecording existing = factCheckRecordings.get(replayKey);
+                if (existing != null && existing.isComplete()) {
+                    this.replayFrom = existing;
+                    this.recordInto = null;
+                    log.info("[CallAnalysis] 팩트체크를 지난 회차 녹화로 재생합니다 - ticker={} call_id={}", ticker, callId);
+                } else {
+                    this.replayFrom = null;
+                    this.recordInto = new FactCheckRecording(context.expectedSegments());
+                    factCheckRecordings.put(replayKey, recordInto);
+                }
+            } else {
+                this.replayFrom = null;
+                this.recordInto = null;
+            }
         }
 
         public String callId() {
@@ -322,8 +407,16 @@ public class CallAnalysisService {
                     if (cancelled.get()) {
                         return;
                     }
-                    aiEngineClient.submitSentence(request)
-                            .ifPresent(batch -> factCheckPublisher.publish(ticker, callId, batch));
+                    if (replayFrom != null) {
+                        replayFrom.get(segment.sequence())
+                                .ifPresent(batch -> factCheckPublisher.publish(ticker, callId, batch));
+                        return;
+                    }
+                    java.util.Optional<LiveFactCheckModels.BatchResponse> response = aiEngineClient.submitSentence(request);
+                    if (recordInto != null) {
+                        recordInto.record(segment.sequence(), segment.isSessionEnd(), response);
+                    }
+                    response.ifPresent(batch -> factCheckPublisher.publish(ticker, callId, batch));
                 });
             } catch (RejectedExecutionException e) {
                 log.debug("[CallAnalysis] 팩트체크 제출 생략(종료 중) - ticker={} sequence={}", ticker, segment.sequence());

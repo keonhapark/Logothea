@@ -1,5 +1,7 @@
 package com.earningwhisperer.infrastructure.websocket;
 
+import com.earningwhisperer.infrastructure.broadcast.CallBroadcastStore;
+import org.springframework.beans.factory.annotation.Autowired;
 import com.earningwhisperer.infrastructure.aiengine.EarningsSummaryModels;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -37,8 +39,23 @@ public class EarningsSummaryPublisher {
 
     private final SimpMessagingTemplate messagingTemplate;
 
+    /** 중간 입장 스냅샷용 기록. 없으면(슬라이스 테스트 등) 남기지 않는다. */
+    private CallBroadcastStore broadcastStore;
+
+    @Autowired(required = false)
+    void setBroadcastStore(CallBroadcastStore broadcastStore) {
+        this.broadcastStore = broadcastStore;
+    }
+
+    private void record(int sequence, String ticker, String callId, Object payload) {
+        if (broadcastStore != null) {
+            broadcastStore.record(CallBroadcastStore.Kind.EVALUATION, ticker, callId, sequence, payload);
+        }
+    }
+
     public void publish(Payload payload) {
         String topic = TOPIC_PREFIX + payload.getTicker();
+        record(0, payload.getTicker(), payload.getCallId(), payload);
         try {
             messagingTemplate.convertAndSend(topic, payload);
             log.info("[WebSocket] 종합 판단 fan-out - ticker={} call_id={} direction={}",

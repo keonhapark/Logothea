@@ -1,5 +1,7 @@
 package com.earningwhisperer.infrastructure.websocket;
 
+import com.earningwhisperer.infrastructure.broadcast.CallBroadcastStore;
+import org.springframework.beans.factory.annotation.Autowired;
 import com.earningwhisperer.domain.transcript.TranscriptSegment;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -30,6 +32,20 @@ public class TranscriptPublisher {
 
     private final SimpMessagingTemplate messagingTemplate;
 
+    /** 중간 입장 스냅샷용 기록. 없으면(슬라이스 테스트 등) 남기지 않는다. */
+    private CallBroadcastStore broadcastStore;
+
+    @Autowired(required = false)
+    void setBroadcastStore(CallBroadcastStore broadcastStore) {
+        this.broadcastStore = broadcastStore;
+    }
+
+    private void record(int sequence, String ticker, String callId, Object payload) {
+        if (broadcastStore != null) {
+            broadcastStore.record(CallBroadcastStore.Kind.SEGMENT, ticker, callId, sequence, payload);
+        }
+    }
+
     /**
      * 세그먼트를 ticker 별 토픽으로 브로드캐스트한다.
      * 발행 실패는 로깅만 수행하고 예외를 재던지지 않는다.
@@ -37,6 +53,7 @@ public class TranscriptPublisher {
     public void publish(TranscriptSegment segment) {
         String topic = TOPIC_PREFIX + segment.ticker();
         Payload payload = Payload.from(segment);
+        record(payload.getSequence(), payload.getTicker(), payload.getCallId(), payload);
         try {
             messagingTemplate.convertAndSend(topic, payload);
             log.debug("[WebSocket] 어닝콜 트랜스크립트 fan-out - ticker={} call_id={} sequence={} end={}",

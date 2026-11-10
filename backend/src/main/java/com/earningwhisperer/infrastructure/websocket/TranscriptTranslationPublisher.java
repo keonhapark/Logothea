@@ -1,5 +1,7 @@
 package com.earningwhisperer.infrastructure.websocket;
 
+import com.earningwhisperer.infrastructure.broadcast.CallBroadcastStore;
+import org.springframework.beans.factory.annotation.Autowired;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Builder;
 import lombok.Getter;
@@ -33,8 +35,23 @@ public class TranscriptTranslationPublisher {
 
     private final SimpMessagingTemplate messagingTemplate;
 
+    /** 중간 입장 스냅샷용 기록. 없으면(슬라이스 테스트 등) 남기지 않는다. */
+    private CallBroadcastStore broadcastStore;
+
+    @Autowired(required = false)
+    void setBroadcastStore(CallBroadcastStore broadcastStore) {
+        this.broadcastStore = broadcastStore;
+    }
+
+    private void record(int sequence, String ticker, String callId, Object payload) {
+        if (broadcastStore != null) {
+            broadcastStore.record(CallBroadcastStore.Kind.TRANSLATION, ticker, callId, sequence, payload);
+        }
+    }
+
     public void publish(Payload payload) {
         String topic = TOPIC_PREFIX + payload.getTicker();
+        record(0, payload.getTicker(), payload.getCallId(), payload);
         try {
             messagingTemplate.convertAndSend(topic, payload);
             log.debug("[WebSocket] 번역 fan-out - ticker={} call_id={} sequences={}",

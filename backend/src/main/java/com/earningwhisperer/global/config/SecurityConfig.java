@@ -49,6 +49,7 @@ public class SecurityConfig {
             "/api/v1/glossary",
             "/api/v1/demo/earnings-call/status",
             "/api/v1/demo/earnings-call/speakers",
+            "/api/v1/demo/earnings-call/snapshot",
             "/api/v1/earnings-calendar/terminal-timeline",
             "/api/v1/stocks/*/detail",
     };
