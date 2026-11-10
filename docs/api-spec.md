@@ -131,6 +131,7 @@ REST · STOMP · Redis 메시지의 형식을 정리한 문서입니다. 모듈�
 | 엔드포인트 | `/ws-native`(native WebSocket, 터미널), `/ws`(SockJS, 웹) |
 | broker prefix | `/topic`, `/queue`. 앱 prefix `/app` 과 사용자 prefix `/user` 는 설정만 있고 쓰지 않습니다 |
 | 인증 | CONNECT 프레임의 `Authorization: Bearer {accessToken}` 을 `StompJwtChannelInterceptor` 가 검증합니다 |
+| heart-beat | 서버는 `10000,10000`(밀리초)을 제안합니다. 실제 간격은 클라이언트가 CONNECT 에 보낸 값과 협상해 정해지고, 클라이언트가 `0,0` 을 보내면 꺼집니다. 터미널과 웹은 `10000,10000` 을 보냅니다 |
 
 - 인증에 실패하면 ERROR 프레임(`STOMP 인증 실패`)으로 끊습니다. 터미널은 이 문구를 보면 access token 을 한 번
   갱신해 다시 연결하므로, 문구도 계약에 포함됩니다.
