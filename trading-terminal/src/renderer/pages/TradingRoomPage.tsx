@@ -8,6 +8,7 @@ import { useTranscriptStore } from "../store/useTranscriptStore";
 import { ipc, IPC_CHANNELS } from "../lib/ipc";
 import SpeakerProfileModal from "../components/trading/SpeakerProfileModal";
 import CallBar from "../components/call/CallBar";
+import CallTimeline from "../components/call/CallTimeline";
 import CallBriefing from "../components/call/CallBriefing";
 import TranscriptStream from "../components/call/TranscriptStream";
 import CallSideTabs, { type SideTab } from "../components/call/CallSideTabs";
@@ -16,6 +17,8 @@ import SegmentedControl from "../components/common/SegmentedControl";
 import CallVerdict from "../components/call/CallVerdict";
 import PriceCard from "../components/call/PriceCard";
 import OrderSheet, { type OrderSubmitPayload } from "../components/call/OrderSheet";
+import CallTour from "../components/call/CallTour";
+import { isCallTourDone } from "../lib/callTour";
 import { useOrderAccount } from "../hooks/useOrderAccount";
 import { DEMO_TICKER } from "../constants/demo";
 import { showIpcErrorToast } from "../components/common/Toast";
@@ -153,6 +156,13 @@ export default function TradingRoomPage() {
     [transcriptDiffItems],
   );
   const isLive = phase === "LIVE";
+
+  // 첫 사용 안내 — 실제 콜이 처음 시작된 화면에서 한 번만 띄운다. 시연 재생 중에는 띄우지 않는다.
+  const [tourOpen, setTourOpen] = useState(false);
+  useEffect(() => {
+    if (isLive && !isDemo && !isCallTourDone()) setTourOpen(true);
+  }, [isLive, isDemo]);
+  const showTour = tourOpen && isLive && !isDemo;
   const lastCallId = segments.length > 0 ? segments[segments.length - 1].callId : null;
   const translations = useMemo(
     () => translationsByLastSequence(translationItems, lastCallId),
@@ -405,8 +415,8 @@ export default function TradingRoomPage() {
     await startDemo();
   }
 
-  async function handleOrderSubmit(payload: OrderSubmitPayload) {
-    if (!ticker) return;
+  async function handleOrderSubmit(payload: OrderSubmitPayload): Promise<SessionOrder | null> {
+    if (!ticker) return null;
     setSubmitting(true);
     // 주문 종목·수량·지정가는 요청에만 있고 응답에는 없다. 여기서 둘을 합쳐 기록한다.
     const localId = `${ticker}-${payload.side}-${Date.now()}`;
@@ -430,14 +440,16 @@ export default function TradingRoomPage() {
         executedQty: number;
         errorMessage: string | null;
       } | null;
-      addSessionOrder({
+      const order: SessionOrder = {
         ...base,
         status: result?.status ?? "PENDING",
         executedQty: result?.executedQty ?? 0,
         executedPrice: result?.executedPrice ?? null,
         brokerOrderId: result?.orderId ?? null,
         errorMessage: result?.errorMessage ?? null,
-      });
+      };
+      addSessionOrder(order);
+      return order;
     } catch (e) {
       showIpcErrorToast(e);
       // 실패도 남긴다. 토스트는 사라지고, 무엇이 왜 안 됐는지 다시 볼 곳이 없어진다.
@@ -449,6 +461,7 @@ export default function TradingRoomPage() {
         brokerOrderId: null,
         errorMessage: e instanceof Error ? e.message : "주문에 실패했습니다.",
       });
+      return null;
     } finally {
       setSubmitting(false);
     }
@@ -458,6 +471,10 @@ export default function TradingRoomPage() {
     // 최근 것이 앞에 온다. 세션 한정이라 상한은 넉넉히 둔다.
     setSessionOrders((prev) => [order, ...prev].slice(0, 30));
   }
+
+  const timeline = (
+    <CallTimeline segments={segments} diffItems={transcriptDiffItems} onFocusSequence={focusSequence} />
+  );
 
   const priceCard = (
     <PriceCard
@@ -525,6 +542,7 @@ export default function TradingRoomPage() {
               diffsBySequence={diffsBySequence}
               isLive
               topInset={TOP_INSET}
+              timeline={transcriptDiffItems.length > 0 ? timeline : undefined}
               focus={focus}
               {...translationProps}
               onAskAbout={askAbout}
@@ -564,6 +582,8 @@ export default function TradingRoomPage() {
                 <CallVerdict
                   summary={currentSummary}
                   demoStopped={stoppedCallId != null && stoppedCallId === lastCallId}
+                  waitKey={lastCallId}
+                  priceSeries={chartSeries}
                   diffCounts={diffCounts}
                   previousCallLabel={previousCallLabel}
                   onOpenTicker={(t) => openDrawer(t)}
@@ -612,6 +632,8 @@ export default function TradingRoomPage() {
         activeSpeakerKey={currentSpeakerKey}
         isLive={isLive}
       />
+
+      {showTour && <CallTour onClose={() => setTourOpen(false)} />}
     </div>
   );
 }

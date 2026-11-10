@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import type { TranscriptSegment } from '../../store/useTranscriptStore'
 import type { HighlightedTranslation } from '../../hooks/useTranscriptTranslation'
 import type { GlossaryStatus } from '../../store/useGlossaryStore'
@@ -27,6 +27,8 @@ interface TranscriptStreamProps {
   glossaryStatus: GlossaryStatus
   /** 이 발언을 범위로 질의응답을 연다. 없으면 버튼을 두지 않는다. */
   onAskAbout?: (sequence: number) => void
+  /** 머리줄 아래에 붙는 가로 시간축. 스크롤하면 콜 바 바로 아래에 멈춰 있다. */
+  timeline?: ReactNode
 }
 
 /**
@@ -50,6 +52,7 @@ export default function TranscriptStream({
   onShowTranslationChange,
   glossaryStatus,
   onAskAbout,
+  timeline,
 }: TranscriptStreamProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const [stuck, setStuck] = useState(true)
@@ -93,7 +96,7 @@ export default function TranscriptStream({
   const latestSeq = segments.length > 0 ? segments[segments.length - 1].sequence : null
 
   return (
-    <section className="cloud relative h-full rounded-[28px] overflow-hidden" aria-label="자막">
+    <section className="cloud relative h-full rounded-[28px] overflow-hidden" aria-label="자막" data-tour="transcript">
       <ScrollEdge height={topInset + 12} />
       <div
         ref={scrollRef}
@@ -111,6 +114,11 @@ export default function TranscriptStream({
         {showTranslation && glossaryStatus === 'failed' && translations.size > 0 && !compact && (
           <p className="px-7 -mt-1 pb-2 text-[12px] text-ink-3">용어 설명을 불러오지 못해 번역만 보여 줍니다.</p>
         )}
+        {timeline && (
+          <div className="sticky z-[2] px-7 pt-1 pb-3 mb-1" style={{ top: 0, background: 'var(--cloud)' }}>
+            {timeline}
+          </div>
+        )}
 
         {segments.length === 0 ? (
           <p className="px-7 py-10 text-center text-[13px] text-ink-3">
@@ -118,7 +126,15 @@ export default function TranscriptStream({
           </p>
         ) : (
           <ol role="log" aria-label="자막" className={`flex flex-col ${compact ? 'gap-3 px-5 pb-6' : 'gap-5 px-7 pb-10'}`}>
-            {segments.map((seg) => {
+            {segments.map((seg, i) => {
+              // 같은 사람이 이어 말하면 이름을 다시 쓰지 않고 앞 발언에 붙여 한 덩어리로 읽힌다.
+              // 앞 발언 밑에 대조 · 번역이 붙어 있으면 그 아래로 당기지 않는다(카드에 딸린 글처럼 보인다).
+              const prev = segments[i - 1]
+              const continued = !!seg.speaker && seg.speaker === prev?.speaker
+              const prevHasExtra =
+                prev != null &&
+                ((diffsBySequence.get(prev.sequence)?.length ?? 0) > 0 || (showTranslation && translations.has(prev.sequence)))
+              const pullUp = continued && !prevHasExtra
               const diffs = diffsBySequence.get(seg.sequence)
               const translation = showTranslation ? translations.get(seg.sequence) : undefined
               const isLatest = isLive && seg.sequence === latestSeq
@@ -127,23 +143,25 @@ export default function TranscriptStream({
                   key={`${seg.callId}-${seg.sequence}`}
                   data-seq={seg.sequence}
                   className={`group flex flex-col gap-1.5 rounded-[14px] transition-colors duration-500 ${
-                    flash === seg.sequence ? 'bg-wash/[0.06]' : ''
-                  }`}
+                    pullUp ? (compact ? '-mt-1.5' : '-mt-2.5') : ''
+                  } ${flash === seg.sequence ? 'bg-wash/[0.06]' : ''}`}
                 >
                   <div className="flex items-center gap-2 text-[11.5px] text-ink-3">
                     <span className="num">{formatCallClock(seg.startMs)}</span>
                     {seg.speaker &&
-                      (onSpeakerClick ? (
+                      (continued ? (
+                        <span className="sr-only">{seg.speaker}</span>
+                      ) : onSpeakerClick ? (
                         <button
                           type="button"
                           onClick={() => onSpeakerClick(seg.speaker as string)}
-                          className="hover:text-ink-1 underline decoration-dotted underline-offset-2"
+                          className="text-[12.5px] font-semibold text-ink-1 underline decoration-dotted underline-offset-2 hover:decoration-solid"
                           aria-label={`${seg.speaker} 발화자 프로필 열기`}
                         >
                           {seg.speaker}
                         </button>
                       ) : (
-                        <span>{seg.speaker}</span>
+                        <span className="text-[12.5px] font-semibold text-ink-1">{seg.speaker}</span>
                       ))}
                     {onAskAbout && (
                       <button

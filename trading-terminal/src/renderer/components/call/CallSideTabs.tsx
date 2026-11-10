@@ -41,9 +41,9 @@ export default function CallSideTabs({ diffItems, onFocusSequence, price, ask, t
   const ordered = useMemo(() => [...diffItems].sort((a, b) => a.sequence - b.sequence), [diffItems])
 
   return (
-    <section className="cloud relative h-full rounded-[28px] overflow-hidden flex flex-col" style={{ paddingTop: topInset }}>
+    <section className="cloud relative h-full rounded-[28px] overflow-hidden flex flex-col" style={{ paddingTop: topInset }} data-tour="side">
       <ScrollEdge height={topInset + 12} />
-      <div className="px-5 pt-4 pb-3 shrink-0">
+      <div className="px-5 pt-4 pb-3 shrink-0" data-tour="side-tabs">
         <SegmentedControl items={TABS} activeId={tab} onChange={onTabChange} />
       </div>
 

@@ -6,6 +6,7 @@ import { usePrices } from '../hooks/usePrices'
 import { useWatchlist } from '../hooks/useWatchlist'
 import { useEarningsTimeline } from '../hooks/useEarningsTimeline'
 import StockMarketTable from '../components/market/StockMarketTable'
+import MarketMap from '../components/market/MarketMap'
 import SegmentedControl, { type SegmentItem } from '../components/common/SegmentedControl'
 import Pagination from '../components/common/Pagination'
 import { EmptyState, LoadingBlock } from '../components/common/StateView'
@@ -29,6 +30,12 @@ const FILTER_LABELS: Record<StockFilter, string> = {
 
 const FILTERS: StockFilter[] = ['all', 'watch', 'held', 'week']
 
+type MarketView = 'table' | 'map'
+const VIEW_ITEMS: SegmentItem<MarketView>[] = [
+  { id: 'table', label: '표' },
+  { id: 'map', label: '지도' },
+]
+
 /**
  * 종목 — S&P 500 목록에서 종목을 찾는 화면 (docs/design/screens/stocks.md).
  *
@@ -39,6 +46,8 @@ export default function MarketPage() {
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<StockFilter>('all')
   const [page, setPage] = useState(0)
+  // 표는 그대로 두고, 같은 자리에서 시장 지도로 바꿔 볼 수 있다(W1).
+  const [view, setView] = useState<MarketView>('table')
   const topRef = useRef<HTMLDivElement>(null)
 
   const list = useStockMarketStore((s) => s.list)
@@ -111,20 +120,42 @@ export default function MarketPage() {
   return (
     <div ref={topRef} className="flex flex-col gap-6 max-w-[1320px]">
       <header className="flex items-end justify-between gap-4 pt-2">
-        <div>
-          <h1 className="text-[24px] font-bold tracking-[-0.02em] text-ink-1">종목</h1>
-          <p className="mt-1 text-[12.5px] text-ink-3">S&amp;P 500 · 시가총액 순</p>
+        <div className="flex items-end gap-5">
+          <div>
+            <h1 className="text-[24px] font-bold tracking-[-0.02em] text-ink-1">종목</h1>
+            <p className="mt-1 text-[12.5px] text-ink-3">S&amp;P 500 · 시가총액 순</p>
+          </div>
+          <SegmentedControl items={VIEW_ITEMS} activeId={view} onChange={setView} ariaLabel="종목 보기" idPrefix="market" />
         </div>
-        {ready && <span className="text-[12.5px] text-ink-3 tabular-nums">{filtered.length}개 종목</span>}
+        {ready && view === 'table' && <span className="text-[12.5px] text-ink-3 tabular-nums">{filtered.length}개 종목</span>}
       </header>
 
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <SegmentedControl items={segments} activeId={filter} onChange={changeFilter} />
-        <SearchField value={query} onChange={changeQuery} />
-      </div>
+      {view === 'table' && (
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <SegmentedControl items={segments} activeId={filter} onChange={changeFilter} />
+          <SearchField value={query} onChange={changeQuery} />
+        </div>
+      )}
 
-      <section className="cloud rounded-[28px] flex flex-col" aria-label="종목 목록">
-        {!isLoaded || (filter === 'week' && timelineStatus === 'loading') ? (
+      <section
+        className="cloud rounded-[28px] flex flex-col"
+        aria-label={view === 'map' ? '시장 지도' : '종목 목록'}
+        role="tabpanel"
+        id={`market-panel-${view}`}
+      >
+        {view === 'map' ? (
+          !isLoaded ? (
+            <LoadingBlock lines={10} lineHeight={20} className="p-5" />
+          ) : listFailed ? (
+            <FailureState
+              message="종목 목록을 불러오지 못했습니다."
+              reason={error && failureReason(error)}
+              onRetry={error === 'AUTH_REQUIRED' || error === 'AUTH_EXPIRED' ? undefined : retryList}
+            />
+          ) : (
+            <MarketMap list={list} prices={prices} onPick={openDrawer} />
+          )
+        ) : !isLoaded || (filter === 'week' && timelineStatus === 'loading') ? (
           <LoadingBlock lines={10} lineHeight={20} className="p-5" />
         ) : listFailed ? (
           <FailureState

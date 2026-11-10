@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import SidePanel from '../common/SidePanel'
 import CompanyLogo from '../common/CompanyLogo'
@@ -29,6 +29,7 @@ import {
 } from '../../lib/companyDetailFormatters'
 import { ComingSoon, EmptyState, LoadingBlock } from '../common/StateView'
 import { countdownParts } from '../../lib/callScreen'
+import { flyToNav } from '../../lib/flyToNav'
 
 /**
  * 종목 브리핑 — 어느 화면에서나 오른쪽에 여는 패널 (docs/design/screens/stock-brief.md).
@@ -239,6 +240,8 @@ function PanelHeader({
   )
 }
 
+const STAR_PATH = 'M12 2.8l2.8 5.9 6.4.8-4.7 4.4 1.2 6.4L12 17.2l-5.7 3.1 1.2-6.4L2.8 9.5l6.4-.8z'
+
 function ActionBar({
   ticker,
   isWatched,
@@ -250,6 +253,7 @@ function ActionBar({
 }) {
   // 응답(WATCHLIST_UPDATE 방송)이 오기 전에 다시 누르면 같은 요청이 두 번 나가므로 그동안 막는다.
   const [busy, setBusy] = useState(false)
+  const buttonRef = useRef<HTMLButtonElement>(null)
   const toggleWatchlist = useCallback(async () => {
     setBusy(true)
     try {
@@ -257,6 +261,9 @@ function ActionBar({
         await ipc.invoke(IPC_CHANNELS.WATCHLIST_REMOVE, { ticker })
       } else {
         await ipc.invoke(IPC_CHANNELS.WATCHLIST_ADD, { ticker })
+        // 관심 종목은 종목 화면의 관심 필터에서 본다. 칩이 그 메뉴로 날아가 들어간다
+        const from = buttonRef.current?.querySelector('svg') ?? buttonRef.current
+        if (from) flyToNav(from, ticker, '/stocks')
       }
       // store 는 WATCHLIST_UPDATE 방송으로 갱신된다.
     } catch (e) {
@@ -271,14 +278,23 @@ function ActionBar({
   return (
     <div className="px-6 py-4 flex gap-3 border-t border-edge/[0.08] shrink-0">
       <button
+        ref={buttonRef}
         type="button"
         onClick={toggleWatchlist}
         disabled={busy}
-        className="gbtn flex-1"
+        className="gbtn flex-1 watch-btn"
         aria-pressed={isWatched}
       >
-        <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden>
-          {isWatched ? <path d="M3 7h8" /> : <path d="M7 2v10M2 7h10" />}
+        {/* 관심이면 별이 아래에서부터 금색으로 찬다(bookmark-ribbon, ui-shelf) */}
+        <svg viewBox="0 0 24 24" aria-hidden>
+          <defs>
+            <clipPath id={`watch-star-${ticker}`}>
+              <rect className="watch-star-fill" x="0" y="0" width="24" height="24" />
+            </clipPath>
+          </defs>
+          {/* 채움을 먼저 그려 외곽선이 덮이지 않게 한다 */}
+          <path d={STAR_PATH} clipPath={`url(#watch-star-${ticker})`} fill="var(--gold)" />
+          <path d={STAR_PATH} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
         </svg>
         {isWatched ? '관심 해제' : '관심 추가'}
       </button>

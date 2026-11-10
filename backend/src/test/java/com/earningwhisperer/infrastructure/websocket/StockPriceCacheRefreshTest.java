@@ -46,7 +46,7 @@ class StockPriceCacheRefreshTest {
     @BeforeEach
     void 기동_초기화() {
         given(stockRepository.findByActiveTrue()).willReturn(List.of(stockOf("WMT")));
-        given(dailyBarRepository.findLatestClosesByTickers(any()))
+        given(dailyBarRepository.findLatestClosesInRange(any(), any(), any()))
                 .willReturn(List.of(new TickerLatestClose("WMT", 130.15)));
         cache.initialize();
     }
@@ -57,7 +57,7 @@ class StockPriceCacheRefreshTest {
         cache.update("WMT", 106.06);
         assertThat(snapshotOf("WMT").changePercent()).isLessThan(-18.0); // 옛 종가 기준
 
-        given(dailyBarRepository.findLatestClosesByTickers(any()))
+        given(dailyBarRepository.findLatestClosesInRange(any(), any(), any()))
                 .willReturn(List.of(new TickerLatestClose("WMT", 105.83)));
 
         assertThat(cache.refreshPreviousCloses()).isEqualTo(1);
@@ -72,7 +72,7 @@ class StockPriceCacheRefreshTest {
     @Test
     @DisplayName("값이 그대로면 아무것도 바꾸지 않는다")
     void 변화_없으면_무시() {
-        given(dailyBarRepository.findLatestClosesByTickers(any()))
+        given(dailyBarRepository.findLatestClosesInRange(any(), any(), any()))
                 .willReturn(List.of(new TickerLatestClose("WMT", 130.15)));
 
         assertThat(cache.refreshPreviousCloses()).isZero();
@@ -81,10 +81,20 @@ class StockPriceCacheRefreshTest {
     @Test
     @DisplayName("일봉이 0 이하로 오면 무시한다 — 멀쩡한 전일종가를 0 으로 덮지 않는다")
     void 비정상_종가_무시() {
-        given(dailyBarRepository.findLatestClosesByTickers(any()))
+        given(dailyBarRepository.findLatestClosesInRange(any(), any(), any()))
                 .willReturn(List.of(new TickerLatestClose("WMT", 0.0)));
 
         assertThat(cache.refreshPreviousCloses()).isZero();
         assertThat(snapshotOf("WMT").previousClose()).isEqualTo(130.15);
+    }
+
+    @Test
+    @DisplayName("기간 안에 봉이 없어지면 전일종가를 0(모름)으로 돌린다 — 오래된 값으로 변동률을 만들지 않는다")
+    void 봉_없으면_모름() {
+        given(dailyBarRepository.findLatestClosesInRange(any(), any(), any())).willReturn(List.of());
+
+        assertThat(cache.refreshPreviousCloses()).isEqualTo(1);
+        assertThat(snapshotOf("WMT").previousClose()).isZero();
+        assertThat(snapshotOf("WMT").changePercent()).isZero();
     }
 }

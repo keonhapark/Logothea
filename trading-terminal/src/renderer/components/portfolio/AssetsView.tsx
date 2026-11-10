@@ -230,7 +230,7 @@ export default function AssetsView() {
             <LoadingBlock lines={5} lineHeight={28} />
           </div>
         ) : (
-          <HoldingsTable rows={view.rows} onRowClick={openDrawer} callStatus={callStatus} onRetryCalls={retryCalls} />
+          <HoldingsTable rows={view.rows} cash={totalCash} onRowClick={openDrawer} callStatus={callStatus} onRetryCalls={retryCalls} />
         )}
         {hasBalance && (
           <StaleDataOverlay

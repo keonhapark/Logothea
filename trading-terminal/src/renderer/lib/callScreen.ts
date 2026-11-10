@@ -149,3 +149,65 @@ export function translationsByLastSequence<T extends { callId: string; sequences
   }
   return map
 }
+
+/**
+ * 최근 어닝 반응의 EPS 막대가 함께 쓰는 눈금 범위. 분기마다 예상과 실제는 몇 센트 차이라
+ * 0 에서 시작하면 막대 끝이 모두 같아 보인다. 그래서 값들의 최솟값 아래로 여유를 두고 시작해
+ * 예상을 넘었는지 못 미쳤는지가 막대 길이로 보이게 한다. 값이 하나도 없으면 null.
+ */
+export function epsBulletDomain(values: readonly (number | null)[]): readonly [number, number] | null {
+  const nums = values.filter((v): v is number => v != null && Number.isFinite(v))
+  if (nums.length === 0) return null
+  const min = Math.min(...nums)
+  const max = Math.max(...nums)
+  const span = max - min || Math.max(Math.abs(max) * 0.1, 0.01)
+  return [min - span * 0.6, max + span * 0.15]
+}
+
+/** 눈금 범위 안의 비율(0~1). 범위를 벗어나면 양 끝에 붙인다. */
+export function epsBulletRatio(value: number, [lo, hi]: readonly [number, number]): number {
+  return Math.min(1, Math.max(0, (value - lo) / (hi - lo)))
+}
+
+/** 가로 시간축의 점 하나 — 한 발언에 붙은 대조 항목들과 그 발언의 시작 시각 · 축 위 비율(0~1). */
+export interface TimelineMark {
+  sequence: number
+  startMs: number
+  ratio: number
+  /** 도착 순서. 같은 발언의 대조는 한 점으로 묶는다(겹치면 위의 점만 눌린다). */
+  items: TranscriptDiffItem[]
+  /** 점의 색 · 크기를 정하는 항목 — 후퇴 · 고위험이 있으면 그것, 없으면 먼저 온 것. */
+  lead: TranscriptDiffItem
+}
+
+/**
+ * 가로 시간축(W11)에 찍을 점. 축은 콜 처음부터 마지막 발언 끝까지이고, 진행 중이면 오른쪽 끝이 지금이다.
+ * 지금 보이는 자막에 없는 발언(지난 회차 · 아직 안 온 발언)의 대조는 찍지 않는다. 점은 시각 순이다.
+ */
+export function timelineMarks(
+  segments: readonly TranscriptSegment[],
+  items: readonly TranscriptDiffItem[],
+): { totalMs: number; marks: TimelineMark[] } {
+  const totalMs = segments.length > 0 ? segments[segments.length - 1].endMs : 0
+  if (!(totalMs > 0)) return { totalMs: 0, marks: [] }
+  const startBySeq = new Map(segments.map((s) => [s.sequence, s.startMs]))
+  const bySeq = new Map<number, TimelineMark>()
+  for (const item of items) {
+    const startMs = startBySeq.get(item.sequence)
+    if (startMs == null) continue
+    const mark = bySeq.get(item.sequence)
+    if (mark) {
+      mark.items.push(item)
+      if (!isProminentDiff(mark.lead) && isProminentDiff(item)) mark.lead = item
+    } else {
+      bySeq.set(item.sequence, {
+        sequence: item.sequence,
+        startMs,
+        ratio: Math.min(1, Math.max(0, startMs / totalMs)),
+        items: [item],
+        lead: item,
+      })
+    }
+  }
+  return { totalMs, marks: [...bySeq.values()].sort((x, y) => x.startMs - y.startMs) }
+}

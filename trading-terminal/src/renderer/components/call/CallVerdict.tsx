@@ -3,6 +3,8 @@ import type { EarningsSummary, ImpactDirection, SignalDirection } from '../../ty
 import type { TranscriptDiffChangeType } from '../../store/useTranscriptDiffStore'
 import { CHANGE_META, CHANGE_ORDER } from './diffMeta'
 import ScrollEdge from './ScrollEdge'
+import RiskBandChart from './RiskBandChart'
+import type { PricePoint } from '../../types/priceSeries'
 import { catalystLabel } from '../../lib/catalystLabel'
 
 interface CallVerdictProps {
@@ -13,7 +15,27 @@ interface CallVerdictProps {
   onOpenTicker: (ticker: string) => void
   /** 시연을 중지해 판단이 오지 않는 콜. 대기 대신 중지했다고 알린다. */
   demoStopped?: boolean
+  /** 기다리기 시작한 시각을 기억할 열쇠(콜 회차). 판단 · 질문 전환으로 다시 붙어도 지난 시간을 이어 센다. */
+  waitKey?: string | null
+  /** 30일 종가. 손절 · 익절 띠의 가격선으로 쓴다. 비어 있으면 띠만 그린다. */
+  priceSeries?: readonly PricePoint[]
   topInset: number
+}
+
+const NO_PRICES: readonly PricePoint[] = []
+
+// 회차별로 판단을 기다리기 시작한 시각. 판단 · 질문 전환으로 이 판이 떨어졌다 다시 붙어도 이어 센다.
+const waitStarts = new Map<string, number>()
+
+function useWaitStart(key: string | null | undefined): number {
+  const [fallback] = useState(() => Date.now())
+  if (!key) return fallback
+  let started = waitStarts.get(key)
+  if (started === undefined) {
+    started = Date.now()
+    waitStarts.set(key, started)
+  }
+  return started
 }
 
 /** 판단이 오지 않을 때 대기 문구를 무한히 두지 않고 안내로 바꾸는 시간. */
@@ -97,7 +119,16 @@ function signedPct(v: number | null): string {
  *  - 근거 · 반대 논거 · 질문 회피 · 파급 영향 · 손절 계획은 펼쳐 본다.
  *  - 없는 값을 0 으로 채우지 않고, 엔진 경고와 부가 정보 누락도 감추지 않는다.
  */
-export default function CallVerdict({ summary, diffCounts, previousCallLabel, onOpenTicker, demoStopped = false, topInset }: CallVerdictProps) {
+export default function CallVerdict({
+  summary,
+  diffCounts,
+  previousCallLabel,
+  onOpenTicker,
+  demoStopped = false,
+  waitKey,
+  priceSeries = NO_PRICES,
+  topInset,
+}: CallVerdictProps) {
   return (
     <section className="cloud relative h-full rounded-[28px] overflow-hidden" aria-label="종합 판단">
       <ScrollEdge height={topInset + 12} />
@@ -105,7 +136,7 @@ export default function CallVerdict({ summary, diffCounts, previousCallLabel, on
       <div className="absolute inset-x-0 bottom-0 overflow-y-auto" style={{ top: topInset }}>
         <div className="px-8 pt-4 pb-10 flex flex-col gap-6 max-w-[820px]">
           {summary ? (
-            <Verdict summary={summary} onOpenTicker={onOpenTicker} />
+            <Verdict summary={summary} onOpenTicker={onOpenTicker} priceSeries={priceSeries} />
           ) : demoStopped ? (
             <div className="flex flex-col gap-2" role="status">
               <span className="text-[13px] text-ink-3">종합 판단</span>
@@ -113,7 +144,7 @@ export default function CallVerdict({ summary, diffCounts, previousCallLabel, on
               <span className="text-[13px] text-ink-3">끝까지 재생하지 않은 콜은 종합 판단을 만들지 않습니다. 콜 바의 처음부터로 다시 재생할 수 있습니다.</span>
             </div>
           ) : (
-            <Waiting />
+            <Waiting waitKey={waitKey} />
           )}
           <DiffSummary counts={diffCounts} previousCallLabel={previousCallLabel} />
         </div>
@@ -122,12 +153,19 @@ export default function CallVerdict({ summary, diffCounts, previousCallLabel, on
   )
 }
 
-function Waiting() {
-  const [timedOut, setTimedOut] = useState(false)
+function Waiting({ waitKey }: { waitKey?: string | null }) {
+  const startedAt = useWaitStart(waitKey)
+  const [timedOut, setTimedOut] = useState(() => Date.now() - startedAt >= SUMMARY_WAIT_LIMIT_MS)
   useEffect(() => {
-    const t = setTimeout(() => setTimedOut(true), SUMMARY_WAIT_LIMIT_MS)
+    const left = SUMMARY_WAIT_LIMIT_MS - (Date.now() - startedAt)
+    if (left <= 0) {
+      setTimedOut(true)
+      return
+    }
+    setTimedOut(false)
+    const t = setTimeout(() => setTimedOut(true), left)
     return () => clearTimeout(t)
-  }, [])
+  }, [startedAt])
   return (
     <div className="flex flex-col gap-2" role="status">
       <span className="text-[13px] text-ink-3">종합 판단</span>
@@ -142,14 +180,80 @@ function Waiting() {
       ) : (
         <>
           <span className="text-[22px] font-bold text-ink-1">콜 전체를 종합하는 중입니다</span>
-          <span className="text-[13px] text-ink-3">콜이 끝나면 전문을 다시 읽고 판단을 만듭니다.</span>
+          <WaitingProgress startedAt={startedAt} />
         </>
       )}
     </div>
   )
 }
 
-function Verdict({ summary, onOpenTicker }: { summary: EarningsSummary; onOpenTicker: (t: string) => void }) {
+/**
+ * 판단을 기다리는 동안의 진행 표시 — 흐르는 막대 · 지난 시간 · 단계.
+ * 서버는 단계를 알려 주지 않는다. 단계는 지난 시간으로 넘기는 안내이고, 마지막 단계는 판단이 올 때까지 진행 중으로 남는다.
+ */
+const WAIT_STEPS: { label: string; untilSec: number }[] = [
+  { label: '전문 다시 읽기', untilSec: 12 },
+  { label: '직전 콜과 대조', untilSec: 30 },
+  { label: '판단 만들기', untilSec: Infinity },
+]
+
+function secondsSince(at: number): number {
+  return Math.max(0, Math.floor((Date.now() - at) / 1000))
+}
+
+function WaitingProgress({ startedAt }: { startedAt: number }) {
+  const [elapsed, setElapsed] = useState(() => secondsSince(startedAt))
+  useEffect(() => {
+    const t = setInterval(() => setElapsed(secondsSince(startedAt)), 1000)
+    return () => clearInterval(t)
+  }, [startedAt])
+  const current = WAIT_STEPS.findIndex((s) => elapsed < s.untilSec)
+
+  return (
+    <div className="flex flex-col gap-3 pt-1">
+      {/* 지난 시간은 매초 바뀐다. 알림 영역(role=status) 안이라 화면 읽기 도구가 매초 읽지 않도록 숨긴다 */}
+      <span className="text-[13px] text-ink-3 tabular-nums">
+        <span aria-hidden>{elapsed}초 지남 · </span>전문을 다시 읽고 판단을 만듭니다
+      </span>
+      <div className="wait-bar" aria-hidden>
+        <i />
+        <i />
+      </div>
+      <ol className="flex flex-col gap-2 text-[13.5px]">
+        {WAIT_STEPS.map((s, i) => {
+          const done = i < current
+          const on = i === current
+          return (
+            <li
+              key={s.label}
+              className={`flex items-center gap-2.5 transition-colors duration-300 ${done ? 'text-ink-2' : on ? 'text-ink-1' : 'text-ink-3'}`}
+            >
+              <span className="w-4 h-4 rounded-full grid place-items-center shadow-[inset_0_0_0_1.5px_currentColor]" aria-hidden>
+                {done && (
+                  <svg width="9" height="9" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M2 5.2l2 2L8 3" />
+                  </svg>
+                )}
+              </span>
+              {s.label}
+              <span className="sr-only">{done ? ' · 끝남' : on ? ' · 진행 중' : ''}</span>
+            </li>
+          )
+        })}
+      </ol>
+    </div>
+  )
+}
+
+function Verdict({
+  summary,
+  onOpenTicker,
+  priceSeries,
+}: {
+  summary: EarningsSummary
+  onOpenTicker: (t: string) => void
+  priceSeries: readonly PricePoint[]
+}) {
   const { judgment, gate, evasion, impactChain, riskPlan, warnings } = summary
   const action = gate?.action ? ACTION_LABELS[gate.action] ?? gate.action : null
   const gateMeta = gate?.gateResult ? GATE_META[gate.gateResult] ?? { label: gate.gateResult, color: 'var(--ink-2)' } : null
@@ -280,6 +384,17 @@ function Verdict({ summary, onOpenTicker }: { summary: EarningsSummary; onOpenTi
                     {riskPlan.referencePrice !== null && ` · 기준가 ${money(riskPlan.referencePrice)}`}
                   </span>
                 )}
+                <RiskBandChart
+                  series={priceSeries}
+                  referencePrice={riskPlan.referencePrice}
+                  stopLoss={riskPlan.stopLoss}
+                  takeProfit1={riskPlan.takeProfit1}
+                  takeProfit2={riskPlan.takeProfit2}
+                  stopPct={riskPlan.stopPct}
+                  takeProfit1Pct={riskPlan.takeProfit1Pct}
+                  takeProfit2Pct={riskPlan.takeProfit2Pct}
+                  days={riskPlan.timeStopDays}
+                />
                 <dl className="grid grid-cols-3 gap-3">
                   <Plan label="손절" value={money(riskPlan.stopLoss)} sub={signedPct(riskPlan.stopPct)} />
                   <Plan label="1차 익절" value={money(riskPlan.takeProfit1)} sub={signedPct(riskPlan.takeProfit1Pct)} />

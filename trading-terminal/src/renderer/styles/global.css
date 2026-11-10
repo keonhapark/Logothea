@@ -28,6 +28,9 @@
     color: var(--ink-1);
     -webkit-font-smoothing: antialiased;
     font-feature-settings: 'ss06';
+    /* 한국어는 낱말(어절) 단위로 줄을 바꾼다. 한 낱말이 칸보다 길 때만 낱말 안에서 끊는다 */
+    word-break: keep-all;
+    overflow-wrap: break-word;
     user-select: none; /* 데스크톱 앱 — 텍스트 선택 기본 비활성 */
   }
 
@@ -336,6 +339,151 @@
   transition-property: transform, width !important;
 }
 
+@layer components {
+  /* ── 넘어가는 숫자판 (콜 시작 카운트다운) ──────────────────────────────
+     flip-clock-timer(ui-shelf, MIT (c) Seokwoooo · https://github.com/Seokwoooo/lucian-uxui-prompt)의 접히는 방식을
+     옮겼다. 숫자판은 작은 구름 재질이다. 위아래 반쪽이 한 장의 구름 그라데이션을 나눠 그려 이어 보인다.
+     바뀐 자리만 위 반쪽이 옛 숫자를 들고 접히고, 아래 반쪽이 새 숫자를 들고 펼쳐진다(CallBriefing FlipDigit). */
+  .flip-digit {
+    position: relative;
+    width: 44px;
+    height: 60px;
+    border-radius: 10px;
+    box-shadow: var(--puff-small);
+    perspective: 260px;
+    font: 600 40px/60px var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+    color: var(--ink-1);
+    transition: color 0.3s;
+  }
+  .flip-digit > .half {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 50%;
+    overflow: hidden;
+    background: var(--cloud);
+    background-size: 100% 200%;
+  }
+  .flip-digit > .half.top { top: 0; border-radius: 10px 10px 0 0; background-position: top; transform-origin: bottom; }
+  .flip-digit > .half.bot { top: 50%; border-radius: 0 0 10px 10px; background-position: bottom; transform-origin: top; }
+  .flip-digit > .half > i { position: absolute; left: 0; right: 0; height: 60px; font-style: normal; }
+  .flip-digit > .half.bot > i { top: -30px; }
+  .flip-digit > .flap { z-index: 2; backface-visibility: hidden; }
+  /* 경첩 */
+  .flip-digit::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    z-index: 3;
+    height: 1px;
+    background: rgb(var(--ink-rgb) / 0.14);
+  }
+  /* 시작 10초 전부터 금색. 라이트에서는 밝은 금이 바탕에 묻혀 짙은 금을 쓴다 */
+  .flip-hot .flip-digit { color: var(--gold); }
+  :root[data-theme='light'] .flip-hot .flip-digit { color: var(--gold-lo); }
+}
+
+@layer components {
+  /* ── 흐르는 대기 막대 (판단 대기) ──────────────────────────────────────
+     indeterminate-bar(ui-shelf)의 두 조각이 엇갈려 흐르는 방식. 끝을 알 수 없는 기다림에만 쓴다.
+     모션 줄이기에서는 흐르지 않고 옅게 채운 막대로 둔다. */
+  .wait-bar {
+    position: relative;
+    height: 6px;
+    border-radius: 3px;
+    background: rgb(var(--ink-rgb) / 0.08);
+    overflow: hidden;
+  }
+  .wait-bar > i {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    border-radius: 3px;
+    background: var(--lapis);
+  }
+  .wait-bar > i:first-child { animation: wait-bar-a 1.6s infinite cubic-bezier(0.65, 0.8, 0.35, 1); }
+  .wait-bar > i:last-child { animation: wait-bar-b 1.6s 0.5s infinite cubic-bezier(0.2, 0.8, 0.2, 1); }
+  @keyframes wait-bar-a {
+    0% { left: -35%; width: 35%; }
+    60%, 100% { left: 100%; width: 60%; }
+  }
+  @keyframes wait-bar-b {
+    0% { left: -60%; width: 60%; }
+    70%, 100% { left: 105%; width: 15%; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .wait-bar > i:first-child { animation: none; left: 0; width: 100%; opacity: 0.35; }
+    .wait-bar > i:last-child { display: none; }
+  }
+}
+
+@layer components {
+  /* ── 로그인 버튼 반응 (W10) ───────────────────────────────────────────
+     login-card-feedback(ui-shelf)의 방식. 누르면 버튼이 동그라미로 줄며 돌고, 맞으면 체크가 그려진다.
+     틀렸을 때 카드 흔들림은 AuthPage 에서 Web Animations 로 준다. */
+  /* 높이는 기본 버튼과 같은 38px(12 + 14 + 12)로 고정해 동그라미가 될 때 카드 높이가 바뀌지 않게 한다 */
+  .login-btn {
+    width: 100%;
+    height: 38px;
+    transition:
+      width 300ms var(--ease),
+      padding 300ms var(--ease),
+      transform 220ms var(--spring),
+      filter 200ms var(--ease),
+      opacity 200ms;
+  }
+  .login-btn.is-busy { width: 38px; padding: 0; }
+  .login-spin {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 2px solid rgb(var(--ink-rgb) / 0.2);
+    border-top-color: currentColor;
+    animation: login-spin 0.7s linear infinite;
+  }
+  @keyframes login-spin { to { transform: rotate(360deg); } }
+  .gbtn svg.login-check { width: 18px; height: 18px; }
+  .login-check path {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2.4;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-dasharray: 20;
+    stroke-dashoffset: 20;
+    animation: login-check 0.35s var(--ease) forwards;
+  }
+  @keyframes login-check { to { stroke-dashoffset: 0; } }
+}
+
+@layer components {
+  /* ── 관심 추가 (W4) ───────────────────────────────────────────────────
+     종목 칩이 사이드바 메뉴로 날아간다(lib/flyToNav). 열린 서랍(z-300) 위를 지난다. */
+  .fly-chip {
+    position: fixed;
+    left: 0;
+    top: 0;
+    z-index: 400;
+    pointer-events: none;
+    padding: 5px 12px;
+    border-radius: 999px;
+    font: 600 12.5px var(--font-mono);
+    color: var(--ink-1);
+  }
+  /* 별 채움은 아래에서 위로 찬다 */
+  .watch-star-fill {
+    transform-box: fill-box;
+    transform-origin: bottom;
+    transform: scaleY(0);
+    transition: transform 380ms var(--ease);
+  }
+  .watch-btn[aria-pressed='true'] .watch-star-fill { transform: scaleY(1); }
+}
+
 /* 움직임 줄이기 · 투명도 줄이기 설정을 따른다 */
 @media (prefers-reduced-motion: reduce) {
   *,
@@ -357,5 +505,124 @@
     background: var(--solid-frost);
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
+  }
+}
+
+@layer components {
+  /* ── 주문 보내기 (W2) ─────────────────────────────────────────────────
+     ring-draw-check(ui-shelf)의 방식. 보내면 버튼이 동그라미로 줄고 라피스 링이 차오른다. 접수되면
+     링이 닫히며 체크가 그려지고, 클레이 영수증이 시트 아래에서 올라온다. 시트 틀은 읽는 유리 그대로다. */
+  .send-cancel,
+  .send-btn {
+    height: 38px;
+    transition:
+      flex-basis 300ms var(--ease),
+      flex-grow 300ms var(--ease),
+      width 300ms var(--ease),
+      padding 300ms var(--ease),
+      transform 220ms var(--spring),
+      filter 200ms var(--ease),
+      opacity 200ms;
+  }
+  .send-btn { width: 100%; }
+  .send-cancel.is-gone { flex: 0 0 0; width: 0; padding: 0; opacity: 0; pointer-events: none; margin-right: -8px; }
+  .send-btn.is-run,
+  .send-btn.is-ok { width: 38px; padding: 0; pointer-events: none; }
+  .send-btn.is-ok { background: var(--lapis); color: var(--on-lapis); }
+  .send-ring {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 54px;
+    height: 54px;
+    margin: -27px 0 0 -27px;
+    transform: rotate(-90deg);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 250ms;
+  }
+  .send-ring.is-on { opacity: 1; transition-delay: 200ms; }
+  .send-ring circle { fill: none; stroke-width: 3; stroke-linecap: round; }
+  .send-ring .t { stroke: rgb(var(--ink-rgb) / 0.1); }
+  .send-ring .p {
+    stroke: var(--lapis);
+    stroke-dasharray: 100;
+    stroke-dashoffset: calc(100 - var(--p, 0) * 100);
+    transition: stroke-dashoffset 2.6s cubic-bezier(0.15, 0.7, 0.3, 1);
+  }
+  .send-ring.is-done .p { transition-duration: 350ms; }
+  .send-check path {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2.4;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-dasharray: 20;
+    stroke-dashoffset: 20;
+    animation: login-check 0.4s var(--ease) 0.2s forwards;
+  }
+  .order-body { transition: opacity 300ms, transform 450ms var(--ease); }
+  /* 영수증이 오면 입력 화면은 자리를 내주고(겹쳐 둔 채) 사라진다. 시트 높이는 영수증에 맞춰진다 */
+  .order-body.is-away { position: absolute; left: 0; right: 0; opacity: 0; transform: translateY(-16px); pointer-events: none; }
+  .receipt {
+    transform: translateY(calc(100% + 16px));
+    transition: transform 600ms var(--spring);
+  }
+  .receipt.is-in { transform: none; }
+  .receipt-tear {
+    border-top: 1.5px dashed rgb(var(--ink-rgb) / 0.14);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .send-ring .p { transition-duration: 400ms; }
+    .receipt { transition: opacity 200ms; transform: none; opacity: 0; }
+    .receipt.is-in { opacity: 1; }
+    .order-body { transition: opacity 200ms; }
+    .order-body.is-away { transform: none; }
+  }
+}
+
+@layer components {
+  /* ── 포트폴리오 비중 도넛 (W5) ────────────────────────────────────────
+     donut-hover-expand(ui-shelf)의 방식. 올린 조각이 굵어지며 바깥으로 나오고 나머지는 옅어진다. */
+  .donut-seg {
+    pointer-events: stroke;
+    transition:
+      transform 450ms var(--spring),
+      stroke-width 450ms var(--spring),
+      opacity 250ms;
+  }
+  .donut-center { animation: donut-center 320ms var(--ease); }
+  @keyframes donut-center { from { opacity: 0; transform: translateY(5px); } }
+  @media (prefers-reduced-motion: reduce) {
+    .donut-seg { transition: opacity 150ms; }
+    .donut-center { animation: none; }
+  }
+}
+
+@layer components {
+  /* ── 손절 · 익절 가격 띠 (W6) ─────────────────────────────────────────
+     forecast-band(ui-shelf)의 방식. 띠는 Tab 으로도 가고, 그때 금테 대신 띠 가장자리를 밝힌다. */
+  .risk-band { cursor: default; transition: opacity 200ms; }
+  .risk-band:focus-visible rect { stroke: var(--gold); stroke-width: 1.5; }
+}
+
+@layer components {
+  /* ── 시장 지도 (W1) ───────────────────────────────────────────────────
+     treemap-drilldown(ui-shelf)의 방식. 칸은 종목별 자리를 기억해 섹터 확대 · 축소 때 제자리에서 커지고 준다. */
+  .map-tile {
+    box-shadow: inset 0 0 0 1px rgb(var(--ink-rgb) / 0.06);
+    transition:
+      left 500ms cubic-bezier(0.2, 0.8, 0.2, 1),
+      top 500ms cubic-bezier(0.2, 0.8, 0.2, 1),
+      width 500ms cubic-bezier(0.2, 0.8, 0.2, 1),
+      height 500ms cubic-bezier(0.2, 0.8, 0.2, 1),
+      opacity 350ms,
+      background-color 300ms;
+  }
+  .map-resizing .map-tile { transition: none; }
+  .map-tile:hover,
+  .map-tile:focus-visible { box-shadow: inset 0 0 0 2px var(--gold); outline: none; }
+  @media (prefers-reduced-motion: reduce) {
+    .map-tile { transition: opacity 150ms, background-color 150ms; }
   }
 }
