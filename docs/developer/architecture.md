@@ -256,7 +256,10 @@ sequenceDiagram
 ai-engine 의 `/v1/engine/live-fact-check/sentence` 는 항상 HTTP 200 을 돌려주고 결과를 본문 `status`
 (`BUFFERING`, `COMPLETED`, `REJECTED`, `DISCARDED`)로 구분합니다. 세션이 끝날 때 3문장에 못 미치는
 나머지 문장은 `DISCARDED` 로 버려지므로 시연 스크립트의 세그먼트 수를 3의 배수로 맞춥니다. 종합 판단은
-별도 `demo-call-summary` 스레드에서 돌아갑니다. 그 사이 같은 종목이 다시 재생되면 이전 회차 판단은 발행하지 않습니다.
+별도 `call-summary` 스레드에서 돌아갑니다. 그 사이 같은 종목이 다시 재생되면 이전 회차 판단은 발행하지 않습니다.
+팩트체크 · 대조 · 종합 판단 요청은 `CallAnalysisService` 가 맡고, data_pipeline 실시간 인입도 같은 경로를 씁니다
+(`app.live-analysis.enabled`, 기본 꺼짐). 시연이 재생 중인 종목의 실시간 자막은 분석하지 않습니다. AI Engine 이
+팩트체크 버퍼를 종목 단위로 잡아서 두 흐름이 섞이면 양쪽 팩트체크가 거부되기 때문입니다.
 
 ### 어닝콜 질의응답
 

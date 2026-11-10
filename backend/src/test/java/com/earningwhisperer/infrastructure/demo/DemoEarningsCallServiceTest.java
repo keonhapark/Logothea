@@ -1,5 +1,6 @@
 package com.earningwhisperer.infrastructure.demo;
 
+import com.earningwhisperer.infrastructure.analysis.CallAnalysisService;
 import com.earningwhisperer.domain.transcript.TranscriptSegment;
 import com.earningwhisperer.domain.transcript.TranscriptService;
 import com.earningwhisperer.domain.transcript.TranscriptSessionRegistry;
@@ -37,14 +38,26 @@ class DemoEarningsCallServiceTest {
 
     private DemoEarningsCallService service;
 
+    /** 마지막으로 만든 분석 서비스. 종합 판단 스레드를 테스트마다 회수한다. */
+    private CallAnalysisService analysis;
+
     @AfterEach
     void tearDown() {
         if (service != null) {
-            // stop() 은 세션 executor 만 정리한다. shutdownAll 을 부르지 않으면 종합 판단
-            // 전용 스레드가 테스트 JVM 에 계속 park 된 채 남고, @PreDestroy 회수 경로가
-            // 한 번도 실행되지 않는다.
+            // stop() 은 세션 executor 만 정리한다. shutdownAll 을 부르지 않으면 @PreDestroy 회수
+            // 경로가 한 번도 실행되지 않는다.
             service.shutdownAll();
         }
+        if (analysis != null) {
+            // 종합 판단 전용 스레드는 분석 서비스가 갖는다. 회수하지 않으면 테스트 JVM 에 park 된 채 남는다.
+            analysis.shutdown();
+        }
+    }
+
+    private CallAnalysisService analysis(AiEngineClient client, FactCheckPublisher publisher,
+                                         TranscriptDiffPublisher diffPublisher, EarningsSummaryService summaryService) {
+        analysis = new CallAnalysisService(client, publisher, diffPublisher, summaryService, AI_TIMEOUT_MS, true, 30);
+        return analysis;
     }
 
     private DemoEarningsCallService newService(TranscriptService transcript,
@@ -59,16 +72,16 @@ class DemoEarningsCallServiceTest {
                                                FactCheckPublisher publisher,
                                                EarningsSummaryService summaryService,
                                                long intervalMs) {
-        service = new DemoEarningsCallService(transcript, client, publisher, noopDiffPublisher(), summaryService,
-                new ObjectMapper(), SCRIPT, intervalMs, AI_TIMEOUT_MS);
+        service = new DemoEarningsCallService(transcript, client,
+                analysis(client, publisher, noopDiffPublisher(), summaryService), new ObjectMapper(), SCRIPT, intervalMs);
         return service;
     }
 
     private DemoEarningsCallService newServiceWithDiff(AiEngineClient client,
                                                        TranscriptDiffPublisher diffPublisher,
                                                        long intervalMs) {
-        service = new DemoEarningsCallService(new RecordingTranscriptService(), client, noopPublisher(),
-                diffPublisher, noopSummaryService(), new ObjectMapper(), SCRIPT, intervalMs, AI_TIMEOUT_MS);
+        service = new DemoEarningsCallService(new RecordingTranscriptService(), client,
+                analysis(client, noopPublisher(), diffPublisher, noopSummaryService()), new ObjectMapper(), SCRIPT, intervalMs);
         return service;
     }
 
@@ -231,8 +244,8 @@ class DemoEarningsCallServiceTest {
     @Test
     void 스크립트가_없으면_시작하지_않는다() {
         service = new DemoEarningsCallService(new RecordingTranscriptService(), disabledClient(),
-                noopPublisher(), noopDiffPublisher(), noopSummaryService(), new ObjectMapper(),
-                "data/does-not-exist.json", 1, AI_TIMEOUT_MS);
+                analysis(disabledClient(), noopPublisher(), noopDiffPublisher(), noopSummaryService()),
+                new ObjectMapper(), "data/does-not-exist.json", 1);
 
         DemoEarningsCallService.StartResult result = service.start("ORCL");
 
@@ -496,7 +509,7 @@ class DemoEarningsCallServiceTest {
     }
 
     @Test
-    void shutdownAll_이_종합_판단_스레드를_회수한다() {
+    void 종료하면_종합_판단_스레드를_회수한다() {
         DemoEarningsCallService svc = newService(new RecordingTranscriptService(), disabledClient(),
                 noopPublisher(), new RecordingSummaryService(), 1);
         svc.start("ORCL");
@@ -504,10 +517,13 @@ class DemoEarningsCallServiceTest {
 
         svc.shutdownAll();
         service = null;
+        // 종합 판단 스레드는 시연과 실시간이 함께 쓰는 분석 서비스가 갖는다.
+        analysis.shutdown();
+        analysis = null;
 
         await().atMost(5, TimeUnit.SECONDS).untilAsserted(() ->
                 assertThat(Thread.getAllStackTraces().keySet())
-                        .noneMatch(thread -> "demo-call-summary".equals(thread.getName())));
+                        .noneMatch(thread -> "call-summary".equals(thread.getName())));
     }
 
     /** 종합 판단 호출을 기록만 하는 스텁. */
@@ -519,7 +535,8 @@ class DemoEarningsCallServiceTest {
         }
 
         @Override
-        public boolean summarizeAndPublish(String ticker, String callId, DemoEarningsCallScript script) {
+        public boolean summarizeAndPublish(String ticker, String callId, String transcript,
+                                           List<String> relatedTickers, String analystQuestion, String analystAnswer) {
             calls.add(ticker + "|" + callId);
             return true;
         }

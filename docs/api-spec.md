@@ -27,7 +27,9 @@ REST · STOMP · Redis 메시지의 형식을 정리한 문서입니다. 모듈�
 | 9 | Backend → Frontend Web | STOMP | 쇼케이스 데모룸. 현재 frontend 는 연결하지 않습니다 | 4.1 |
 
 시연에서는 data_pipeline 대신 backend 의 시연 재생(7.8)이 세그먼트를 넣습니다. 팩트체크 · 직전 콜 대조 · 종합
-판단은 지금 시연 재생 경로에서만 호출하며, data_pipeline 이 넣은 세그먼트에는 자막과 번역만 나갑니다.
+판단은 두 경로 모두 같은 분석 경로(`CallAnalysisService`)로 요청합니다. data_pipeline 인입의 분석은
+`app.live-analysis.enabled`(기본 `false`)로 켜며, 꺼져 있으면 자막과 번역만 나갑니다. 시연이 재생 중인 종목의
+data_pipeline 자막은 분석하지 않습니다(AI Engine 의 팩트체크 버퍼가 종목 단위라 두 흐름이 섞이면 거부됩니다).
 
 > 매매 신호로 주문을 내던 경로(AI Engine → Redis `trading-signals` → Backend 룰 엔진 → `/user/queue/signals` →
 > Terminal)는 #127 에서 제거했습니다([ADR 0005](adr/0005-support-only-user-placed-orders.md)). 주문은 사용자가
@@ -226,8 +228,9 @@ Redis `trading-signals` 수신을 계기로 발행하던 토픽입니다. #127 �
 - **설명:** 어닝콜 발언의 검증 가능한 주장을 AI Engine 이 뉴스 근거와 대조한 결과입니다(9.1).
 - **발행 시점:** AI Engine 이 `status=COMPLETED` 이고 `claims[]` 가 비어 있지 않은 결과를 돌려줄 때만 보냅니다.
   `BUFFERING` · `REJECTED` · `DISCARDED` 와 주장이 0건인 결과는 보내지 않습니다.
-- **호출 경로:** 지금은 시연 재생(7.8)에서만 AI Engine 에 제출합니다. data_pipeline 인입(6.4)으로 들어온
-  세그먼트에는 팩트체크가 돌지 않습니다. `ai-engine.fact-check-enabled` 로 끕니다.
+- **호출 경로:** 시연 재생(7.8)과 data_pipeline 인입(6.4)이 새로 받아들인 세그먼트마다 AI Engine 에 제출합니다.
+  재전송(같은 세그먼트 202)과 본문 없는 종료 제어는 제출하지 않습니다. `ai-engine.fact-check-enabled` 로 끕니다.
+  data_pipeline 인입은 `app.live-analysis.enabled=true` 일 때만 제출합니다(기본 꺼짐).
 - **지연:** 검증에 LLM 호출이 최대 2번 들어가 해당 발언보다 늦게 도착합니다. 클라이언트는
   `batch_start_sequence` ~ `batch_end_sequence` 범위로 어느 발언의 판정인지 짝짓습니다.
 
@@ -244,10 +247,13 @@ Redis `trading-signals` 수신을 계기로 발행하던 토픽입니다. #127 �
 ### 4.7. Earnings Call Summary Broadcast (콜 종료 후 종합 판단)
 
 - **Topic:** `/topic/evaluation/{ticker}`
-- **설명:** 시연 재생이 끝난 뒤 회차당 한 번 보내는 종합 판단입니다. 콜 전체를 놓고 낸 방향 · 강도 · 신뢰도와
+- **설명:** 콜이 끝난 뒤 회차당 한 번 보내는 종합 판단입니다. 콜 전체를 놓고 낸 방향 · 강도 · 신뢰도와
   회피 지표 · 파급 영향 · 손절 계획이 들어 있습니다.
-- **발행 시점:** 재생이 정상 완료되고(중지된 회차 제외) 세그먼트가 1건 이상 발행되었으며, AI Engine 이 판단
-  본문(`judgment`)을 돌려준 경우에만 보냅니다. 지금은 시연 재생 경로에만 있습니다.
+- **발행 시점:** 시연 재생은 재생이 정상 완료된 회차(중지 제외), data_pipeline 인입은 `is_session_end: true` 를
+  받은 회차에서, 본문 있는 세그먼트가 1건 이상 있고 AI Engine 이 판단 본문(`judgment`)을 돌려준 경우에만 보냅니다.
+  같은 종목의 새 회차가 그 사이 시작됐으면 지난 회차의 판단은 보내지 않습니다. data_pipeline 회차에는 스크립트의
+  애널리스트 Q&A 와 관련 종목이 없어 `evasion` 은 `null`, 파급 영향은 관련 종목 없이 계산합니다. 종료 신호 없이
+  `app.live-analysis.idle-timeout-minutes`(기본 30분) 동안 자막이 없으면 판단 없이 회차를 정리합니다.
 - **소요 시간:** 마지막 세그먼트 직후 제출되지만 `analyze`(9.6)와 `earnings/intelligence`(9.7)를 차례로 부르므로
   수 초에서 십수 초가 걸립니다. `analyze` 가 읽기 타임아웃(`ai-engine.timeout-ms`, 기본 50초) 안에 응답하지 않으면
   보내지 않고 끝나며, `earnings/intelligence` 만 실패하면 `intelligence_available=false` 로 판단만 보냅니다.
@@ -314,8 +320,8 @@ Redis `trading-signals` 수신을 계기로 발행하던 토픽입니다. #127 �
 
 - **Topic:** `/topic/transcript-diff/{ticker}`
 - **설명:** 이번 발언을 직전 콜 경영진 발언과 비교한 결과입니다(9.11).
-- **발행 시점:** 시연 재생이 세그먼트마다 AI Engine 에 대조를 요청하고, 응답이 `available=true` 이며 `items` 가
-  1건 이상일 때만 보냅니다. 지금은 시연 재생 경로에만 있습니다. `ai-engine.transcript-diff-enabled` 로 끕니다.
+- **발행 시점:** 시연 재생과 data_pipeline 인입이 새로 받아들인 세그먼트마다 AI Engine 에 대조를 요청하고, 응답이
+  `available=true` 이며 `items` 가 1건 이상일 때만 보냅니다. `ai-engine.transcript-diff-enabled` 로 끕니다.
 
 | 필드명              | 타입    | 설명                                                    |
 | :------------------ | :------ | :------------------------------------------------------ |
@@ -446,8 +452,10 @@ Redis `trading-signals` 수신을 계기로 발행하던 토픽입니다. #127 �
 - **통신 방식:** HTTP POST, 세그먼트 단위
 - **인증:** `X-Internal-Secret` (8.3)
 - **호출하는 곳:** data_pipeline STT 워커(`stt_worker/take.py`), 질의응답 평가 하네스(`logothea-assistant/eval/seed.py`)
-- **설명:** 받은 세그먼트를 검증해 바로 4.5 로 보내고, 질의응답용 기록(10.1)과 번역 묶음(4.8)을 시작합니다. 응답은
-  자막 발행까지 마친 뒤 돌려주며, 질의응답 기록은 그 뒤에 비동기로 저장합니다.
+- **설명:** 받은 세그먼트를 검증해 바로 4.5 로 보내고, 질의응답용 기록(10.1)과 번역 묶음(4.8)을 시작합니다. 새로
+  받아들인 세그먼트는 `app.live-analysis.enabled=true` 일 때 팩트체크(4.6)와 직전 콜 대조(4.9)에 넘기고, 종료 신호를
+  받으면 종합 판단(4.7)을 냅니다.
+  응답은 자막 발행까지 마친 뒤 돌려주며, 질의응답 기록과 AI 분석은 그 뒤에 비동기로 진행합니다.
 
 | 필드명           | 타입    | 필수 | 설명                                              |
 | :--------------- | :------ | :--: | :------------------------------------------------ |
