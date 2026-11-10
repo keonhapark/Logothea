@@ -4,6 +4,7 @@ import com.earningwhisperer.domain.transcript.TranscriptSegmentStore;
 import com.earningwhisperer.domain.transcript.TranscriptService;
 import com.earningwhisperer.domain.transcript.TranscriptSessionRegistry;
 import com.earningwhisperer.global.exception.GlobalExceptionHandler;
+import com.earningwhisperer.infrastructure.analysis.CallAnalysisService;
 import com.earningwhisperer.infrastructure.security.InternalSecretFilter;
 import com.earningwhisperer.infrastructure.translation.TranscriptTranslationService;
 import com.earningwhisperer.infrastructure.websocket.TranscriptPublisher;
@@ -28,6 +29,7 @@ class BackendIngestRuntimeContractTest {
     private SimpMessagingTemplate websocket;
     private TranscriptSegmentStore store;
     private TranscriptTranslationService translation;
+    private CallAnalysisService analysis;
     private static final String URL = "/api/v1/internal/transcript-segment";
 
     @BeforeEach
@@ -39,7 +41,8 @@ class BackendIngestRuntimeContractTest {
                 new TranscriptPublisher(websocket), translation, store);
         var validator = new LocalValidatorFactoryBean();
         validator.afterPropertiesSet();
-        mvc = MockMvcBuilders.standaloneSetup(new TranscriptInternalController(service))
+        analysis = mock(CallAnalysisService.class);
+        mvc = MockMvcBuilders.standaloneSetup(new TranscriptInternalController(service, analysis))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .setValidator(validator)
                 .addFilters(new InternalSecretFilter("isolated-test-only"))
@@ -72,6 +75,7 @@ class BackendIngestRuntimeContractTest {
     void acceptedPayloadRetryIs202AndDoesNotRepeatSideEffects() throws Exception {
         send(0, false, "Same retry payload.", 202);
         send(0, false, "Same retry payload.", 202);
+        verify(analysis, times(1)).onIngested(any());
         verify(websocket, times(1)).convertAndSend(anyString(), any(Object.class));
         verify(store, times(1)).append(any());
         verify(translation, times(1)).submit(any());
@@ -112,6 +116,8 @@ class BackendIngestRuntimeContractTest {
         send(0, true, "Original sentence.", 409);
         send(1, false, "Next sentence.", 202);
         verify(store, times(2)).append(any());
+        // 거부된 요청은 분석에 넘기지 않는다.
+        verify(analysis, times(2)).onIngested(any());
     }
 
     @Test
@@ -134,7 +140,7 @@ class BackendIngestRuntimeContractTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body(0, true, "").replace("\"text\":\"\"", "\"text\":null")))
                 .andExpect(status().isBadRequest());
-        verifyNoInteractions(websocket, store, translation);
+        verifyNoInteractions(websocket, store, translation, analysis);
     }
 
     @Test

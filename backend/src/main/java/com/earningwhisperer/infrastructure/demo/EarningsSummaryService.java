@@ -53,11 +53,26 @@ public class EarningsSummaryService {
      * @return 발행했으면 true
      */
     public boolean summarizeAndPublish(String ticker, String callId, DemoEarningsCallScript script) {
+        DemoEarningsCallScript.AnalystQa qa = script.analystQa();
+        return summarizeAndPublish(ticker, callId, joinTranscript(script), script.relatedTickers(),
+                qa == null ? null : qa.question(), qa == null ? null : qa.answer());
+    }
+
+    /**
+     * 전문과 부가 정보로 종합 판단을 만들어 발행한다. 자막 출처(시연 · 실시간)와 무관하게 같은 경로다.
+     *
+     * @param transcript      콜 전문
+     * @param relatedTickers  파급 분석 대상 종목. 없으면 빈 목록
+     * @param analystQuestion 회피 지표용 애널리스트 질문. 답과 함께 있어야 쓴다
+     * @param analystAnswer   그 답
+     */
+    public boolean summarizeAndPublish(String ticker, String callId, String transcript, List<String> relatedTickers,
+                                       String analystQuestion, String analystAnswer) {
         if (!aiEngineClient.isSummaryEnabled()) {
             log.info("[Summary] 종합 판단 비활성화 - ticker={}", ticker);
             return false;
         }
-        String transcript = joinTranscript(script);
+        transcript = transcript == null ? "" : transcript.trim();
         if (transcript.isBlank()) {
             log.warn("[Summary] 전문이 비어 종합 판단을 건너뜁니다 - ticker={} call_id={}", ticker, callId);
             return false;
@@ -73,8 +88,8 @@ public class EarningsSummaryService {
         }
         EarningsSummaryModels.Analysis judgment = analyzed.get().analysis();
 
-        EarningsSummaryModels.IntelligenceRequest intelRequest =
-                intelligenceRequest(ticker, transcript, script, marketData, judgment);
+        EarningsSummaryModels.IntelligenceRequest intelRequest = intelligenceRequest(
+                ticker, transcript, relatedTickers, analystQuestion, analystAnswer, marketData, judgment);
         Optional<EarningsSummaryModels.IntelligenceResponse> intel =
                 aiEngineClient.earningsIntelligence(intelRequest);
         if (intel.isEmpty()) {
@@ -113,12 +128,13 @@ public class EarningsSummaryService {
     private EarningsSummaryModels.IntelligenceRequest intelligenceRequest(
             String ticker,
             String transcript,
-            DemoEarningsCallScript script,
+            List<String> relatedTickers,
+            String analystQuestion,
+            String analystAnswer,
             Map<String, Object> marketData,
             EarningsSummaryModels.Analysis judgment) {
-        DemoEarningsCallScript.AnalystQa qa = script.analystQa();
-        String question = usableQaText(qa == null ? null : qa.question());
-        String answer = usableQaText(qa == null ? null : qa.answer());
+        String question = usableQaText(analystQuestion);
+        String answer = usableQaText(analystAnswer);
         if (question == null || answer == null) {
             // 둘 중 하나만 있으면 회피 점수가 성립하지 않는다. 반쪽으로 보내면 엔진은
             // 그래도 숫자를 내고, 화면에는 의미 없는 값이 정상 지표처럼 뜬다.
@@ -131,7 +147,7 @@ public class EarningsSummaryService {
                 transcript,
                 question,
                 answer,
-                script.relatedTickers(),
+                relatedTickers,
                 marketData,
                 judgment.direction(),
                 judgment.confidence());
