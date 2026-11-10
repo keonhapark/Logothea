@@ -2,7 +2,11 @@ package com.earningwhisperer.global.config;
 
 import com.earningwhisperer.infrastructure.websocket.StompJwtChannelInterceptor;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Lazy;
+import org.springframework.scheduling.TaskScheduler;
 import org.springframework.messaging.simp.config.ChannelRegistration;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
 import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
@@ -18,17 +22,35 @@ import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerCo
  *
  * 구독 예시:
  *   Public  → stompClient.subscribe('/topic/live/NVDA', handler)
+ *
+ * heart-beat 는 양방향 10초로 협상한다. 끄면(0,0) 모바일에서 망이 바뀐 뒤 닫힘 이벤트 없이 죽은
+ * 소켓을 클라이언트가 알아채지 못한다. 터미널과 웹 클라이언트도 10초를 요청한다.
  */
 @Configuration
 @EnableWebSocketMessageBroker
 @RequiredArgsConstructor
 public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
+    static final long HEARTBEAT_MILLIS = 10_000;
+
     private final StompJwtChannelInterceptor stompJwtChannelInterceptor;
+
+    private TaskScheduler messageBrokerTaskScheduler;
+
+    /**
+     * heart-beat 전송에 쓰는 브로커 스케줄러. 이 설정 클래스가 브로커 설정보다 먼저 만들어지므로 @Lazy 로 받는다.
+     * {@code @Scheduled} 작업은 {@link SchedulingConfig} 의 별도 풀에서 돌아 이 풀을 막지 않는다.
+     */
+    @Autowired
+    public void setMessageBrokerTaskScheduler(@Lazy @Qualifier("messageBrokerTaskScheduler") TaskScheduler taskScheduler) {
+        this.messageBrokerTaskScheduler = taskScheduler;
+    }
 
     @Override
     public void configureMessageBroker(MessageBrokerRegistry registry) {
-        registry.enableSimpleBroker("/topic", "/queue");
+        registry.enableSimpleBroker("/topic", "/queue")
+                .setHeartbeatValue(new long[]{HEARTBEAT_MILLIS, HEARTBEAT_MILLIS})
+                .setTaskScheduler(messageBrokerTaskScheduler);
         registry.setApplicationDestinationPrefixes("/app");
         registry.setUserDestinationPrefix("/user");
     }
