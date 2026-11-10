@@ -65,3 +65,7 @@ learning/
 CLAUDE.md
 **/CLAUDE.md
 .claude/settings.local.json
+
+# Runtime pipeline source is not the personal learning directory.
+!data_pipeline/tools/learning/
+!data_pipeline/tools/learning/*.py

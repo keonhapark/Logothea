@@ -107,6 +107,20 @@ async def test_no_evidence_answer_is_flagged():
     assert events[-1][1]["status"] == "no_evidence"
 
 
+async def test_no_evidence_with_citation_is_flagged():
+    llm = FakeLLM(parsed=_answer(), deltas=["이번 콜과 제공된 자료에서 찾지 못했습니다. [S3]"])
+    events = await _collect(_pipeline(llm), _request())
+    assert events[-1][1]["status"] == "no_evidence"
+
+
+async def test_partial_answer_with_missing_evidence_remains_answered():
+    llm = FakeLLM(parsed=_answer(), deltas=[
+        "기존점 매출은 4.5% 늘었습니다 [S3]. 이번 콜과 제공된 자료에서 찾지 못했습니다."
+    ])
+    events = await _collect(_pipeline(llm), _request())
+    assert events[-1][1]["status"] == "answered"
+
+
 async def test_segments_not_found_is_an_error_before_meta():
     llm = FakeLLM(parsed=_answer())
     events = await _collect(_pipeline(llm, backend=FakeBackend(segments=NOT_FOUND)), _request())

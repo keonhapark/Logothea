@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
@@ -13,10 +14,27 @@ try:
     from db.postgres_executor import PsycopgExecutor
     from models.request_models import AnalyzeRequest
     from models.storage_models import PersistEnvelopeResponse
+    from repositories.company_intelligence_repository import CompanyIntelligenceRepository
     from repositories.evidence_store_repository import EvidenceStoreRepository
     from repositories.event_store_repository import EventStoreRepository
+    from repositories.live_session_repository import LiveSessionRepository
     from repositories.qdrant_evidence_repository import QdrantEvidenceRepository
-    from services import CalibrationService, ControlPlaneService, EarningsIntelligenceService, EquityResearchReportService, EvidenceRetrievalService, LiveNewsFactCheckService, NewsIngestionService, RegressionService, TranscriptDiffService, TranscriptIngestionService
+    from services import (
+        CalibrationService,
+        CompanyIntelligenceService,
+        ControlPlaneService,
+        EarningsIntelligenceService,
+        EquityResearchReportService,
+        EvidenceIngestionScheduler,
+        EvidenceIngestionService,
+        EvidenceRetrievalService,
+        LiveEarningsSessionService,
+        LiveNewsFactCheckService,
+        NewsIngestionService,
+        RegressionService,
+        TranscriptDiffService,
+        TranscriptIngestionService,
+    )
     from services.redis_signal_publisher import RedisSignalPublisher
     from services.runtime_dispatch_service import dispatch_analysis
     from services.transcript_translation_service import TranscriptTranslationService
@@ -30,10 +48,27 @@ except ImportError:  # pragma: no cover
     from .db.postgres_executor import PsycopgExecutor
     from .models.request_models import AnalyzeRequest
     from .models.storage_models import PersistEnvelopeResponse
+    from .repositories.company_intelligence_repository import CompanyIntelligenceRepository
     from .repositories.evidence_store_repository import EvidenceStoreRepository
     from .repositories.event_store_repository import EventStoreRepository
+    from .repositories.live_session_repository import LiveSessionRepository
     from .repositories.qdrant_evidence_repository import QdrantEvidenceRepository
-    from .services import CalibrationService, ControlPlaneService, EarningsIntelligenceService, EquityResearchReportService, EvidenceRetrievalService, LiveNewsFactCheckService, NewsIngestionService, RegressionService, TranscriptDiffService, TranscriptIngestionService
+    from .services import (
+        CalibrationService,
+        CompanyIntelligenceService,
+        ControlPlaneService,
+        EarningsIntelligenceService,
+        EquityResearchReportService,
+        EvidenceIngestionScheduler,
+        EvidenceIngestionService,
+        EvidenceRetrievalService,
+        LiveEarningsSessionService,
+        LiveNewsFactCheckService,
+        NewsIngestionService,
+        RegressionService,
+        TranscriptDiffService,
+        TranscriptIngestionService,
+    )
     from .services.redis_signal_publisher import RedisSignalPublisher
     from .services.runtime_dispatch_service import dispatch_analysis
     from .services.transcript_translation_service import TranscriptTranslationService
@@ -85,6 +120,31 @@ def _build_repository(settings: Settings) -> EventStoreRepository:
     )
     return EventStoreRepository(executor=executor, schema_path=_schema_path_from_settings(settings))
 
+def _resolve_ai_engine_path(configured: str) -> Path:
+    path = Path(configured)
+    if path.is_absolute():
+        return path
+    return Path(__file__).resolve().parent / path
+
+
+def _build_company_repository(
+    settings: Settings,
+    executor,
+) -> CompanyIntelligenceRepository:
+    return CompanyIntelligenceRepository(
+        store_path=_resolve_ai_engine_path(
+            settings.company_intelligence_store_path
+        ),
+        executor=executor,
+        schema_path=_resolve_ai_engine_path(
+            settings.evidence_schema_path
+        ),
+        seed_path=(
+            Path(__file__).resolve().parent
+            / "data"
+            / "company_intelligence_seed.json"
+        ),
+    )
 
 def _build_evidence_repository(settings: Settings, event_repository: EventStoreRepository):
     if str(settings.vector_store_backend).lower().strip() == "qdrant":
@@ -147,7 +207,20 @@ def _persist_or_raise(repository: EventStoreRepository, envelope: dict[str, Any]
 
 def create_app() -> FastAPI:
     settings = get_settings()
-    app = FastAPI(title="EarningWhisperer AI Engine", version=settings.app_version)
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        await app.state.evidence_ingestion_scheduler.start()
+        try:
+            yield
+        finally:
+            await app.state.evidence_ingestion_scheduler.stop()
+
+    app = FastAPI(
+        title="EarningWhisperer AI Engine",
+        version=settings.app_version,
+        lifespan=lifespan,
+    )
 
     app.config = {
         "GEMINI_FAST_MODEL": settings.gemini_primary_model,
@@ -160,6 +233,22 @@ def create_app() -> FastAPI:
     app.state.settings = settings
     app.state.event_store_repository = _build_repository(settings)
     app.state.evidence_repository = _build_evidence_repository(settings, app.state.event_store_repository)
+    persistence_executor = None
+
+    if settings.evidence_postgres_enabled:
+        persistence_executor = PsycopgExecutor(
+            dsn=settings.database_url,
+            connect_timeout_seconds=settings.database_connect_timeout_seconds,
+            failure_cooldown_seconds=settings.database_failure_cooldown_seconds,
+        )
+    app.state.company_intelligence_repository = _build_company_repository(
+        settings,
+        persistence_executor,
+    )
+
+    app.state.company_intelligence_service = CompanyIntelligenceService(
+        app.state.company_intelligence_repository
+    )
     app.state.transcript_repository = _build_transcript_repository(settings)
     app.state.evidence_service = EvidenceRetrievalService(repository=app.state.evidence_repository)
     app.state.transcript_ingestion_service = TranscriptIngestionService(app.state.transcript_repository)
@@ -176,6 +265,17 @@ def create_app() -> FastAPI:
         settings=settings,
         evidence_service=app.state.evidence_service,
     )
+    app.state.evidence_ingestion_service = EvidenceIngestionService(
+        settings=settings,
+        evidence_service=app.state.evidence_service,
+        external_retriever=app.state.analysis_service.external_retriever,
+        company_service=app.state.company_intelligence_service,
+    )
+    app.state.evidence_ingestion_scheduler = EvidenceIngestionScheduler(
+        service=app.state.evidence_ingestion_service, settings=settings,
+    )
+    if settings.evidence_postgres_enabled and settings.evidence_auto_bootstrap:
+        app.state.company_intelligence_repository.bootstrap_schema()
     app.state.news_ingestion_service = NewsIngestionService(app.state.analysis_service.external_retriever)
     app.state.live_news_fact_check_service = LiveNewsFactCheckService(
         retriever=app.state.analysis_service.external_retriever,
@@ -193,6 +293,23 @@ def create_app() -> FastAPI:
     app.state.calibration_service = _get_calibration_service(app)
     app.state.regression_service = _get_regression_service(app)
     app.state.dispatch_analysis = lambda payload, _app=app: _dispatch_analysis(payload, settings, _app)
+    app.state.live_session_repository = LiveSessionRepository(
+        store_path=_resolve_ai_engine_path(
+            settings.live_session_store_path
+        ),
+        executor=persistence_executor,
+        retention_hours=settings.live_session_retention_hours,
+        max_sessions=settings.live_session_max_sessions,
+    )
+
+    app.state.live_session_service = LiveEarningsSessionService(
+        repository=app.state.live_session_repository,
+        dispatcher=app.state.dispatch_analysis,
+        evidence_service=app.state.evidence_service,
+        company_service=app.state.company_intelligence_service,
+        redis_publisher=app.state.redis_signal_publisher,
+        settings=settings,
+    )
     app.state.persist_envelope = lambda envelope: _persist_or_raise(app.state.event_store_repository, envelope)
 
     for router in ALL_ROUTERS:
@@ -207,6 +324,8 @@ app = create_app()
 __all__ = [
     "HealthResponse",
     "_build_repository",
+    "_build_company_repository",
+    "_resolve_ai_engine_path",
     "_build_evidence_repository",
     "_build_transcript_repository",
     "_dispatch_analysis",

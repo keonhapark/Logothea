@@ -31,7 +31,7 @@ describe('화면 코드의 색', () => {
   it('토큰 대신 색을 직접 적은 곳이 없다', () => {
     const found: string[] = []
     for (const path of sourceFiles(ROOT)) {
-      const rel = relative(ROOT, path)
+      const rel = relative(ROOT, path).replace(/\\/g, '/')
       if (ALLOW_FILES.includes(rel)) continue
       readFileSync(path, 'utf8').split('\n').forEach((line, i) => {
         // 이슈 번호(#112 등, 네 자리까지)는 hex 가 아니다. 숫자로만 된 여섯 자리 이상은 색으로 본다

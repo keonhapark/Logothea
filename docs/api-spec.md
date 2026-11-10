@@ -1337,3 +1337,24 @@ backend 는 호출 실패를 빈 결과로 처리하고, `available=false` 이�
 - 뉴스 · 지난 분기 콜 · 실적 추정치는 정보원마다 3초 안에 오지 않으면 빼고 답합니다. 콜 세그먼트를 읽지 못하면
   `error` 로 끝납니다. OpenAI 호출은 1회 30초가 상한입니다.
 - 연결이 끊기면 진행 중인 생성 호출도 닫습니다.
+
+## PR185 추가 런타임 API (로컬 통합)
+
+기존 `logothea-assistant`의 SSE 질의응답 계약은 유지합니다. 다음은 ai-engine 내부 API이며 공개 브라우저에 직접 노출하는 용도가 아닙니다.
+
+- `GET /v1/engine/company-intelligence/{ticker}`, `POST /v1/engine/company-intelligence/upsert`: 기업 관계·경영진·발언자 메타데이터.
+- `POST /v1/engine/live-sessions`, `GET /v1/engine/live-sessions`, `GET /v1/engine/live-sessions/{session_id}`, `POST /v1/engine/live-sessions/{session_id}/chunks`, `POST /v1/engine/live-sessions/{session_id}/finalize`: 별도 분석 세션 수명주기. assistant의 대화 세션과 다릅니다.
+- `POST /v1/engine/evidence/sync`, `POST /v1/engine/transcripts/ingest`, `POST /v1/engine/transcripts/upload`, `GET /v1/engine/evidence/ingestion/status`: 근거 동기화·원문/PDF 적재. PDF 업로드에는 python-multipart와 pypdf가 필요합니다.
+- `POST /v1/engine/evidence/bootstrap-schema`: Postgres 구성을 사용한 경우 스키마 적용. 기본 메모리 모드에서는 스키마를 생성하지 않습니다.
+- `GET /v1/engine/redis/retry/status`, `POST /v1/engine/redis/retry?limit=100`: 실패한 Redis 발행을 로컬 JSONL에 보관하고 명시적 요청으로 재전송합니다. limit은 1~1000입니다. 단일 프로세스에서 사용하며, 장애 시 중복 전달이 가능하므로 수신자는 중복을 처리해야 합니다. 자동 재전송과 프로필별 채널 라우팅은 구현하지 않았습니다.
+
+`EVIDENCE_SYNC_ENABLED=false`가 기본이며 앱 시작·종료에 동기화 스케줄러를 연결합니다. 자동 DB 스키마 생성은 `EVIDENCE_POSTGRES_ENABLED`와 `EVIDENCE_AUTO_BOOTSTRAP`을 모두 켠 경우에만 수행합니다. 파일 저장 위치는 `COMPANY_INTELLIGENCE_STORE_PATH`, `LIVE_SESSION_STORE_PATH`, `REDIS_RETRY_SPOOL_PATH`로 지정합니다.
+
+### 실시간 팩트체크의 전체 요청 시간 제한
+
+`FACT_CHECK_TOTAL_TIMEOUT_SECONDS`는 ticker 락 대기부터 주장 추출·검색·검증까지의 합을 제한합니다. 기본 45초이며 0초 초과, 45초 이하의 유한한 값만 허용합니다. backend 읽기 제한(기본 50초)은 이 값보다 크게 설정해야 합니다. 단계별 제한은 그대로 적용되지만 단계별 최대 시간이 전체 예산에 추가되지는 않습니다.
+
+전체 제한을 넘으면 `fact_check_total_timeout` 경고와 빈 `claims`를 반환합니다. 이미 꺼낸 배치는 `DISCARDED`와 원래 시작/끝 sequence로 보고하며 재처리하지 않습니다. 락 대기 중 제한을 넘긴 요청은 버퍼에 넣지 않고 `REJECTED`로 반환하므로 같은 sequence를 재시도할 수 있습니다. 외부 취소는 그대로 전파하고 락을 해제합니다. 이 제한은 응답 coroutine의 시간 예산이며, `asyncio.to_thread`로 시작한 SDK/검색 작업의 스레드까지 강제로 중단하지는 않습니다.
+
+### 과거 콜 요약의 검색 기준 시각
+`POST /v1/engine/earnings/intelligence` 요청은 선택 필드 `as_of_epoch`(양수 Unix 초)를 받습니다. backend는 유효한 과거 콜 시작 시각에 마지막 세그먼트 종료 시간을 더해 전달합니다. 생략 시 기존 실시간 호출처럼 현재 시각을 사용합니다. AI는 초기 검색·개별 주장 검증·발언 비교 모두 같은 상한을 적용하고, 발행 시각이 없거나 상한보다 나중인 근거를 제외합니다. 응답의 `generated_at`은 실제 생성 시각입니다. 이 변경은 원문 뉴스의 잘못 저장된 발행 시각(#196)이나 현재 주가 기반 market_data까지 보정하지 않습니다.

@@ -12,3 +12,7 @@ openai>=1.0.0,<3.0
 qdrant-client>=1.14.0,<2.0
 pytest>=9.0.0,<10.0
 pytest-asyncio>=1.0.0,<2.0
+
+# Transcript upload and PDF ingestion are part of the runtime API.
+python-multipart>=0.0.20,<1.0
+pypdf>=5.0,<7.0
