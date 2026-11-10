@@ -115,6 +115,18 @@ class BackendIngestRuntimeContractTest {
     }
 
     @Test
+    void retryWithRegeneratedTimestampIsConflict() throws Exception {
+        send(0, false, "Same text, new clock.", 202);
+        mvc.perform(post(URL).header("X-Internal-Secret", "isolated-test-only")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body(0, false, "Same text, new clock.")
+                                .replace("1794240000", "1794240001")))
+                .andExpect(status().isConflict());
+        verify(websocket, times(1)).convertAndSend(anyString(), any(Object.class));
+        verify(store, times(1)).append(any());
+    }
+
+    @Test
     void emptyOrdinaryTextAndWhitespaceTerminalRemainInvalid() throws Exception {
         send(0, false, "", 400);
         send(0, true, "   ", 400);
@@ -133,6 +145,7 @@ class BackendIngestRuntimeContractTest {
         doThrow(new IllegalStateException("isolated translation failure")).when(translation).submit(any());
         send(0, false, "Acknowledgement is not durable delivery.", 202);
         send(0, false, "Acknowledgement is not durable delivery.", 202);
+        verify(websocket, times(1)).convertAndSend(anyString(), any(Object.class));
         verify(store, times(1)).append(any());
         verify(translation, times(1)).submit(any());
     }

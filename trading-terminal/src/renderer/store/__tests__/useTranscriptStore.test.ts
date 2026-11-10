@@ -193,6 +193,27 @@ describe('useTranscriptStore', () => {
       expect(tickerState.endedCallIds.has('NVDA-2025-Q3')).toBe(true)
       expect(tickerState.endedCallIds.has('NVDA-2026-Q1')).toBe(false)
     })
+
+    it('본문 없는 종료 신호는 종료만 표시하고 자막 목록에는 넣지 않는다', () => {
+      const store = useTranscriptStore.getState()
+      store.upsertSegment(makeRaw({ sequence: 1, text: 'last words' }))
+      store.upsertSegment(
+        makeRaw({ sequence: 2, text: '', start_ms: 5000, end_ms: 5000, is_session_end: true }),
+      )
+      store.upsertSegment(makeRaw({ sequence: 3, text: 'after-end' }))
+      const tickerState = useTranscriptStore.getState().byTicker.get('NVDA')!
+      expect(tickerState.segments.map((s) => s.text)).toEqual(['last words'])
+      expect(tickerState.endedCallIds.has('NVDA-2025-Q3')).toBe(true)
+      expect(tickerState.lastSequenceByCall.get('NVDA-2025-Q3')).toBe(2)
+    })
+
+    it('자막 없이 종료 신호만 받으면 목록은 비어 있고 종료만 기록된다', () => {
+      const store = useTranscriptStore.getState()
+      store.upsertSegment(makeRaw({ sequence: 7, text: '', is_session_end: true }))
+      const tickerState = useTranscriptStore.getState().byTicker.get('NVDA')!
+      expect(tickerState.segments).toHaveLength(0)
+      expect(tickerState.endedCallIds.has('NVDA-2025-Q3')).toBe(true)
+    })
   })
 
   describe('upsertSegment — ticker 전환 격리', () => {
