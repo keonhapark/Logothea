@@ -146,7 +146,7 @@ class TranscriptEmitter:
 
     def emit_chunk(self, client: httpx.Client, text: str, is_final: bool = False) -> None:
         clean_text = text.strip()
-        if not clean_text:
+        if not clean_text and not is_final:
             return
 
         now_ms = int((time.monotonic() - self.session_started_monotonic) * 1000)
@@ -165,7 +165,7 @@ class TranscriptEmitter:
         print(json.dumps(analysis_payload, indent=4, ensure_ascii=False))
         print("-" * 55 + "\n", flush=True)
 
-        if self.config.send_to_ai_engine:
+        if clean_text and self.config.send_to_ai_engine:
             self._post_json(
                 client,
                 "AI Engine",
@@ -185,7 +185,8 @@ class TranscriptEmitter:
                     headers={"X-Internal-Secret": self.config.internal_secret},
                 )
 
-        self._archive_segment(self._build_transcript_payload(analysis_payload, start_ms, end_ms))
+        if clean_text:
+            self._archive_segment(self._build_transcript_payload(analysis_payload, start_ms, end_ms))
 
         self.sequence += 1
         self.last_emit_ms = end_ms
@@ -294,6 +295,13 @@ def run_transcription(config: SttConfig) -> int:
     emitted_chunks = 0
     stopped_by_limit = False
 
+    def finish(client: httpx.Client) -> None:
+        if accumulated_text.strip():
+            emitter.emit_chunk(client, accumulated_text, is_final=True)
+        elif emitted_chunks:
+            # Main's transcript contract accepts an empty session-end control.
+            emitter.emit_chunk(client, "", is_final=True)
+
     print(f"[{config.ticker}] STT worker started call_id={config.call_id}", flush=True)
     print(f"[{config.ticker}] AI Engine: {config.ai_engine_url}/api/v1/analyze", flush=True)
     print(
@@ -338,13 +346,11 @@ def run_transcription(config: SttConfig) -> int:
                     accumulated_text = ""
                     chunk_count = 0
 
-            if accumulated_text.strip():
-                emitter.emit_chunk(client, accumulated_text, is_final=True)
+            finish(client)
 
     except KeyboardInterrupt:
-        if accumulated_text.strip():
-            with httpx.Client() as client:
-                emitter.emit_chunk(client, accumulated_text, is_final=True)
+        with httpx.Client() as client:
+            finish(client)
         print("\nSTT worker interrupted", flush=True)
     finally:
         process.terminate()
