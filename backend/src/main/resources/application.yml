@@ -102,6 +102,8 @@ app:
     # 정확한 origin (스킴+호스트+포트) 또는 와일드카드 패턴 (예: https://*-keonha123.vercel.app) 모두 허용.
     # 미설정 시 dev 로컬 호스트(3000/5173) 만 허용.
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173}
+    # 쿠키 없이 Bearer 토큰만 쓰는 출처(전시용 웹). allowCredentials=false 로 따로 허용한다.
+    guest-origins: ${CORS_GUEST_ORIGINS:}
 
   assistant:
     # 질의응답(#112)이 근거로 쓰는 콜 단위 세그먼트 기록의 보관 시간. 마지막 세그먼트 기준으로 갱신된다.
@@ -112,6 +114,18 @@ app:
     daily-limit: ${ASSISTANT_DAILY_LIMIT:50}
     # 답변 스트림 전체 상한(초). 넘으면 error 이벤트를 보내고 assistant 연결을 닫는다.
     stream-timeout-seconds: ${ASSISTANT_STREAM_TIMEOUT_SECONDS:60}
+
+  guest:
+    # 전시용 웹(demo.logothea.com) 게스트 토큰 발급. 끄면 POST /api/v1/guest/token 이 404.
+    enabled: ${GUEST_ENABLED:false}
+    # 게스트 토큰 수명(초). 만료되면 웹이 다시 발급받는다.
+    token-ttl-seconds: ${GUEST_TOKEN_TTL_SECONDS:3600}
+    # 클라이언트 IP(CF-Connecting-IP) 하나당 1분 발급 수. 전시장은 관람객이 같은 IP 를 쓸 수 있다.
+    issue-per-minute: ${GUEST_ISSUE_PER_MINUTE:20}
+    # 게스트 토큰 하나당 질의응답 수.
+    assistant-per-guest: ${GUEST_ASSISTANT_PER_GUEST:5}
+    # 모든 게스트를 합친 하루 질의응답 수(Asia/Seoul 날짜). LLM 비용 상한.
+    assistant-daily-total: ${GUEST_ASSISTANT_DAILY_TOTAL:500}
 
   trade:
     # 수동 주문 PENDING 의 유효시간(초). 증권사에 실제로 들어가 체결을 기다리는

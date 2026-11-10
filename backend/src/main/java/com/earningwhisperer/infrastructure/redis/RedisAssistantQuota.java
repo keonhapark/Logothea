@@ -18,7 +18,7 @@ public class RedisAssistantQuota implements AssistantQuota {
     private final StringRedisTemplate redisTemplate;
 
     @Override
-    public boolean tryConsumeDaily(Long userId, LocalDate day, int limit) {
+    public boolean tryConsumeDaily(String userId, LocalDate day, int limit) {
         String key = "assistant:daily:" + day + ":" + userId;
         Long count = redisTemplate.opsForValue().increment(key);
         if (count == null) {
@@ -31,16 +31,16 @@ public class RedisAssistantQuota implements AssistantQuota {
     }
 
     @Override
-    public boolean tryLock(Long userId, Duration ttl) {
+    public boolean tryLock(String userId, Duration ttl) {
         return Boolean.TRUE.equals(redisTemplate.opsForValue().setIfAbsent(lockKey(userId), "1", ttl));
     }
 
     @Override
-    public void unlock(Long userId) {
+    public void unlock(String userId) {
         redisTemplate.delete(lockKey(userId));
     }
 
-    private static String lockKey(Long userId) {
+    private static String lockKey(String userId) {
         return "assistant:lock:" + userId;
     }
 }

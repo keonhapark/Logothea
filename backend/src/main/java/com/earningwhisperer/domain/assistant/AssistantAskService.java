@@ -22,10 +22,10 @@ public class AssistantAskService {
 
     public record HistoryTurn(String role, String text) {}
 
-    public record AskCommand(Long userId, String ticker, String callId, int asOfSequence, Integer anchorSequence,
+    public record AskCommand(String userId, String ticker, String callId, int asOfSequence, Integer anchorSequence,
                              String question, String suggestedQuestionId, List<HistoryTurn> history) {}
 
-    public record PreparedAsk(Long userId, String ticker, String callId, int asOfSequence, long asOfEpoch,
+    public record PreparedAsk(String userId, String ticker, String callId, int asOfSequence, long asOfEpoch,
                               Integer anchorSequence, boolean callEnded, String question,
                               String suggestedQuestionId, List<HistoryTurn> history) {}
 

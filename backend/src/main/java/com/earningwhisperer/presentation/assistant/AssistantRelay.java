@@ -122,14 +122,14 @@ public class AssistantRelay {
 
     /** 질문 하나의 정리 상태. 여러 경로(완료·끊김·타임아웃)에서 닫혀도 한 번만 정리한다. */
     final class Session {
-        private final Long userId;
+        private final String userId;
         private final AtomicBoolean closed = new AtomicBoolean(false);
         private final AtomicBoolean terminated = new AtomicBoolean(false);
         private volatile InputStream body;
         private volatile ScheduledFuture<?> timeoutTask;
         private volatile ScheduledFuture<?> heartbeatTask;
 
-        private Session(Long userId) {
+        private Session(String userId) {
             this.userId = userId;
         }
 
@@ -184,7 +184,7 @@ public class AssistantRelay {
         }
     }
 
-    Session newSession(Long userId) {
+    Session newSession(String userId) {
         return new Session(userId);
     }
 

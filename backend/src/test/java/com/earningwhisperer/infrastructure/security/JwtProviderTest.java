@@ -93,4 +93,38 @@ class JwtProviderTest {
         org.junit.jupiter.api.Assertions.assertThrows(IllegalStateException.class,
                 () -> new JwtProvider("short", 3600_000L, "i", "a"));
     }
+
+    @Test
+    void 게스트_토큰은_게스트_ID로_읽히고_사용자_ID로는_읽히지_않는다() {
+        String token = jwtProvider.generateGuestToken("abc-123", java.time.Duration.ofMinutes(60));
+
+        assertThat(jwtProvider.validateToken(token)).isTrue();
+        assertThat(jwtProvider.getGuestIdFromToken(token)).contains("abc-123");
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> jwtProvider.getUserIdFromToken(token))
+                .isInstanceOf(io.jsonwebtoken.JwtException.class);
+    }
+
+    @Test
+    void 사용자_토큰은_게스트_ID가_없다() {
+        String token = jwtProvider.generateToken(7L);
+
+        assertThat(jwtProvider.getGuestIdFromToken(token)).isEmpty();
+        assertThat(jwtProvider.getUserIdFromToken(token)).isEqualTo(7L);
+    }
+
+    @Test
+    void 만료된_게스트_토큰은_검증_실패() {
+        String token = jwtProvider.generateGuestToken("abc", java.time.Duration.ofMillis(-1000));
+
+        assertThat(jwtProvider.validateToken(token)).isFalse();
+    }
+
+    @Test
+    void 다른_시크릿으로_서명한_게스트_토큰은_검증_실패() {
+        JwtProvider other = new JwtProvider("another-secret-key-minimum-32-characters!!", 3600_000L,
+                "test-issuer", "test-audience");
+        String forged = other.generateGuestToken("abc", java.time.Duration.ofMinutes(5));
+
+        assertThat(jwtProvider.validateToken(forged)).isFalse();
+    }
 }
