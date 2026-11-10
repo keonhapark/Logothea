@@ -34,7 +34,12 @@ export const ALLOWED_DIRS: readonly string[] = [
 ]
 
 /** 디렉터리 밖이지만 한 파일씩 허용한 것. PR 2 에서 디자인 토큰 · 화면 조각을 가져올 때 여기에 더한다. */
-export const ALLOWED_FILES: readonly string[] = []
+export const ALLOWED_FILES: readonly string[] = [
+  // 색 · 글꼴 · 반경 · 그림자 토큰과 그 글꼴 (모바일 화면 명세 2절)
+  'renderer/styles/tokens.css',
+  'renderer/assets/fonts/PretendardVariable.woff2',
+  'renderer/assets/fonts/JetBrainsMono-Variable.woff2',
+]
 
 export type TerminalImport =
   | { kind: 'outside' }
