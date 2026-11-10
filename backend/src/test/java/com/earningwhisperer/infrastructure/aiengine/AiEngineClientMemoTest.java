@@ -78,19 +78,19 @@ class AiEngineClientMemoTest {
     }
 
     @Test
-    @DisplayName("대조는 결과가 있거나 주제 무관 판정일 때만 기억하고, 근거 부족 같은 실패는 다시 묻는다")
-    void memoizesDiffOnlyWhenUsable() {
+    @DisplayName("대조는 일시적 실패(LLM 실패)만 다시 묻고, 근거 약함 같은 결정적 결과는 기억한다")
+    void memoizesDiffExceptTransientFailures() {
         client.setMemoEnabled(true);
         var request = TranscriptDiffModels.DiffRequest.forEarningsCall("WMT", "Guidance raised.", 1_787_000_000L);
 
-        bodies.put("/v1/engine/transcript/diff",
-                "{\"available\":false,\"ticker\":\"WMT\",\"items\":[],\"warnings\":[\"weak_prior_transcript_evidence\"]}");
+        bodies.put("/v1/engine/transcript/diff", "{\"available\":true,\"ticker\":\"WMT\",\"items\":[],"
+                + "\"warnings\":[\"historical_transcript_diff_llm_failed\",\"timeout\"]}");
         client.transcriptDiff(request);
         client.transcriptDiff(request);
         assertThat(hits("/v1/engine/transcript/diff")).isEqualTo(2);
 
         bodies.put("/v1/engine/transcript/diff",
-                "{\"available\":true,\"ticker\":\"WMT\",\"items\":[],\"warnings\":[\"current_chunk_not_material\"]}");
+                "{\"available\":true,\"ticker\":\"WMT\",\"items\":[],\"warnings\":[\"weak_prior_transcript_evidence\"]}");
         client.transcriptDiff(request);
         client.transcriptDiff(request);
         assertThat(hits("/v1/engine/transcript/diff")).isEqualTo(3);
