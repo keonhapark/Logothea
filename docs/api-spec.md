@@ -215,7 +215,7 @@ Redis `trading-signals` 수신을 계기로 발행하던 토픽입니다. #127 �
 | `sequence`       | Integer | 세그먼트 번호                                                   |
 | `start_ms`       | Long    | 세그먼트 시작 시각 (밀리초)                                     |
 | `end_ms`         | Long    | 세그먼트 끝 시각 (밀리초)                                       |
-| `text`           | String  | 세그먼트 텍스트                                                 |
+| `text`           | String  | 세그먼트 텍스트. 종료 제어(6.4)는 빈 문자열이며, 터미널은 종료 표시만 하고 자막 목록에 넣지 않습니다 |
 | `speaker`        | String  | 발화자 라벨. 값이 없으면 키가 빠집니다                          |
 | `timestamp`      | Long    | 세그먼트 시각 (Unix Epoch Second). 인입 값을 그대로 넘깁니다    |
 | `is_session_end` | Boolean | 어닝콜 세션 종료 신호. 항상 들어갑니다                          |
@@ -456,7 +456,7 @@ Redis `trading-signals` 수신을 계기로 발행하던 토픽입니다. #127 �
 | `sequence`       | Integer |  Y   | 세그먼트 번호. 0 이상                             |
 | `start_ms`       | Long    |  Y   | 세그먼트 시작 시각 (밀리초, 0 이상)               |
 | `end_ms`         | Long    |  Y   | 세그먼트 끝 시각 (밀리초, 0 이상)                 |
-| `text`           | String  |  Y   | 세그먼트 텍스트                                   |
+| `text`           | String  |  Y   | 세그먼트 텍스트. 공백만 있으면 안 됩니다. 빈 문자열은 종료 제어(`is_session_end: true`)에만 허용합니다 |
 | `speaker`        | String  |  N   | 발화자 라벨                                       |
 | `timestamp`      | Long    |  Y   | 세그먼트 시각 (Unix Epoch Second, 0 이상). 시연은 `call_started_at + start_ms / 1000`(초), data_pipeline 은 전송 시각 |
 | `is_session_end` | Boolean |  N   | 어닝콜 세션 종료 신호. 없으면 `false`             |
@@ -468,15 +468,17 @@ Redis `trading-signals` 수신을 계기로 발행하던 토픽입니다. #127 �
 
 | 상태 | 의미 |
 |---|---|
-| 202 | 받음. 본문 없음 |
-| 400 | 필드 검증 실패(`{"error": "<필드>: <메시지>"}`, 필드 이름은 Java 이름), 또는 `sequence` 가 직전 값 이하(`{"error": "sequence regress detected for call_id=..."}`) |
+| 202 | 받음. 본문 없음. 이미 받은 세그먼트와 모든 필드가 같은 재전송도 202 이며, 발행 · 저장 · 번역을 다시 하지 않습니다 |
+| 400 | 필드 검증 실패(`{"error": "<필드>: <메시지>"}`, 필드 이름은 Java 이름. 빈 `text` 규칙 위반은 `textValid`), 또는 받은 적 없는 `sequence` 가 직전 값 이하(`{"error": "sequence regress detected for call_id=..."}`) |
 | 401 | `X-Internal-Secret` 불일치 또는 서버에 시크릿이 설정되지 않음 |
-| 409 | `is_session_end: true` 뒤 같은 `call_id` 로 다시 보냄(`{"error": "session already ended for call_id=..."}`) |
+| 409 | 이미 받은 `sequence` 에 다른 내용을 보냄(`{"error": "conflicting payload for call_id=... sequence=..."}`), 또는 `is_session_end: true` 뒤 같은 `call_id` 에 새 `sequence` 를 보냄(`{"error": "session already ended for call_id=..."}`) |
 
-- `sequence` 는 직전 값보다 크기만 하면 됩니다. 0 에서 시작하거나 1씩 늘 필요는 없지만, 같은 번호를 다시 보내면
-  400 입니다.
-- 어닝콜이 끝나면 마지막 세그먼트에 `is_session_end: true` 를 한 번 보내고, 같은 `call_id` 로 더 보내지 않습니다.
-  종료된 `call_id` 는 backend 를 다시 시작하기 전까지 종료 상태로 남습니다.
+- `sequence` 는 직전 값보다 크기만 하면 됩니다. 0 에서 시작하거나 1씩 늘 필요는 없습니다.
+- 재전송은 `timestamp` 를 포함해 처음 보낸 내용을 그대로 써야 202 를 받습니다. 한 필드라도 다르면 409 입니다.
+- 어닝콜이 끝나면 마지막 세그먼트에 `is_session_end: true` 를 한 번 보냅니다. 본문 없이 종료만 알리려면 다음
+  `sequence` 에 `text: ""`, `is_session_end: true`, `start_ms == end_ms` 로 보냅니다. 이 종료 제어는 4.5 로 발행하고
+  번역 대기 묶음을 바로 보내지만, 질의응답 기록(10.1)에는 넣지 않습니다.
+- 받은 세그먼트와 종료 상태는 backend 메모리에만 있어 다시 시작하면 사라집니다.
 - **data_pipeline 의 현재 전송 방식:** 오디오를 약 10초씩 겹침 없이 잘라 인식한 텍스트를 그대로 보내며, 2.1 에 보내는
   `text_chunk` 와 같은 문자열입니다. `speaker` 는 늘 `null` 이고, `start_ms` · `end_ms` 는 캡처를 시작한 뒤 흐른
   시간입니다. `call_id` 기본값은 `{TICKER}-YYYYMMDD-HHMMSS` 입니다. 시크릿이 없으면 backend 로 보내지 않습니다.
