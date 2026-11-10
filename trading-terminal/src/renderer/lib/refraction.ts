@@ -140,10 +140,10 @@ export function applyRefraction(el: HTMLElement, bezel: number): () => void {
   filter.append(feImage, feDisp)
   filterDefs().appendChild(filter)
 
-  // 색상 유리 버튼은 채도 · 밝기를 더 올리고, 읽는 유리는 짙은 흐림을 지킨다 (tokens.css)
+  // 색상 유리 버튼은 흐림과 함께 뒤 바탕의 색을 빼고(global.css 색유리), 읽는 유리는 짙은 흐림을 지킨다 (tokens.css)
   const tinted = /\bgbtn-(lapis|olive|porphyra)\b/.test(el.className)
   const reading = /\bread\b/.test(el.className)
-  const base = reading ? 'var(--read-filter)' : tinted ? 'var(--tint-filter)' : 'var(--glass-filter)'
+  const base = reading ? 'var(--read-filter)' : tinted ? 'blur(6px) var(--tint-backdrop)' : 'var(--glass-filter)'
   el.style.backdropFilter = `url(#${id}) ${base}`
 
   return () => {

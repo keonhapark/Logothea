@@ -156,6 +156,19 @@
   --on-olive: var(--ink-1);
   --on-porphyra: var(--ink-1);
   --on-strong: var(--ink-1);
+  /* 색유리(global.css .gbtn-lapis 등, haru 의 tint-slab 방식) — 몸체 색 · 밝은 가장자리 색 · 글자 색 */
+  --tint-lapis: #4a77ee;
+  --tint-lapis-edge: #93b2ff;
+  --tint-lapis-ink: #ffffff;
+  --tint-olive: #6f8f1c;
+  --tint-olive-edge: #b8d35a;
+  --tint-olive-ink: #ffffff;
+  --tint-porphyra: #c0449a;
+  --tint-porphyra-edge: #f08fd0;
+  --tint-porphyra-ink: #ffffff;
+  --tint-strong: 58%;
+  /* 뒤 배경의 색을 빼고 명암만 남긴다. 낮은 불투명도의 색면이 뒤 색과 섞여 탁해지지 않게 한다 */
+  --tint-backdrop: saturate(0.2) brightness(1.2);
   --gbtn-hover: 1.15;
 
   /* 글꼴 */
@@ -263,4 +276,15 @@
   --on-olive: rgb(var(--olive-ink-rgb));
   --on-porphyra: rgb(var(--porphyra-ink-rgb));
   --gbtn-hover: 1.04;
+  --tint-lapis: #6a8ff0;
+  --tint-lapis-edge: #c2d3ff;
+  --tint-lapis-ink: #142c7a;
+  --tint-olive: #a9c454;
+  --tint-olive-edge: #dbeaa6;
+  --tint-olive-ink: #34440a;
+  --tint-porphyra: #e08cc4;
+  --tint-porphyra-edge: #f6cfe8;
+  --tint-porphyra-ink: #6e1452;
+  --tint-strong: 78%;
+  --tint-backdrop: saturate(0.25) brightness(1);
 }
