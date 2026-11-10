@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { create } from 'zustand'
 import { DEMO_TICKER } from '@terminal/renderer/constants/demo'
 import { useLiveTranscript } from '@terminal/renderer/hooks/useLiveTranscript'
@@ -8,6 +8,11 @@ import { useFactCheck } from '@terminal/renderer/hooks/useFactCheck'
 import { useEarningsSummary } from '@terminal/renderer/hooks/useEarningsSummary'
 import { useTranscriptStore, type TranscriptSegment } from '@terminal/renderer/store/useTranscriptStore'
 import { currentCallSegments } from '@terminal/renderer/lib/callScreen'
+import { useTranscriptDiffStore } from '@terminal/renderer/store/useTranscriptDiffStore'
+import { useFactCheckStore } from '@terminal/renderer/store/useFactCheckStore'
+import { useAssistantStore } from '@terminal/renderer/store/useAssistantStore'
+import { retireCall, trackRound, useCallFeed } from './callFeed'
+import { useCallUi } from './callUi'
 import { fetchBroadcastStatus, type BroadcastStatus } from '../data/broadcast'
 import { http } from '../data/runtime'
 
@@ -43,12 +48,37 @@ export function BroadcastFeeds() {
       window.clearInterval(timer)
     }
   }, [])
-  useLiveTranscript(BROADCAST_TICKER)
-  useTranscriptTranslation(BROADCAST_TICKER)
+  const { segments } = useLiveTranscript(BROADCAST_TICKER)
+  const translation = useTranscriptTranslation(BROADCAST_TICKER)
+  useEffect(() => {
+    useCallFeed.setState({ translations: translation.items, glossaryStatus: translation.glossaryStatus })
+  }, [translation.items, translation.glossaryStatus])
+
+  // 새 회차가 시작되면 지난 회차의 대조 · 팩트체크 · 질문 대화 · 범위를 비운다. 판단은 "지난 회차" 로 남긴다.
+  const latestCallId = segments.length > 0 ? segments[segments.length - 1].callId : null
+  const seenCallId = useRef<string | null>(null)
+  useEffect(() => {
+    const next = trackRound(seenCallId.current, latestCallId)
+    seenCallId.current = next.seen
+    if (next.reset && next.retired) resetCallRound(next.retired)
+  }, [latestCallId])
+
   useTranscriptDiff(BROADCAST_TICKER)
   useFactCheck(BROADCAST_TICKER)
   useEarningsSummary(BROADCAST_TICKER)
   return null
+}
+
+/**
+ * 새 회차로 넘어갈 때 지난 회차 내용을 비운다. 끝난 회차 id 는 기억해 두고 늦게 오는 대조 · 팩트체크를 버린다.
+ * 자막 store 는 비우지 않는다(currentCallSegments 가 최근 회차만 보여 준다). 판단은 "지난 회차" 로 남긴다.
+ */
+export function resetCallRound(retiredCallId: string): void {
+  retireCall(retiredCallId)
+  useTranscriptDiffStore.getState().clearTicker(BROADCAST_TICKER)
+  useFactCheckStore.getState().clearTicker(BROADCAST_TICKER)
+  useAssistantStore.getState().reset()
+  useCallUi.getState().resetRound()
 }
 
 export type BroadcastView =

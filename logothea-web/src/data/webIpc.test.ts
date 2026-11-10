@@ -205,3 +205,22 @@ describe('createWebIpc — 막는 채널', () => {
     await expect(ipc.invoke(channel, {})).rejects.toMatchObject({ code: 'BUSINESS_RULE', details: { unsupported: true, channel } })
   })
 })
+
+describe('createWebIpc — 메시지 거르기', () => {
+  it('dropMessage 가 참이면 store 로 내보내지 않는다(끝난 회차의 늦은 대조)', async () => {
+    const { stomp, handlers } = fakeStomp()
+    const ipc = createWebIpc({
+      http: { getJson: vi.fn() } as never,
+      stomp,
+      assistant: { ask: vi.fn(), cancel: vi.fn() },
+      dropMessage: (channel, payload) => channel === IPC_CHANNELS.TRANSCRIPT_DIFF_RECEIVED && (payload as { call_id?: string }).call_id === 'old',
+    })
+    const listener = vi.fn()
+    ipc.on(IPC_CHANNELS.TRANSCRIPT_DIFF_RECEIVED, listener)
+    await ipc.invoke(IPC_CHANNELS.TRANSCRIPT_DIFF_SUBSCRIBE, { ticker: 'WMT' })
+    handlers.get('/topic/transcript-diff/WMT')!('{"call_id":"old"}')
+    handlers.get('/topic/transcript-diff/WMT')!('{"call_id":"new"}')
+    expect(listener).toHaveBeenCalledTimes(1)
+    expect(listener).toHaveBeenCalledWith({ call_id: 'new' })
+  })
+})

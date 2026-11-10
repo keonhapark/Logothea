@@ -24,6 +24,8 @@ export interface WebIpcDeps {
   http: Pick<HttpClient, 'getJson'>
   stomp: StompBridge
   assistant: AssistantStream
+  /** STOMP 메시지를 store 로 내보내기 전에 버릴지(끝난 회차의 늦은 대조 등). 기본은 모두 통과. */
+  dropMessage?: (receivedChannel: string, payload: unknown) => boolean
   /** 폴링 · 캐시 시간. 테스트에서 바꿔 끼운다. */
   timers?: Pick<MarketChannelDeps, 'setInterval' | 'clearInterval' | 'now'>
 }
@@ -105,6 +107,7 @@ export function createWebIpc(deps: WebIpcDeps): WebIpc {
           console.error(`[webIpc] ${route.prefix} 메시지 파싱 실패:`, e)
           return
         }
+        if (deps.dropMessage?.(route.received, parsed)) return
         emit(route.received, parsed)
       })
       void deps.stomp.connect()

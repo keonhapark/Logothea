@@ -6,6 +6,8 @@ import { installPageLifecycle } from './pageLifecycle'
 import { createStompBridge } from './stomp'
 import { createWebIpc } from './webIpc'
 import { createFixtureHttp, createFixtureStomp } from '../dev/fixtures'
+import { IPC_CHANNELS } from '@terminal/lib/ipcChannels'
+import { isRetiredPayload } from '../app/callFeed'
 
 /**
  * 앱 전체가 함께 쓰는 연결 묶음. 터미널 훅 · store 는 `bridge/ipc.ts` 를 거쳐 여기의 webIpc 를 받는다.
@@ -28,7 +30,14 @@ const baseUrl = backendUrl()
 export const http = useFixtures ? createFixtureHttp() : createHttpClient({ baseUrl, auth })
 export const stomp = useFixtures ? createFixtureStomp() : createStompBridge({ url: stompUrl(baseUrl), auth })
 export const assistant = createAssistantStream({ http })
-export const webIpc = createWebIpc({ http, stomp, assistant })
+/** 끝난 회차의 늦은 대조 · 팩트체크는 store 에 넣지 않는다(app/callFeed.ts). */
+const LATE_ROUND_CHANNELS: ReadonlySet<string> = new Set([IPC_CHANNELS.TRANSCRIPT_DIFF_RECEIVED, IPC_CHANNELS.FACTCHECK_BATCH_RECEIVED])
+export const webIpc = createWebIpc({
+  http,
+  stomp,
+  assistant,
+  dropMessage: (channel, payload) => LATE_ROUND_CHANNELS.has(channel) && isRetiredPayload(payload),
+})
 
 // 테스트(node)에는 document 가 없다
 if (typeof document !== 'undefined') installPageLifecycle(stomp)
