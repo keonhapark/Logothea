@@ -59,6 +59,9 @@ class Settings(BaseSettings):
     gemini_response_mime_type: str = "application/json"
     gemini_temperature: float = Field(default=0.15, alias="GEMINI_TEMPERATURE")
     gemini_max_tokens: int = Field(default=2048, alias="GEMINI_MAX_TOKENS")
+    gemini_request_timeout_seconds: float = Field(default=20.0, gt=0, le=120, alias="GEMINI_REQUEST_TIMEOUT_SECONDS")
+    gemini_attempt_timeout_seconds: float = Field(default=10.0, gt=0, le=120, alias="GEMINI_ATTEMPT_TIMEOUT_SECONDS")
+    gemini_model_rpm: int = Field(default=15, ge=1, alias="GEMINI_MODEL_RPM")
     gemini_max_retries: int = Field(default=3, alias="GEMINI_MAX_RETRIES")
     gemini_base_retry_delay: float = Field(default=1.5, alias="GEMINI_BASE_RETRY_DELAY")
     # 임베딩 배치의 각 항목이 요청 1건으로 계산된다. 무료 등급 분당 한도를 넘지 않도록
@@ -158,6 +161,7 @@ class Settings(BaseSettings):
     fact_check_max_evidence: int = Field(default=5, alias="FACT_CHECK_MAX_EVIDENCE")
     fact_check_strong_relevance_score: float = Field(default=0.42, alias="FACT_CHECK_STRONG_RELEVANCE_SCORE")
     fact_check_moderate_relevance_score: float = Field(default=0.34, alias="FACT_CHECK_MODERATE_RELEVANCE_SCORE")
+    fact_check_total_timeout_seconds: float = Field(default=45.0, gt=0, le=45, allow_inf_nan=False, alias="FACT_CHECK_TOTAL_TIMEOUT_SECONDS")
     fact_check_retrieval_timeout_seconds: float = Field(default=3.0, alias="FACT_CHECK_RETRIEVAL_TIMEOUT_SECONDS")
     fact_check_llm_timeout_seconds: float = Field(default=8.0, alias="FACT_CHECK_LLM_TIMEOUT_SECONDS")
     fact_check_max_output_tokens: int = Field(default=1024, alias="FACT_CHECK_MAX_OUTPUT_TOKENS")

@@ -14,7 +14,7 @@ from contextlib import aclosing
 from typing import Any
 
 from assistant.agent import AgentAnswerer, AgentFinished
-from assistant.citations import verify_citations
+from assistant.citations import MARKER_RE, verify_citations
 from assistant.classifier import Classification, GlossaryProvider, classify, glossary_answer
 from assistant.context import BaseSources, ContextAssembler, ContextError, Evidence, meta_payload
 from assistant.llm import LLMClient, LLMError, StreamDone, TextDelta, Usage
@@ -139,7 +139,13 @@ class AnswerPipeline:
     def _finish(self, started: float, usage: Usage, category: str, answer: str, evidence: dict[str, Evidence],
                 extra_warnings: list[str]) -> list[Event]:
         result = verify_citations(answer, evidence)
-        status = "no_evidence" if NO_EVIDENCE_PHRASE in answer and not result.citations else "answered"
+        plain_answer = " ".join(MARKER_RE.sub("", answer).split()).rstrip(" .")
+        missing_answer = f"이번 콜과 제공된 자료에서 {NO_EVIDENCE_PHRASE}"
+        status = "no_evidence" if plain_answer in {
+            NO_EVIDENCE_PHRASE,
+            missing_answer,
+            f"{missing_answer}. 아직 콜에서 언급되지 않았습니다",
+        } else "answered"
         return [("citations", result.citations),
                 self._done(started, usage, category, status=status, warnings=[*extra_warnings, *result.warnings])]
 

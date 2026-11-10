@@ -9,6 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
+import java.time.format.DateTimeParseException;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -134,7 +135,24 @@ public class EarningsSummaryService {
                 script.relatedTickers(),
                 marketData,
                 judgment.direction(),
-                judgment.confidence());
+                judgment.confidence(),
+                summaryAsOfEpoch(script));
+    }
+
+    /** Historical summaries use the end of the source call, never the replay wall clock. */
+    private static Long summaryAsOfEpoch(DemoEarningsCallScript script) {
+        if (script.callStartedAt() == null || script.callStartedAt().isBlank()) {
+            return null; // Legacy scripts omit the additive field; the engine keeps its live-call default.
+        }
+        try {
+            long started = Instant.parse(script.callStartedAt().trim()).getEpochSecond();
+            long lastEndMs = script.segments() == null ? 0 : script.segments().stream()
+                    .mapToLong(DemoEarningsCallScript.Segment::endMs).max().orElse(0);
+            return Math.addExact(started, Math.max(0, lastEndMs) / 1000L);
+        } catch (DateTimeParseException | ArithmeticException exception) {
+            log.warn("[Summary] Invalid historical call timestamp for ticker={}; as_of_epoch omitted", script.ticker());
+            return null;
+        }
     }
 
     /**

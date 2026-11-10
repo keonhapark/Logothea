@@ -63,7 +63,8 @@ public final class EarningsSummaryModels {
             @JsonProperty("related_tickers") List<String> relatedTickers,
             @JsonProperty("market_data") Map<String, Object> marketData,
             @JsonProperty("direction_hint") String directionHint,
-            @JsonProperty("confidence_hint") Double confidenceHint
+            @JsonProperty("confidence_hint") Double confidenceHint,
+            @JsonProperty("as_of_epoch") Long asOfEpoch
     ) {
     }
 

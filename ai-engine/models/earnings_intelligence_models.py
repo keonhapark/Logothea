@@ -131,6 +131,7 @@ class EarningsIntelligenceRequest(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     ticker: str
+    as_of_epoch: int | None = Field(default=None, gt=0)
     event_text: str = Field(min_length=1)
     question: str | None = None
     answer: str | None = None

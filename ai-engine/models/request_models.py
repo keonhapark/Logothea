@@ -3,7 +3,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 try:
     from models.canonical_models import CanonicalEventBundle, CanonicalSourceHealth
@@ -33,7 +33,7 @@ class SourceType(str, Enum):
 class MarketData(BaseModel):
     model_config = ConfigDict(extra="ignore", populate_by_name=True)
 
-    ticker: str | None = Field(default=None)
+    ticker: str | None = Field(default=None, validation_alias=AliasChoices("ticker", "symbol"))
     current_price: float = Field(default=0.0)
     prev_close: float | None = Field(default=None)
     day_change_pct: float = Field(default=0.0, validation_alias="price_change_pct")

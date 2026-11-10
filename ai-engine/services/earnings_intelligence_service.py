@@ -74,12 +74,13 @@ class EarningsIntelligenceService:
 
     async def analyze(self, payload: EarningsIntelligenceRequest) -> EarningsIntelligenceResponse:
         ticker = payload.ticker.upper()
-        now = int(time.time())
-        evidence_docs = [_to_external_document(item, default_ticker=ticker, fallback_timestamp=now) for item in payload.external_documents]
+        wall_time = int(time.time())
+        now = payload.as_of_epoch or wall_time
+        evidence_docs = [_to_external_document(item, default_ticker=ticker, fallback_timestamp=wall_time) for item in payload.external_documents]
         if evidence_docs:
             self.retriever.upsert_documents(evidence_docs)
 
-        retrieved = self.retriever.retrieve(
+        retrieved = self._retrieve_as_of(
             query=f"{ticker} {payload.event_text}",
             ticker=ticker,
             chunk_timestamp=now,
@@ -123,8 +124,16 @@ class EarningsIntelligenceService:
             warnings=warnings,
         )
 
+    def _retrieve_as_of(self, **kwargs):
+        """Enforce the cutoff even when a retrieval backend ignores its filter."""
+        cutoff = kwargs["chunk_timestamp"]
+        return [
+            item for item in self.retriever.retrieve(**kwargs)
+            if 0 < int(item.published_at or 0) <= cutoff
+        ]
+
     def _fact_check_claim(self, *, ticker: str, claim: str, now: int, top_k: int) -> ClaimFactCheck:
-        evidence = self.retriever.retrieve(query=claim, ticker=ticker, chunk_timestamp=now, preferred_sources=[], lookback_days=365, limit=top_k)
+        evidence = self._retrieve_as_of(query=claim, ticker=ticker, chunk_timestamp=now, preferred_sources=[], lookback_days=365, limit=top_k)
         if not evidence:
             return ClaimFactCheck(
                 claim=claim,
@@ -149,7 +158,7 @@ class EarningsIntelligenceService:
 
     def _claim_diff(self, *, ticker: str, claim: str, now: int) -> ClaimDiff:
         topic = _topic(claim)
-        evidence = self.retriever.retrieve(query=claim, ticker=ticker, chunk_timestamp=now, preferred_sources=["ir", "filing", "press_release"], lookback_days=365, limit=3)
+        evidence = self._retrieve_as_of(query=claim, ticker=ticker, chunk_timestamp=now, preferred_sources=["ir", "filing", "press_release"], lookback_days=365, limit=3)
         prior = next((item for item in evidence if item.text.strip() != claim.strip()), None)
         if prior is None:
             return ClaimDiff(current_claim=claim, topic=topic, direction_change="unknown", contradiction_score=0.0, severity="low", rationale_ko="비교 가능한 과거 발언 근거가 부족합니다.", evidence=[])
