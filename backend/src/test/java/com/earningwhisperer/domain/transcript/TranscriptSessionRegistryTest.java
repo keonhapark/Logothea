@@ -3,6 +3,7 @@ package com.earningwhisperer.domain.transcript;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -17,7 +18,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * 검증 포인트:
  *   1) 단조 증가 sequence 허용 (OK)
- *   2) 동일 sequence 재인입 거부 (SEQ_REGRESS)
+ *   2) 동일 페이로드 재시도 허용 (DUPLICATE), 같은 sequence의 다른 페이로드 거부
  *   3) 더 작은 sequence 재인입 거부 (SEQ_REGRESS)
  *   4) is_session_end=true 이후 동일 callId 재인입 거부 (SESSION_ENDED)
  *   5) call_id 격리 — 한 콜의 종료가 다른 콜에 영향 없음
@@ -44,12 +45,48 @@ class TranscriptSessionRegistryTest {
     }
 
     @Test
-    @DisplayName("동일 sequence 재인입은 SEQ_REGRESS")
-    void 동일_sequence_거부() {
+    @DisplayName("동일 페이로드 재시도는 DUPLICATE")
+    void 동일_페이로드_재시도() {
         TranscriptSessionRegistry registry = new TranscriptSessionRegistry();
 
         assertThat(registry.validateAndAccept(seg("c1", 5, false))).isEqualTo(TranscriptSessionRegistry.Result.OK);
-        assertThat(registry.validateAndAccept(seg("c1", 5, false))).isEqualTo(TranscriptSessionRegistry.Result.SEQ_REGRESS);
+        assertThat(registry.validateAndAccept(seg("c1", 5, false))).isEqualTo(TranscriptSessionRegistry.Result.DUPLICATE);
+    }
+
+    @Test
+    void exactEarlierAndTerminalRetriesAreAcknowledgedAfterClosure() {
+        TranscriptSessionRegistry registry = new TranscriptSessionRegistry();
+        TranscriptSegment first = seg("c1", 0, false);
+        TranscriptSegment terminal = seg("c1", 2, true);
+        registry.validateAndAccept(first);
+        registry.validateAndAccept(seg("c1", 1, false));
+        assertThat(registry.validateAndAccept(first)).isEqualTo(TranscriptSessionRegistry.Result.DUPLICATE);
+        registry.validateAndAccept(terminal);
+
+        assertThat(registry.validateAndAccept(first)).isEqualTo(TranscriptSessionRegistry.Result.DUPLICATE);
+        assertThat(registry.validateAndAccept(terminal)).isEqualTo(TranscriptSessionRegistry.Result.DUPLICATE);
+    }
+
+    @Test
+    void everyPayloadFieldMustMatchForDuplicateAcknowledgement() {
+        TranscriptSessionRegistry registry = new TranscriptSessionRegistry();
+        TranscriptSegment original = new TranscriptSegment("NVDA", "c1", 0, 0, 500, "text", null, 1, false);
+        registry.validateAndAccept(original);
+        List<TranscriptSegment> conflicts = List.of(
+                new TranscriptSegment("WMT", "c1", 0, 0, 500, "text", null, 1, false),
+                new TranscriptSegment("NVDA", "c1", 0, 1, 500, "text", null, 1, false),
+                new TranscriptSegment("NVDA", "c1", 0, 0, 501, "text", null, 1, false),
+                new TranscriptSegment("NVDA", "c1", 0, 0, 500, "different", null, 1, false),
+                new TranscriptSegment("NVDA", "c1", 0, 0, 500, "text", "CFO", 1, false),
+                new TranscriptSegment("NVDA", "c1", 0, 0, 500, "text", null, 2, false),
+                new TranscriptSegment("NVDA", "c1", 0, 0, 500, "text", null, 1, true));
+
+        for (TranscriptSegment conflict : conflicts) {
+            assertThat(registry.validateAndAccept(conflict)).isEqualTo(TranscriptSessionRegistry.Result.SEQUENCE_CONFLICT);
+        }
+        assertThat(registry.validateAndAccept(original)).isEqualTo(TranscriptSessionRegistry.Result.DUPLICATE);
+        // Rejected terminal flag must not close the session.
+        assertThat(registry.validateAndAccept(seg("c1", 1, false))).isEqualTo(TranscriptSessionRegistry.Result.OK);
     }
 
     @Test
@@ -98,7 +135,7 @@ class TranscriptSessionRegistryTest {
         CountDownLatch ready = new CountDownLatch(threads);
         CountDownLatch start = new CountDownLatch(1);
         AtomicInteger okCount = new AtomicInteger();
-        AtomicInteger regressCount = new AtomicInteger();
+        AtomicInteger duplicateCount = new AtomicInteger();
 
         for (int i = 0; i < threads; i++) {
             pool.submit(() -> {
@@ -111,7 +148,7 @@ class TranscriptSessionRegistryTest {
                 }
                 TranscriptSessionRegistry.Result r = registry.validateAndAccept(seg("c1", 7, false));
                 if (r == TranscriptSessionRegistry.Result.OK) okCount.incrementAndGet();
-                else if (r == TranscriptSessionRegistry.Result.SEQ_REGRESS) regressCount.incrementAndGet();
+                else if (r == TranscriptSessionRegistry.Result.DUPLICATE) duplicateCount.incrementAndGet();
             });
         }
 
@@ -120,9 +157,9 @@ class TranscriptSessionRegistryTest {
         pool.shutdown();
         assertThat(pool.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
 
-        // 정확히 1건만 OK, 나머지는 모두 SEQ_REGRESS
+        // 정확히 1건만 OK, 나머지는 모두 DUPLICATE
         assertThat(okCount.get()).isEqualTo(1);
-        assertThat(regressCount.get()).isEqualTo(threads - 1);
+        assertThat(duplicateCount.get()).isEqualTo(threads - 1);
     }
 
     @Test

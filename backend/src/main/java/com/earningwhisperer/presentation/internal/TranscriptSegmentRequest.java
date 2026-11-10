@@ -1,7 +1,9 @@
 package com.earningwhisperer.presentation.internal;
 
 import com.earningwhisperer.domain.transcript.TranscriptSegment;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
@@ -43,7 +45,7 @@ public class TranscriptSegmentRequest {
     @JsonProperty("end_ms")
     private Long endMs;
 
-    @NotBlank(message = "text는 필수이며 비공백이어야 합니다.")
+    @NotNull(message = "text는 필수입니다.")
     private String text;
 
     /** 발화자 라벨. 선택 필드. */
@@ -56,6 +58,13 @@ public class TranscriptSegmentRequest {
     /** Boolean 객체로 받아 명시적 null 시 false 로 디폴트한다. */
     @JsonProperty("is_session_end")
     private Boolean isSessionEnd;
+
+    /** 명시적 종료 제어는 빈 문자열을 허용한다. 일반 자막과 공백 문자열은 기존 검증을 유지한다. */
+    @JsonIgnore
+    @AssertTrue(message = "text는 비공백이어야 하며 빈 문자열은 is_session_end=true일 때만 허용됩니다.")
+    public boolean isTextValid() {
+        return text == null || !text.isBlank() || (Boolean.TRUE.equals(isSessionEnd) && text.isEmpty());
+    }
 
     /**
      * DTO → 도메인 record 변환.

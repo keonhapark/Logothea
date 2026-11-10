@@ -133,12 +133,16 @@ public class TranscriptTranslationService {
             return;
         }
         String text = segment.text() == null ? "" : segment.text().strip();
-        if (text.isEmpty()) {
-            return;
-        }
         String key = segment.ticker() + "|" + segment.callId();
         synchronized (this) {
             Batch batch = pending.get(key);
+            if (text.isEmpty()) {
+                if (segment.isSessionEnd() && batch != null) {
+                    pending.remove(key);
+                    dispatch(batch);
+                }
+                return;
+            }
             if (batch != null && batch.chars + 1 + text.length() > maxChars) {
                 // 붙이면 상한을 넘는다. 지금까지 모은 것을 먼저 보낸다.
                 pending.remove(key);
