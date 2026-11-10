@@ -21,6 +21,7 @@ src/app/         앱 틀: 경로(History API) · 시트 · 테마 · 설정 · �
 src/components/  탭 바 · 첫 방문 안내
 src/screens/     홈 · 시장 · 종목 브리핑 · 내 정보
 src/styles/      mobile.css — 터미널 토큰 위에 모바일 값과 표면 · 색유리 클래스
+src/assets/fonts/pretendard-subset/  Pretendard 동적 서브셋(배포본 그대로, OFL). 화면에 나온 글자의 조각만 받습니다
 src/content/     화면 문구
 src/dev/         개발용 가짜 서버(배포용 빌드에서 빠짐)
 src/bridge/      터미널 모듈의 웹 대체 파일 (ipc, Toast)

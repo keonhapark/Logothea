@@ -6,6 +6,9 @@
 
 /* ── 시안 전용 토큰 ──────────────────────────────────────────────────── */
 :root {
+  /* 글꼴: Pretendard 동적 서브셋(pretendard-subset.css). 터미널 tokens.css 의 전체 글꼴(2MB)은 부르지 않는다.
+     뒤의 대체 글꼴 순서는 tokens.css 와 같다 */
+  --font-sans: 'Pretendard Web', -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', system-ui, sans-serif;
   /* 색유리(haru tint-slab 방식) */
   --tint: #4a77ee;
   --tint-edge: #93b2ff;
@@ -27,12 +30,13 @@
   --tabbar-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
 }
 :root[data-theme='light'] {
-  --tint: #7d9ef2;
-  --tint-edge: #c9d8ff;
+  /* 라이트 색유리는 시안보다 진하게(사용자 요청, uiux 2026-11-11) */
+  --tint: #6a8ff0;
+  --tint-edge: #c2d3ff;
   --tint-ink: #142c7a;
-  --tint-strong: 62%;
-  --tint-soft: 46%;
-  --tint-backdrop: saturate(0.25) brightness(1.2);
+  --tint-strong: 78%;
+  --tint-soft: 58%;
+  --tint-backdrop: saturate(0.25) brightness(1);
   --tint-ts: 0 1px 0 rgb(255 255 255 / 0.35);
   --bar-fill: rgb(255 255 255 / 0.28);
   --lens: rgb(255 255 255 / 0.55);
