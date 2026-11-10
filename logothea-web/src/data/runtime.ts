@@ -5,6 +5,7 @@ import { createHttpClient } from './http'
 import { installPageLifecycle } from './pageLifecycle'
 import { createStompBridge } from './stomp'
 import { createWebIpc } from './webIpc'
+import { createFixtureHttp, createFixtureStomp } from '../dev/fixtures'
 
 /**
  * 앱 전체가 함께 쓰는 연결 묶음. 터미널 훅 · store 는 `bridge/ipc.ts` 를 거쳐 여기의 webIpc 를 받는다.
@@ -17,9 +18,15 @@ const auth: AuthProvider = createDevTokenProvider(
   import.meta.env.DEV ? import.meta.env.VITE_DEV_ACCESS_TOKEN : undefined,
 )
 
+/**
+ * 개발 서버에서 `VITE_FIXTURES=1` 이면 가짜 서버(dev/fixtures.ts)로 그린다. 배포용 빌드에서는 DEV 가 false 라
+ * 이 분기와 가짜 서버 코드가 번들에서 빠진다.
+ */
+const useFixtures = import.meta.env.DEV && import.meta.env.VITE_FIXTURES === '1'
+
 const baseUrl = backendUrl()
-export const http = createHttpClient({ baseUrl, auth })
-export const stomp = createStompBridge({ url: stompUrl(baseUrl), auth })
+export const http = useFixtures ? createFixtureHttp() : createHttpClient({ baseUrl, auth })
+export const stomp = useFixtures ? createFixtureStomp() : createStompBridge({ url: stompUrl(baseUrl), auth })
 export const assistant = createAssistantStream({ http })
 export const webIpc = createWebIpc({ http, stomp, assistant })
 
