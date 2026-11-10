@@ -69,13 +69,32 @@ public class StockDetailService {
      *         호출자(컨트롤러)가 503 으로 응답한다.
      * @throws IllegalArgumentException ticker 가 정규식 미통과
      */
+    /**
+     * 이미 저장된 활성 종목(S&P 500 구성 종목)인지. 게스트에게는 이 종목만 열어, 관람객이 임의 종목을 열어
+     * 외부 API 호출(lazy fetch)이 늘어나지 않게 한다. 외부 호출 없이 DB 만 본다.
+     */
+    public boolean isListedActive(String ticker) {
+        return stockRepository.findByTicker(ticker).map(Stock::isActive).orElse(false);
+    }
+
     public Optional<StockDetailResponse> getDetail(String ticker) {
+        return getDetail(ticker, true);
+    }
+
+    /**
+     * 외부 API 를 부르지 않고 저장된 데이터만으로 상세를 만든다. 게스트용이다. 빠진 데이터는 채우지 않고 비워 둔다.
+     */
+    public Optional<StockDetailResponse> getStoredDetail(String ticker) {
+        return getDetail(ticker, false);
+    }
+
+    private Optional<StockDetailResponse> getDetail(String ticker, boolean allowExternalFetch) {
         if (ticker == null || !TICKER_PATTERN.matcher(ticker).matches()) {
             throw new IllegalArgumentException("invalid ticker: " + ticker);
         }
 
         // ─── 1. Lazy fetch (Bean 존재 시) ─────────────────────────────
-        if (lazyFetchService.isPresent()) {
+        if (allowExternalFetch && lazyFetchService.isPresent()) {
             LazyFetchResult result;
             try {
                 result = lazyFetchService.get().ensureExists(ticker);

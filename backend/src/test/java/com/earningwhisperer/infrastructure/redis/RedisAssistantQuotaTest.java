@@ -40,7 +40,7 @@ class RedisAssistantQuotaTest {
         when(redisTemplate.opsForValue()).thenReturn(valueOps);
         when(valueOps.increment(DAILY_KEY)).thenReturn(1L);
 
-        assertThat(quota.tryConsumeDaily(7L, DAY, 50)).isTrue();
+        assertThat(quota.tryConsumeDaily("7", DAY, 50)).isTrue();
         verify(redisTemplate).expire(DAILY_KEY, Duration.ofHours(48));
     }
 
@@ -50,8 +50,8 @@ class RedisAssistantQuotaTest {
         when(redisTemplate.opsForValue()).thenReturn(valueOps);
         when(valueOps.increment(DAILY_KEY)).thenReturn(50L, 51L);
 
-        assertThat(quota.tryConsumeDaily(7L, DAY, 50)).isTrue();
-        assertThat(quota.tryConsumeDaily(7L, DAY, 50)).isFalse();
+        assertThat(quota.tryConsumeDaily("7", DAY, 50)).isTrue();
+        assertThat(quota.tryConsumeDaily("7", DAY, 50)).isFalse();
         verify(redisTemplate, never()).expire(anyString(), org.mockito.ArgumentMatchers.any(Duration.class));
     }
 
@@ -61,14 +61,14 @@ class RedisAssistantQuotaTest {
         when(redisTemplate.opsForValue()).thenReturn(valueOps);
         when(valueOps.setIfAbsent("assistant:lock:7", "1", Duration.ofSeconds(70))).thenReturn(true, false);
 
-        assertThat(quota.tryLock(7L, Duration.ofSeconds(70))).isTrue();
-        assertThat(quota.tryLock(7L, Duration.ofSeconds(70))).isFalse();
+        assertThat(quota.tryLock("7", Duration.ofSeconds(70))).isTrue();
+        assertThat(quota.tryLock("7", Duration.ofSeconds(70))).isFalse();
     }
 
     @Test
     @DisplayName("잠금 해제는 키를 지운다")
     void unlock() {
-        quota.unlock(7L);
+        quota.unlock("7");
         verify(redisTemplate).delete("assistant:lock:7");
     }
 
@@ -79,7 +79,7 @@ class RedisAssistantQuotaTest {
         when(valueOps.increment(DAILY_KEY)).thenReturn(null);
         when(valueOps.setIfAbsent("assistant:lock:7", "1", Duration.ofSeconds(70))).thenReturn(null);
 
-        assertThat(quota.tryConsumeDaily(7L, DAY, 50)).isFalse();
-        assertThat(quota.tryLock(7L, Duration.ofSeconds(70))).isFalse();
+        assertThat(quota.tryConsumeDaily("7", DAY, 50)).isFalse();
+        assertThat(quota.tryLock("7", Duration.ofSeconds(70))).isFalse();
     }
 }

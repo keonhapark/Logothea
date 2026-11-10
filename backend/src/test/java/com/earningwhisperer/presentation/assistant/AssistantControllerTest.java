@@ -5,6 +5,7 @@ import com.earningwhisperer.domain.assistant.AssistantAskService;
 import com.earningwhisperer.domain.assistant.AssistantAskService.PreparedAsk;
 import com.earningwhisperer.domain.assistant.AssistantQuota;
 import com.earningwhisperer.global.config.AssistantProperties;
+import com.earningwhisperer.global.config.GuestProperties;
 import com.earningwhisperer.infrastructure.security.InternalSecretFilter;
 import com.earningwhisperer.infrastructure.security.JwtProvider;
 import com.earningwhisperer.infrastructure.security.UserDetailsServiceImpl;
@@ -25,6 +26,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.RejectedExecutionException;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -62,6 +64,11 @@ class AssistantControllerTest {
         AssistantProperties assistantProperties() {
             return new AssistantProperties("http://127.0.0.1:8100", 50, 60);
         }
+
+        @Bean
+        GuestProperties guestProperties() {
+            return new GuestProperties(true, 3600, 20, 5, 500);
+        }
     }
 
     @Autowired MockMvc mockMvc;
@@ -79,13 +86,20 @@ class AssistantControllerTest {
              "question": "  가이던스가 바뀌었어?  ", "suggested_question_id": null,
              "history": [{"role": "user", "text": "앞 질문"}, {"role": "assistant", "text": "앞 답"}]}
             """;
-    private static final PreparedAsk PREPARED = new PreparedAsk(7L, "WMT", "call-1", 17, 1_787_227_218L, 3, false,
+    private static final PreparedAsk PREPARED = new PreparedAsk("7", "WMT", "call-1", 17, 1_787_227_218L, 3, false,
             "가이던스가 바뀌었어?", null, List.of());
 
     @BeforeEach
     void auth() {
         when(jwtProvider.validateToken("good")).thenReturn(true);
         when(jwtProvider.getUserIdFromToken("good")).thenReturn(7L);
+        when(jwtProvider.validateToken("guest")).thenReturn(true);
+        when(jwtProvider.getGuestIdFromToken("guest")).thenReturn(Optional.of("g1"));
+    }
+
+    private org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder guestAsk(String body) {
+        return post(URL).header("Authorization", "Bearer guest").header("Accept", ACCEPT)
+                .contentType(MediaType.APPLICATION_JSON).content(body);
     }
 
     private org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder ask(String body) {
@@ -105,8 +119,8 @@ class AssistantControllerTest {
     @DisplayName("정상 요청은 SSE 로 중계하고, 끝날 때의 ASYNC 디스패치도 200 이다")
     void streams() throws Exception {
         when(askService.prepare(any())).thenReturn(PREPARED);
-        when(quota.tryLock(eq(7L), any(Duration.class))).thenReturn(true);
-        when(quota.tryConsumeDaily(eq(7L), any(), eq(50))).thenReturn(true);
+        when(quota.tryLock(eq("7"), any(Duration.class))).thenReturn(true);
+        when(quota.tryConsumeDaily(eq("7"), any(), eq(50))).thenReturn(true);
         SseEmitter emitter = new SseEmitter(5_000L);
         when(relay.start(PREPARED)).thenReturn(emitter);
 
@@ -123,7 +137,7 @@ class AssistantControllerTest {
                 org.mockito.ArgumentCaptor.forClass(AssistantAskService.AskCommand.class);
         verify(askService).prepare(captor.capture());
         AssistantAskService.AskCommand command = captor.getValue();
-        assertThat(command.userId()).isEqualTo(7L);
+        assertThat(command.userId()).isEqualTo("7");
         assertThat(command.question()).isEqualTo("가이던스가 바뀌었어?");
         assertThat(command.asOfSequence()).isEqualTo(17);
         assertThat(command.anchorSequence()).isEqualTo(3);
@@ -155,7 +169,7 @@ class AssistantControllerTest {
     @DisplayName("진행 중인 질문이 있으면 409 assistant_busy, 하루 횟수는 차감하지 않는다")
     void busy() throws Exception {
         when(askService.prepare(any())).thenReturn(PREPARED);
-        when(quota.tryLock(eq(7L), any(Duration.class))).thenReturn(false);
+        when(quota.tryLock(eq("7"), any(Duration.class))).thenReturn(false);
 
         mockMvc.perform(ask(BODY))
                 .andExpect(status().isConflict())
@@ -167,43 +181,43 @@ class AssistantControllerTest {
     @DisplayName("하루 한도를 넘으면 429 와 다음 초기화 시각, 잠금은 푼다")
     void dailyLimit() throws Exception {
         when(askService.prepare(any())).thenReturn(PREPARED);
-        when(quota.tryLock(eq(7L), any(Duration.class))).thenReturn(true);
-        when(quota.tryConsumeDaily(eq(7L), any(), eq(50))).thenReturn(false);
+        when(quota.tryLock(eq("7"), any(Duration.class))).thenReturn(true);
+        when(quota.tryConsumeDaily(eq("7"), any(), eq(50))).thenReturn(false);
 
         mockMvc.perform(ask(BODY))
                 .andExpect(status().isTooManyRequests())
                 .andExpect(jsonPath("$.code").value("daily_limit_exceeded"))
                 .andExpect(jsonPath("$.reset_at").exists());
-        verify(quota).unlock(7L);
+        verify(quota).unlock("7");
     }
 
     @Test
     @DisplayName("중계 스레드풀이 가득 차면 503 assistant_overloaded")
     void overloaded() throws Exception {
         when(askService.prepare(any())).thenReturn(PREPARED);
-        when(quota.tryLock(eq(7L), any(Duration.class))).thenReturn(true);
-        when(quota.tryConsumeDaily(eq(7L), any(), eq(50))).thenReturn(true);
+        when(quota.tryLock(eq("7"), any(Duration.class))).thenReturn(true);
+        when(quota.tryConsumeDaily(eq("7"), any(), eq(50))).thenReturn(true);
         when(relay.start(PREPARED)).thenThrow(new RejectedExecutionException("full"));
 
         mockMvc.perform(ask(BODY))
                 .andExpect(status().isServiceUnavailable())
                 .andExpect(jsonPath("$.code").value("assistant_overloaded"));
         // 중계가 이미 잠금을 풀므로 컨트롤러는 다시 풀지 않는다.
-        verify(quota, never()).unlock(7L);
+        verify(quota, never()).unlock("7");
     }
 
     @Test
     @DisplayName("한도 확인 중 Redis 장애면 503 assistant_unavailable 이고 잠금은 푼다")
     void quotaFailureReleasesLock() throws Exception {
         when(askService.prepare(any())).thenReturn(PREPARED);
-        when(quota.tryLock(eq(7L), any(Duration.class))).thenReturn(true);
-        when(quota.tryConsumeDaily(eq(7L), any(), eq(50)))
+        when(quota.tryLock(eq("7"), any(Duration.class))).thenReturn(true);
+        when(quota.tryConsumeDaily(eq("7"), any(), eq(50)))
                 .thenThrow(new org.springframework.data.redis.RedisConnectionFailureException("down"));
 
         mockMvc.perform(ask(BODY))
                 .andExpect(status().isServiceUnavailable())
                 .andExpect(jsonPath("$.code").value("assistant_unavailable"));
-        verify(quota).unlock(7L);
+        verify(quota).unlock("7");
         verify(relay, never()).start(any());
     }
 
@@ -211,7 +225,7 @@ class AssistantControllerTest {
     @DisplayName("Redis 장애면 503 assistant_unavailable")
     void redisDown() throws Exception {
         when(askService.prepare(any())).thenReturn(PREPARED);
-        when(quota.tryLock(eq(7L), any(Duration.class)))
+        when(quota.tryLock(eq("7"), any(Duration.class)))
                 .thenThrow(new org.springframework.data.redis.RedisConnectionFailureException("down"));
 
         mockMvc.perform(ask(BODY))
@@ -251,5 +265,35 @@ class AssistantControllerTest {
         mockMvc.perform(ask(BODY.replaceFirst("\\[\\{\"role\".*\\]", "[null]"))).andExpect(status().isBadRequest());
 
         verify(askService, never()).prepare(any());
+    }
+
+    @Test
+    @DisplayName("게스트는 게스트 키로 질문하고, 토큰당 한도와 게스트 합산 한도를 둘 다 차감한다")
+    void guestConsumesPerGuestAndTotal() throws Exception {
+        when(askService.prepare(any())).thenReturn(PREPARED);
+        when(quota.tryLock(eq("guest:g1"), any(Duration.class))).thenReturn(true);
+        when(quota.tryConsumeDaily(eq("guest:g1"), any(), eq(5))).thenReturn(true);
+        when(quota.tryConsumeDaily(eq("guest-total"), any(), eq(500))).thenReturn(false);
+
+        mockMvc.perform(guestAsk(BODY))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(jsonPath("$.code").value("daily_limit_exceeded"));
+        org.mockito.ArgumentCaptor<AssistantAskService.AskCommand> captor =
+                org.mockito.ArgumentCaptor.forClass(AssistantAskService.AskCommand.class);
+        verify(askService).prepare(captor.capture());
+        assertThat(captor.getValue().userId()).isEqualTo("guest:g1");
+        verify(quota, never()).tryConsumeDaily(eq("guest:g1"), any(), eq(50));
+        verify(quota).unlock("guest:g1");
+    }
+
+    @Test
+    @DisplayName("게스트 토큰당 한도를 넘으면 합산 한도는 차감하지 않는다")
+    void guestPerTokenLimitSkipsTotal() throws Exception {
+        when(askService.prepare(any())).thenReturn(PREPARED);
+        when(quota.tryLock(eq("guest:g1"), any(Duration.class))).thenReturn(true);
+        when(quota.tryConsumeDaily(eq("guest:g1"), any(), eq(5))).thenReturn(false);
+
+        mockMvc.perform(guestAsk(BODY)).andExpect(status().isTooManyRequests());
+        verify(quota, never()).tryConsumeDaily(eq("guest-total"), any(), anyInt());
     }
 }

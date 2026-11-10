@@ -29,7 +29,7 @@ public record AssistantAskRequest(
     public record Turn(@NotNull @Pattern(regexp = "user|assistant") String role,
                        @NotBlank @Size(max = 4000) String text) {}
 
-    AskCommand toCommand(Long userId) {
+    AskCommand toCommand(String userId) {
         List<HistoryTurn> turns = history == null ? List.of()
                 : history.stream().map(turn -> new HistoryTurn(turn.role(), turn.text())).toList();
         return new AskCommand(userId, ticker, callId, asOfSequence, anchorSequence, question.trim(),

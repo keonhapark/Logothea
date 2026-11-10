@@ -1,6 +1,8 @@
 package com.earningwhisperer.infrastructure.websocket;
 
+import com.earningwhisperer.global.config.GuestProperties;
 import com.earningwhisperer.infrastructure.security.JwtProvider;
+import org.springframework.beans.factory.ObjectProvider;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.Message;
@@ -14,6 +16,8 @@ import org.springframework.messaging.support.MessageHeaderAccessor;
 import org.springframework.stereotype.Component;
 
 import java.security.Principal;
+import java.util.Optional;
+import java.util.regex.Pattern;
 
 /**
  * STOMP 인바운드 프레임을 인가하는 인터셉터.
@@ -112,14 +116,36 @@ public class StompJwtChannelInterceptor implements ChannelInterceptor {
      * 이 인터셉터와 무관한 사실에 기대고 있다. 웹에서 쿠키 인증을 붙이는 순간 CONNECT 없는
      * SUBSCRIBE 가 조용히 다시 열린다.
      */
-    record StompPrincipal(String name) implements Principal {
+    record StompPrincipal(String name, boolean guest) implements Principal {
+        StompPrincipal(String name) {
+            this(name, false);
+        }
+
         @Override
         public String getName() {
             return name;
         }
     }
 
+    /**
+     * 게스트 세션이 구독할 수 있는 목적지. 전시용 웹이 쓰는 방송 토픽만 연다.
+     *
+     * <p>Simple broker 는 구독 목적지를 패턴으로 해석하므로({@code /topic/**} 하나로 전부 받을 수 있다)
+     * 종목 자리는 문자 집합을 고정한다. {@code /user/**} 개인 큐와 {@code /queue/**} 는 게스트에게 의미가 없어 막는다.
+     * 사용자 세션에는 토픽별 인가가 없다(이 클래스 머리말).
+     */
+    static final Pattern GUEST_SUBSCRIBE_DESTINATION = Pattern.compile(
+            "^/topic/(?:(?:transcript|factcheck|transcript-diff|transcript-translation|evaluation)/[A-Z0-9.\\-]{1,10}"
+                    + "|market/indices|prices)$");
+
     private final JwtProvider jwtProvider;
+    /** 게스트 설정. 꺼져 있으면(또는 없으면) 게스트 CONNECT 와 게스트 세션의 새 구독을 거부한다. */
+    private final ObjectProvider<GuestProperties> guestProperties;
+
+    private boolean guestEnabled() {
+        GuestProperties props = guestProperties == null ? null : guestProperties.getIfAvailable();
+        return props != null && props.enabled();
+    }
 
     @Override
     public Message<?> preSend(Message<?> message, MessageChannel channel) {
@@ -181,6 +207,19 @@ public class StompJwtChannelInterceptor implements ChannelInterceptor {
             throw new MessageDeliveryException(message, NOT_ALLOWED);
         }
 
+        if (((StompPrincipal) accessor.getUser()).guest()
+                && SimpMessageType.SUBSCRIBE.equals(command.getMessageType())) {
+            if (!guestEnabled()) {
+                // 게스트를 끈 뒤에는 새 구독을 받지 않는다. 이미 맺은 구독은 연결이 끊길 때까지 남는다.
+                throw new MessageDeliveryException(message, NOT_ALLOWED);
+            }
+            String destination = accessor.getDestination();
+            if (destination == null || !GUEST_SUBSCRIBE_DESTINATION.matcher(destination).matches()) {
+                log.warn("[StompAuth] 게스트가 허용되지 않은 목적지를 구독하려 했다 - destination={}", destination);
+                throw new MessageDeliveryException(message, NOT_ALLOWED);
+            }
+        }
+
         return message;
     }
 
@@ -201,6 +240,16 @@ public class StompJwtChannelInterceptor implements ChannelInterceptor {
 
         Long userId;
         try {
+            Optional<String> guestId = jwtProvider.getGuestIdFromToken(token);
+            if (guestId.isPresent()) {
+                if (!guestEnabled()) {
+                    log.warn("[StompAuth] 게스트가 꺼져 있어 게스트 연결을 거부한다");
+                    throw new MessageDeliveryException(message, AUTH_FAILED);
+                }
+                accessor.setUser(new StompPrincipal("guest:" + guestId.get(), true));
+                log.debug("[StompAuth] 게스트 WebSocket 인증 성공");
+                return;
+            }
             userId = jwtProvider.getUserIdFromToken(token);
         } catch (RuntimeException e) {
             /*

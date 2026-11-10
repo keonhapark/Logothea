@@ -458,6 +458,26 @@ HTTPS 를 도입하며 값을 바꾸거나 새로 넣은 것이 둘 있습니다
 로컬 개발에서는 둘 다 필요하지 않습니다. 로컬은 평문이어도 `BackendClient.ts` 가 `localhost` 를
 보안 채널로 취급하고, 바인딩을 좁힐 이유도 없습니다.
 
+전시용 모바일 웹(`https://demo.logothea.com`)을 열 때 넣는 키입니다. 웹은 로그인 없이 게스트 토큰을 받아 씁니다
+(api-spec 7.1.1).
+
+| 키 | 서버 값 | 비우면 |
+|---|---|---|
+| `CORS_GUEST_ORIGINS` | `'https://demo.logothea.com'` | 브라우저의 REST 와 `/ws-native` 핸드셰이크가 모두 403 입니다. Spring Security 의 CORS 필터가 WebSocket 업그레이드의 Origin 도 검사합니다 |
+| `GUEST_ENABLED` | `'true'` | 게스트 토큰 발급이 404 라 웹이 아무것도 받지 못합니다 |
+| `GUEST_ASSISTANT_DAILY_TOTAL` | 기본 500 | 모든 게스트를 합친 하루 질의응답 수입니다. LLM 비용 상한이라 전시 규모에 맞춰 정합니다 |
+
+전시 웹 출처는 `CORS_ALLOWED_ORIGINS` 가 아니라 `CORS_GUEST_ORIGINS` 에 넣습니다. 앞쪽은 refresh 쿠키를 함께 허용하는
+설정이라, 같은 사이트(`*.logothea.com`)인 전시 웹 스크립트가 로그인 사용자의 쿠키로 토큰을 받아 갈 수 있게 됩니다.
+뒤쪽은 쿠키 없이 Bearer 토큰만 허용합니다.
+
+전시 중 남용이 보이면 `GUEST_ENABLED='false'` 로 바꾸고 재시작합니다. 이미 나간 게스트 토큰도 바로 거부되고, 연결된
+게스트 STOMP 세션은 새 구독을 할 수 없습니다(맺어 둔 구독은 연결이 끊길 때까지 남습니다).
+
+`GUEST_TOKEN_TTL_SECONDS`(기본 3600), `GUEST_ISSUE_PER_MINUTE`(IP 당 1분 발급 수, 기본 20),
+`GUEST_ASSISTANT_PER_GUEST`(토큰당 질문 수, 기본 5)는 기본값으로 둬도 됩니다. 게스트는 주문 · 계좌 · 관심종목 ·
+시연 재생 제어를 쓸 수 없고, 구독도 방송 토픽만 할 수 있습니다.
+
 ### 5-4. 매매 신호 경로 제거에 따른 스키마 정리 (#127, 1회)
 
 백엔드는 `ddl-auto: update` 라 엔티티에서 뺀 컬럼과 테이블을 스스로 지우지 않습니다. #127 에서
