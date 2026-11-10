@@ -39,6 +39,8 @@ export const ALLOWED_FILES: readonly string[] = [
   'renderer/styles/tokens.css',
   'renderer/assets/fonts/PretendardVariable.woff2',
   'renderer/assets/fonts/JetBrainsMono-Variable.woff2',
+  // 콜 화면 (모바일 화면 명세 4절). 직전 콜 대조 표기
+  'renderer/components/call/diffMeta.ts',
 ]
 
 export type TerminalImport =

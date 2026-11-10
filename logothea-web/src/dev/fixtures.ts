@@ -117,14 +117,31 @@ function detail(ticker: string) {
   }
 }
 
-const SCRIPT: [string, string, string][] = [
-  ['CEO · Doug McMillon', 'Good morning, and thank you for joining us.', '좋은 아침입니다. 함께해 주셔서 감사합니다.'],
-  ['CEO · Doug McMillon', 'We grew comparable sales 4.6% in the U.S., with transactions up across income cohorts.', '미국 기존점 매출이 4.6% 늘었고, 모든 소득 계층에서 거래 건수가 늘었습니다.'],
-  ['CEO · Doug McMillon', 'eCommerce grew 25% globally and was profitable again this quarter.', '전자상거래는 전 세계에서 25% 성장했고 이번 분기에도 흑자를 냈습니다.'],
-  ['CFO · John David Rainey', 'We now expect full-year EPS toward the lower end of our range, reflecting tariff costs.', '관세 비용을 반영해 연간 EPS 는 전망 범위 하단을 예상합니다.'],
+/**
+ * 화면 확인용 상태. 개발 서버 주소에 `?fixture=ended-wait`(콜 종료 · 판단 대기) · `?fixture=ended`(판단 도착)를 붙이거나
+ * 붙이지 않으면 진행 중인 콜이다.
+ */
+function fixtureMode(): 'live' | 'ended-wait' | 'ended' {
+  const m = new URLSearchParams(window.location.search).get('fixture')
+  return m === 'ended' || m === 'ended-wait' ? m : 'live'
+}
+
+const SCRIPT: [string, string, string, string[]][] = [
+  ['CEO · Doug McMillon', 'Good morning, and thank you for joining us.', '좋은 아침입니다. 함께해 주셔서 감사합니다.', []],
+  ['CEO · Doug McMillon', 'We grew comparable sales 4.6% in the U.S., with transactions up across income cohorts.', '미국 기존점 매출이 4.6% 늘었고, 모든 소득 계층에서 거래 건수가 늘었습니다.', ['comparable sales']],
+  ['CEO · Doug McMillon', 'eCommerce grew 25% globally and was profitable again this quarter.', '전자상거래는 전 세계에서 25% 성장했고 이번 분기에도 흑자를 냈습니다.', []],
+  ['CFO · John David Rainey', 'We now expect full-year EPS toward the lower end of our range, reflecting tariff costs.', '관세 비용을 반영해 연간 EPS 는 전망 범위 하단을 예상합니다.', ['guidance']],
+  ['Kate McShane', 'Can you talk about how tariffs are affecting pricing decisions in grocery?', '관세가 식료품 가격 결정에 어떤 영향을 주고 있는지 말씀해 주시겠습니까?', []],
+  ['CEO · Doug McMillon', 'We are working with suppliers to keep prices low, and we are moving some sourcing.', '공급사와 함께 가격을 낮게 유지하려 하고 있으며 일부 조달처를 옮기고 있습니다.', []],
 ]
 
-function segment(i: number, startedAt: number) {
+const DIFFS: Record<number, { topic: string; change_type: string; summary_ko: string; current_claim: string; prior_claim: string; confidence: number; risk_score: number }> = {
+  1: { topic: 'demand', change_type: 'improved', summary_ko: '거래 건수 증가를 모든 소득 계층에서 확인했습니다.', current_claim: 'transactions up across income cohorts', prior_claim: 'transactions grew, led by higher-income households', confidence: 0.82, risk_score: 0.2 },
+  3: { topic: 'guidance', change_type: 'weakened', summary_ko: '연간 EPS 전망을 상향에서 범위 하단으로 낮췄습니다.', current_claim: '…toward the lower end of our range, reflecting tariff costs.', prior_claim: 'We are raising our full-year EPS guidance.', confidence: 0.86, risk_score: 0.78 },
+  5: { topic: 'supply', change_type: 'new_claim', summary_ko: '관세 대응으로 일부 조달처를 옮기고 있다고 처음 언급했습니다.', current_claim: 'we are moving some sourcing', prior_claim: '', confidence: 0.7, risk_score: 0.35 },
+}
+
+function segment(i: number, startedAt: number, end = false) {
   const [speaker, text] = SCRIPT[i % SCRIPT.length]
   return {
     ticker: 'WMT',
@@ -135,9 +152,43 @@ function segment(i: number, startedAt: number) {
     text,
     speaker,
     timestamp: startedAt + i,
+    ...(end ? { is_session_end: true } : {}),
   }
 }
 
+const EVALUATION = {
+  ticker: 'WMT',
+  call_id: CALL_ID,
+  generated_at: new Date().toISOString(),
+  judgment: { direction: 'BEARISH', magnitude: 0.42, confidence: 0.68, catalyst_type: 'GUIDANCE', rationale: 'Management lowered full-year EPS expectations toward the low end citing tariff costs, offsetting strong comparable sales.', risk_flags: [], hold_days: 5, model_version: 'fixture-model' },
+  gate: { action: 'WATCH', gate_result: 'soft_block', institutional_grade: 'B', institutional_grade_score: 64, position_intent_ko: '가이던스 하향을 확인하기 전까지 지켜봅니다.', no_trade_summary_ko: '수요는 강하지만 이익 전망이 낮아졌습니다.', risk_flags_ko: ['관세 비용 확대'], counter_thesis_ko: '기존점 매출과 전자상거래 흑자가 이익 하향을 상쇄할 수 있습니다.' },
+  evasion: { evasion_score: 0.31, directness: 0.7, pivot_detected: false, missing_topics: ['가격 인상 폭'], rationale_ko: '관세 질문에 구체적인 가격 인상 폭은 답하지 않았습니다.' },
+  impact_chain: [{ ticker: 'COST', relationship: 'retail peer', direction: 'negative', impact_score: 0.4, confidence: 0.6, rationale_ko: '같은 관세 비용 노출' }],
+  risk_plan: { available: true, direction: 'SHORT', reference_price: 98.42, stop_loss: 101.4, take_profit_1: 95.0, take_profit_2: 92.5, stop_pct: 3.0, take_profit_1_pct: -3.5, take_profit_2_pct: -6.0, risk_reward_1: 1.2, time_stop_days: 5, invalidation_text: '주가가 직전 고점을 넘으면 무효' },
+  warnings: [],
+  intelligence_available: true,
+}
+
+const encoder = new TextEncoder()
+function sseAnswer(): Response {
+  const frames = [
+    'event:meta\ndata:{"scope":"call","as_of_sequence":3,"as_of_time":"","anchor_sequence":null,"missing_sources":[]}\n\n',
+    'event:delta\ndata:{"text":"CFO는 관세로 늘어난 비용을 이유로 들었습니다 [S3]. "}\n\n',
+    'event:delta\ndata:{"text":"직전 콜에서는 연간 EPS 전망을 올렸는데, 이번에는 범위 하단을 예상한다고 말해 방향이 바뀌었습니다 [P1]."}\n\n',
+    'event:citations\ndata:[{"marker":"S3","type":"segment","ref":"3","title":null,"source":null,"published_at":null,"start_ms":210000,"speaker":"CFO · John David Rainey","quote":"…toward the lower end of our range, reflecting tariff costs.","verified":true},{"marker":"P1","type":"prior_statement","ref":null,"title":"2026년 1분기 콜","source":"Walmart","published_at":1747267200,"start_ms":null,"speaker":null,"quote":"We are raising our full-year EPS guidance.","verified":true}]\n\n',
+    'event:done\ndata:{"status":"answered","warnings":[]}\n\n',
+  ]
+  const body = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      for (const f of frames) {
+        await new Promise((r) => setTimeout(r, 400))
+        controller.enqueue(encoder.encode(f))
+      }
+      controller.close()
+    },
+  })
+  return new Response(body, { status: 200, headers: { 'content-type': 'text/event-stream' } })
+}
 export function createFixtureHttp(): Pick<HttpClient, 'getJson'> & Pick<HttpClient, 'request'> {
   const routes: [RegExp, (m: RegExpMatchArray) => unknown][] = [
     [/^\/api\/v1\/stocks\/sp500/, () => sp500()],
@@ -149,14 +200,21 @@ export function createFixtureHttp(): Pick<HttpClient, 'getJson'> & Pick<HttpClie
       { symbol: 'VIX', price: 15.2, change_percent: -3.1, trend: 'down', format: 'index', timestamp: now() },
     ]],
     [/^\/api\/v1\/earnings-calendar\/terminal-timeline/, () => timeline()],
-    [/^\/api\/v1\/demo\/earnings-call\/status/, () => ({ running: true, ticker: 'WMT', call_id: CALL_ID, published_count: 4, total_segments: 24 })],
+    [/^\/api\/v1\/demo\/earnings-call\/status/, () =>
+      fixtureMode() === 'live'
+        ? { running: true, ticker: 'WMT', call_id: CALL_ID, published_count: 4, total_segments: 24 }
+        : { running: false, ticker: 'WMT', last_run: { call_id: CALL_ID, outcome: 'COMPLETED', published_count: 6, total_segments: 6 } }],
     [/^\/api\/v1\/demo\/earnings-call\/speakers/, () => [
       { name: 'Doug McMillon', match_key: 'CEO · Doug McMillon', title: 'CEO', affiliation: 'Walmart Inc.', analyst: false },
       { name: 'John David Rainey', match_key: 'CFO · John David Rainey', title: 'CFO', affiliation: 'Walmart Inc.', analyst: false },
+      { name: 'Kate McShane', match_key: 'Kate McShane', title: 'Analyst', affiliation: 'Goldman Sachs', analyst: true },
     ]],
     [/^\/api\/v1\/glossary/, () => ({
       version: 'fixture',
-      terms: [{ term: 'comparable sales', aliases: ['comp sales'], ko: '기존점 매출', definition_ko: '1년 넘게 문을 연 매장만 놓고 작년 같은 기간과 비교한 매출 증가율입니다.', category: 'metric' }],
+      terms: [
+        { term: 'comparable sales', aliases: ['comp sales'], ko: '기존점 매출', definition_ko: '1년 넘게 문을 연 매장만 놓고 작년 같은 기간과 비교한 매출 증가율입니다. 새 매장을 열어서 늘어난 몫을 빼기 때문에, 원래 있던 가게에서 손님이 더 많이 사고 있는지를 보여 줍니다.', why_ko: '어닝콜에서 이 숫자가 오르면 회사의 기본 장사가 좋아지고 있다는 뜻으로 읽힙니다.', category: 'metric' },
+        { term: 'guidance', aliases: [], ko: '전망', definition_ko: '회사가 앞으로의 실적을 스스로 내다본 숫자입니다.', why_ko: '전망을 낮추면 경영진이 앞날을 조심스럽게 본다는 신호로 읽힙니다.', category: 'metric' },
+      ],
     })],
   ]
   return {
@@ -168,8 +226,9 @@ export function createFixtureHttp(): Pick<HttpClient, 'getJson'> & Pick<HttpClie
       }
       throw new Error(`fixture: ${path}`)
     },
-    async request() {
-      return new Response(JSON.stringify({ error: '개발용 가짜 서버는 질문을 받지 않습니다.' }), { status: 503 })
+    async request(path: string) {
+      if (path.startsWith('/api/v1/assistant/ask')) return sseAnswer()
+      return new Response(JSON.stringify({ error: 'fixture' }), { status: 404 })
     },
   }
 }
@@ -185,28 +244,34 @@ export function createFixtureStomp(): StompBridge {
   const start = () => {
     if (started) return
     started = true
-    // 앞 회차 일부를 바로 채우고, 이후 6초마다 한 문장씩
+    const mode = fixtureMode()
     let i = 0
-    const next = () => {
+    const next = (end = false) => {
       if (i >= SCRIPT.length) return
-      push('/topic/transcript/WMT', segment(i, startedAt))
-      const [, , ko] = SCRIPT[i]
-      push('/topic/transcript-translation/WMT', { ticker: 'WMT', call_id: CALL_ID, sequences: [i], text_ko: ko, terms_used: i === 1 ? ['comparable sales'] : [] })
+      push('/topic/transcript/WMT', segment(i, startedAt, end))
+      const [, , ko, terms] = SCRIPT[i]
+      push('/topic/transcript-translation/WMT', { ticker: 'WMT', call_id: CALL_ID, sequences: [i], text_ko: ko, terms_used: terms })
+      const diff = DIFFS[i]
+      if (diff) {
+        push('/topic/transcript-diff/WMT', {
+          ticker: 'WMT',
+          call_id: CALL_ID,
+          sequence: i,
+          previous_document: { document_id: 'prev', title: 'Q1', published_at: '2026-05-15', fiscal_quarter: '2026년 1분기', source_url: '' },
+          items: [{ ...diff, evidence: [] }],
+        })
+      }
       i++
     }
     setTimeout(() => {
-      next()
-      next()
-      next()
-      push('/topic/transcript-diff/WMT', {
-        ticker: 'WMT',
-        call_id: CALL_ID,
-        sequence: 1,
-        previous_document: { document_id: 'prev', title: 'Q1', published_at: '2026-05-15', fiscal_quarter: '2026년 1분기', source_url: '' },
-        items: [{ topic: '수요', change_type: 'improved', summary_ko: '거래 건수 증가를 처음으로 전 소득층에서 확인했습니다.', current_claim: 'transactions up across income cohorts', prior_claim: 'transactions grew', confidence: 0.8, risk_score: 0.2, evidence: [] }],
-      })
+      if (mode === 'live') {
+        for (let k = 0; k < 4; k++) next()
+        setInterval(() => next(), 8000)
+        return
+      }
+      while (i < SCRIPT.length) next(i === SCRIPT.length - 1)
+      if (mode === 'ended') setTimeout(() => push('/topic/evaluation/WMT', EVALUATION), 300)
     }, 600)
-    setInterval(next, 6000)
   }
 
   const setStatus = (next: WsStatus) => {

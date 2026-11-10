@@ -7,7 +7,7 @@ import Intro from './components/Intro'
 import Home from './screens/Home'
 import Market from './screens/Market'
 import Me from './screens/Me'
-import CallPlaceholder from './screens/CallPlaceholder'
+import CallScreen from './screens/call/CallScreen'
 
 /** 시세 구독도 앱 전체에서 한 번만 건다(시장 표 · 지도 · 브리핑이 같은 store 를 읽는다). */
 function PricesFeed() {
@@ -23,7 +23,7 @@ export default function App() {
       <PricesFeed />
       {route === '/' && <Home />}
       {route === '/market' && <Market />}
-      {route === '/call' && <CallPlaceholder />}
+      {route === '/call' && <CallScreen />}
       {route === '/me' && <Me />}
       <TabBar route={route} />
       <SheetHost />
