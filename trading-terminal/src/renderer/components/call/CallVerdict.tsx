@@ -3,6 +3,7 @@ import type { EarningsSummary, ImpactDirection, SignalDirection } from '../../ty
 import type { TranscriptDiffChangeType } from '../../store/useTranscriptDiffStore'
 import { CHANGE_META, CHANGE_ORDER } from './diffMeta'
 import ScrollEdge from './ScrollEdge'
+import { catalystLabel } from '../../lib/catalystLabel'
 
 interface CallVerdictProps {
   summary: EarningsSummary | null
@@ -24,24 +25,6 @@ const DIRECTION_LABELS: Record<SignalDirection, string> = {
   NEUTRAL: '중립',
 }
 
-/**
- * 엔진의 촉매 유형 코드 → 한국어. 엔진이 같은 뜻을 대문자와 소문자 두 표기로 보내는 것을 실측했다.
- * 조회 전에 대문자로 맞추고, 모르는 코드는 숨기지 않고 그대로 보여 준다.
- */
-const CATALYST_LABELS: Record<string, string> = {
-  EARNINGS_REPORT: '실적 발표',
-  EARNINGS_GROWTH: '실적 성장',
-  EARNINGS_GUIDANCE_UPGRADE: '가이던스 상향',
-  EARNINGS_GUIDANCE_DOWNGRADE: '가이던스 하향',
-  EARNINGS_MISS: '실적 미달',
-  GUIDANCE: '가이던스',
-  MARGIN_EXPANSION: '마진 개선',
-  MARGIN_COMPRESSION: '마진 악화',
-  PRODUCT_LAUNCH: '신제품',
-  MACRO: '거시 환경',
-  UNCLASSIFIED: '분류 안 됨',
-}
-
 /** 실행 게이트의 `action` — 방향이 아니라 실행 허용 여부다. "매수/매도" 로 읽히지 않게 옮긴다. */
 const ACTION_LABELS: Record<string, string> = {
   AVOID: '실행 보류',
@@ -53,9 +36,36 @@ const ACTION_LABELS: Record<string, string> = {
 
 /** 실행 조건 — 통과는 올리브, 조건부 보류는 ink-2, 차단은 포르피라 글자 (design-system 종합 판단). */
 const GATE_META: Record<string, { label: string; color: string }> = {
-  pass: { label: '통과', color: 'rgb(var(--olive))' },
+  pass: { label: '통과', color: 'var(--olive-ink)' },
   soft_block: { label: '조건부 보류', color: 'var(--ink-2)' },
-  hard_block: { label: '차단', color: 'rgb(var(--porphyra))' },
+  hard_block: { label: '차단', color: 'var(--porphyra-ink)' },
+}
+
+/**
+ * 엔진의 관계 표기 → 한국어. 엔진은 영어 문구로 보낸다(ai-engine earnings_intelligence_service).
+ * 모르는 문구는 그대로 둔다.
+ */
+const RELATIONSHIP_LABELS: Record<string, string> = {
+  'user-supplied related ticker': '관련 종목',
+  'broad market ETF': '시장 ETF',
+  'large-cap growth ETF': '대형 성장주 ETF',
+  'GPU peer': 'GPU 경쟁사',
+  'foundry supplier': '파운드리 공급사',
+  'AI networking peer': 'AI 네트워크 경쟁사',
+  'HBM memory supplier': 'HBM 공급사',
+  'AI server supply-chain': 'AI 서버 공급망',
+  'cloud/AI peer': '클라우드 · AI 경쟁사',
+  'cloud peer': '클라우드 경쟁사',
+  'AI capex peer': 'AI 투자 경쟁사',
+  'enterprise cloud peer': '기업용 클라우드 경쟁사',
+  'digital ads peer': '디지털 광고 경쟁사',
+  'social ads peer': '소셜 광고 경쟁사',
+  'AI infrastructure supplier': 'AI 인프라 공급사',
+  'EV peer': '전기차 경쟁사',
+  'auto peer': '자동차 경쟁사',
+  'battery material exposure': '배터리 소재',
+  'component supplier': '부품 공급사',
+  'wireless component supplier': '무선 부품 공급사',
 }
 
 const IMPACT_LABELS: Record<ImpactDirection, string> = {
@@ -89,9 +99,10 @@ function signedPct(v: number | null): string {
  */
 export default function CallVerdict({ summary, diffCounts, previousCallLabel, onOpenTicker, demoStopped = false, topInset }: CallVerdictProps) {
   return (
-    <section className="frost relative h-full rounded-[28px] overflow-hidden" aria-label="종합 판단">
+    <section className="cloud relative h-full rounded-[28px] overflow-hidden" aria-label="종합 판단">
       <ScrollEdge height={topInset + 12} />
-      <div className="absolute inset-0 overflow-y-auto" style={{ paddingTop: topInset }}>
+      {/* 위쪽에 판단 / 질문 전환이 떠 있어, 본문이 그 아래로 지나가면 글자가 겹친다. 스크롤 영역을 전환 아래에서 시작한다 */}
+      <div className="absolute inset-x-0 bottom-0 overflow-y-auto" style={{ top: topInset }}>
         <div className="px-8 pt-4 pb-10 flex flex-col gap-6 max-w-[820px]">
           {summary ? (
             <Verdict summary={summary} onOpenTicker={onOpenTicker} />
@@ -142,9 +153,7 @@ function Verdict({ summary, onOpenTicker }: { summary: EarningsSummary; onOpenTi
   const { judgment, gate, evasion, impactChain, riskPlan, warnings } = summary
   const action = gate?.action ? ACTION_LABELS[gate.action] ?? gate.action : null
   const gateMeta = gate?.gateResult ? GATE_META[gate.gateResult] ?? { label: gate.gateResult, color: 'var(--ink-2)' } : null
-  const catalyst = judgment.catalystType
-    ? CATALYST_LABELS[judgment.catalystType.toUpperCase()] ?? judgment.catalystType
-    : null
+  const catalyst = judgment.catalystType ? catalystLabel(judgment.catalystType) : null
   const counterItems = [
     ...(gate?.counterThesisKo ? [gate.counterThesisKo] : []),
     ...(gate?.riskFlagsKo ?? []),
@@ -240,11 +249,16 @@ function Verdict({ summary, onOpenTicker }: { summary: EarningsSummary; onOpenTi
                   >
                     {link.ticker}
                   </button>
-                  <span className="text-ink-3 w-16">{link.relationship ?? '—'}</span>
-                  <span className="text-ink-2 w-10">{link.direction ? IMPACT_LABELS[link.direction] : '—'}</span>
-                  {/* 점수가 없다는 건 "영향 0" 이 아니라 "잴 근거가 없었다" 는 뜻이다. */}
+                  <span className="text-ink-3 w-28 shrink-0 truncate" title={link.relationship ?? undefined}>
+                    {link.relationship ? RELATIONSHIP_LABELS[link.relationship] ?? link.relationship : '—'}
+                  </span>
+                  {/* 점수가 없다는 건 "영향 0" 이 아니라 "잴 근거가 없었다" 는 뜻이다. 그때 엔진의 방향은 이 종목이 아니라
+                      콜 문장 전체의 어조에서 나온 값이라, 종목별 방향처럼 보이지 않게 비운다 */}
+                  <span className="text-ink-2 w-10 shrink-0">
+                    {link.impactScore !== null && link.direction ? IMPACT_LABELS[link.direction] : '—'}
+                  </span>
                   {link.impactScore === null ? (
-                    <span className="text-ink-3">근거 없음</span>
+                    <span className="text-ink-3 shrink-0">근거 없음</span>
                   ) : (
                     <span className="tabular-nums text-ink-3">{pct(link.impactScore)}</span>
                   )}
@@ -337,7 +351,7 @@ function DiffSummary({
 
 function Fold({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
   return (
-    <details className="group glass rim rounded-[18px] px-4 py-3 [&_summary::-webkit-details-marker]:hidden">
+    <details className="group cloud-s rounded-[18px] px-4 py-3 [&_summary::-webkit-details-marker]:hidden">
       <summary className="flex items-center justify-between gap-3 cursor-pointer list-none">
         <span className="text-[14px] font-semibold text-ink-1 on-glass">{title}</span>
         <span className="flex items-center gap-2 text-[12px] text-ink-3">
@@ -358,8 +372,8 @@ function Meter({ label, value }: { label: string; value: number | null }) {
       <span className="text-[12px] text-ink-3 w-12 shrink-0">{label}</span>
       {/* 값이 없으면 0% 막대로 그리지 않는다 — 0 과 미상은 다른 이야기다. */}
       <div
-        className="flex-1 h-1 rounded-full bg-white/[0.08]"
-        style={value === null ? { backgroundImage: 'repeating-linear-gradient(90deg, rgba(251,250,246,0.18) 0 3px, transparent 3px 6px)' } : undefined}
+        className="flex-1 h-1 rounded-full bg-wash/[0.08]"
+        style={value === null ? { backgroundImage: 'repeating-linear-gradient(90deg, var(--chart-hatch) 0 3px, transparent 3px 6px)' } : undefined}
       >
         {value !== null && <div className="h-full rounded-full bg-ink-2" style={{ width: `${value * 100}%` }} />}
       </div>

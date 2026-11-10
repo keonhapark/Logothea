@@ -74,8 +74,8 @@ export default function Modal({
         aria-modal="true"
         aria-label={ariaLabel}
         // 대화상자는 읽을 내용이 있어 서리 유리 + 금테로 둔다
-        className="frost rim rim-float relative z-10 rounded-[30px]
-                   shadow-[0_24px_60px_-16px_rgba(0,0,0,0.7)] flex flex-col"
+        className="read relative z-10 rounded-[30px]
+                   shadow-dialog flex flex-col"
         style={{ animation: 'modal-pop-in 380ms cubic-bezier(0.3, 1.35, 0.5, 1)' }}
       >
         {children}

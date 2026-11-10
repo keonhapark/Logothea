@@ -48,7 +48,7 @@ export default function HoldingsTable({ rows, onRowClick, callStatus, onRetryCal
         {callStatus === 'error' && (
           <span className="flex items-center gap-2 text-[12.5px] text-ink-3">
             <span className="text-danger">콜 일정을 불러오지 못했습니다</span>
-            <button type="button" className="gbtn rim gbtn-sm" onClick={onRetryCalls}>
+            <button type="button" className="gbtn gbtn-sm" onClick={onRetryCalls}>
               다시 시도
             </button>
           </span>
@@ -90,8 +90,8 @@ function Th({ children, align = 'right' }: { children: ReactNode; align?: 'left'
   return (
     <th
       scope="col"
-      className={`sticky top-0 z-[1] bg-[#17181b] px-3 h-9 text-[12px] font-medium text-ink-3 whitespace-nowrap
-                  border-b border-white/[0.08] ${align === 'left' ? 'text-left' : 'text-right'}`}
+      className={`sticky top-0 z-[1] bg-table-head px-3 h-9 text-[12px] font-medium text-ink-3 whitespace-nowrap
+                  border-b border-edge/[0.08] ${align === 'left' ? 'text-left' : 'text-right'}`}
     >
       {children}
     </th>
@@ -107,14 +107,14 @@ function Row({
   callStatus: EarningsTimelineStatus
   onClick: (ticker: string) => void
 }) {
-  const td = 'px-3 h-12 border-b border-white/[0.06] text-right tabular-nums whitespace-nowrap'
+  const td = 'px-3 h-12 border-b border-edge/[0.06] text-right tabular-nums whitespace-nowrap'
   return (
     // 행 어디를 눌러도 열리지만, 키보드 · 화면 낭독기는 종목 셀의 버튼으로 연다 (표 구조를 지키기 위해 행에 role 을 주지 않는다)
     <tr
       onClick={() => onClick(row.ticker)}
-      className="cursor-pointer transition-colors duration-200 hover:bg-white/[0.04] focus-within:bg-white/[0.06]"
+      className="cursor-pointer transition-colors duration-200 hover:bg-wash/[0.04] focus-within:bg-wash/[0.06]"
     >
-      <td className="px-3 h-12 border-b border-white/[0.06]">
+      <td className="px-3 h-12 border-b border-edge/[0.06]">
         <button
           type="button"
           onClick={(e) => {

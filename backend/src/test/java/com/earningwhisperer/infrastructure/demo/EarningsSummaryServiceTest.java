@@ -149,10 +149,53 @@ class EarningsSummaryServiceTest {
 
         service.summarizeAndPublish("ORCL", "call-1", SCRIPT);
 
+        assertThat(sent.get().asOfEpoch()).isNull();
         assertThat(sent.get().relatedTickers()).containsExactly("NVDA", "MSFT");
         assertThat(sent.get().question()).isEqualTo("capex 전망은?");
         assertThat(sent.get().directionHint()).isEqualTo("BULLISH");
         assertThat(sent.get().eventText()).contains("OCI 매출이 52% 늘었습니다.").contains("RPO");
+    }
+
+    @Test
+    void historicalSummaryUsesMaximumSegmentEndAndSerializesCutoff() throws Exception {
+        var historical = new DemoEarningsCallScript("ORCL", "Oracle", "Q4", "demo",
+                "2026-08-20T12:00:00Z", null, null, null, List.of(
+                new DemoEarningsCallScript.Segment(1, 1000, 4500, "CEO", "Revenue rose."),
+                new DemoEarningsCallScript.Segment(0, 0, 1000, "CEO", "Opening remarks.")));
+        var request = captureIntelligenceRequest(historical);
+        long expected = java.time.Instant.parse("2026-08-20T12:00:04Z").getEpochSecond();
+        assertThat(request.asOfEpoch()).isEqualTo(expected);
+        var json = new com.fasterxml.jackson.databind.ObjectMapper().valueToTree(request);
+        assertThat(json.path("as_of_epoch").asLong()).isEqualTo(expected);
+        assertThat(json.has("asOfEpoch")).isFalse();
+    }
+
+    @Test
+    void invalidHistoricalTimeKeepsLegacyWireCompatibility() {
+        var script = new DemoEarningsCallScript("ORCL", "Oracle", "Q4", "demo",
+                "invalid", null, null, null, SCRIPT.segments());
+        var request = captureIntelligenceRequest(script);
+        assertThat(request.asOfEpoch()).isNull();
+        var json = new com.fasterxml.jackson.databind.ObjectMapper().valueToTree(request);
+        assertThat(json.has("as_of_epoch")).isFalse();
+    }
+
+    private EarningsSummaryModels.IntelligenceRequest captureIntelligenceRequest(DemoEarningsCallScript script) {
+        AtomicReference<EarningsSummaryModels.IntelligenceRequest> sent = new AtomicReference<>();
+        AiEngineClient client = new AiEngineClient(null, true, true) {
+            @Override
+            public Optional<EarningsSummaryModels.AnalyzeResponse> analyze(EarningsSummaryModels.AnalyzeRequest request) {
+                return Optional.of(analyzeResponse("BULLISH", 0.74));
+            }
+            @Override
+            public Optional<EarningsSummaryModels.IntelligenceResponse> earningsIntelligence(EarningsSummaryModels.IntelligenceRequest request) {
+                sent.set(request);
+                return Optional.empty();
+            }
+        };
+        new EarningsSummaryService(client, capturingPublisher(new AtomicReference<>()), priceCache(Map.of()))
+                .summarizeAndPublish("ORCL", "historical-call", script);
+        return sent.get();
     }
 
     @Test

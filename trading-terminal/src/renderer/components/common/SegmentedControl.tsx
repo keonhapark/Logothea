@@ -62,12 +62,12 @@ export default function SegmentedControl<V extends string = string>({
     <div
       ref={trackRef}
       role="tablist"
-      className={`glass rim relative inline-flex p-1 rounded-full ${className}`}
+      className={`dent relative inline-flex p-1 rounded-full ${className}`}
     >
       {thumb && (
         <span
           aria-hidden="true"
-          className="glass rim rim-float absolute top-1 bottom-1 left-0 rounded-full transition-[transform,width] duration-[400ms] ease-spring"
+          className="cloud-s rim absolute top-1 bottom-1 left-0 rounded-full transition-[transform,width] duration-[400ms] ease-spring"
           style={{ width: thumb.width, transform: `translateX(${thumb.left}px)` }}
         />
       )}

@@ -8,8 +8,10 @@ Type=simple
 User=ubuntu
 WorkingDirectory=/opt/earning-whisperer
 EnvironmentFile=/opt/earning-whisperer/backend.env
-# 1GB 서버: 힙 상한 384MB. 메타스페이스·스레드 포함 실사용 약 550MB.
-ExecStart=/usr/bin/java -Xms128m -Xmx384m -XX:MaxMetaspaceSize=128m -XX:+UseSerialGC -Xss512k -jar /opt/earning-whisperer/backend.jar
+# 힙 상한 384MB. 메타스페이스는 기동 직후 약 107MB 를 쓰고, 128MB 상한에서는 운영 3일 만에
+# OutOfMemoryError: Metaspace 가 났다(2026-10-29). OOM 뒤에도 JVM 이 살아 있어 Restart=always 가
+# 동작하지 않았으므로, ExitOnOutOfMemoryError 로 프로세스를 끝내 systemd 가 다시 띄우게 한다.
+ExecStart=/usr/bin/java -Xms128m -Xmx384m -XX:MaxMetaspaceSize=192m -XX:+UseSerialGC -Xss512k -XX:+ExitOnOutOfMemoryError -jar /opt/earning-whisperer/backend.jar
 Restart=always
 RestartSec=10
 StartLimitIntervalSec=300

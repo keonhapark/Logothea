@@ -52,7 +52,7 @@ export default function PriceCard({
       <div className="flex gap-1 flex-wrap" role="group" aria-label="차트 기간">
         {TIMEFRAMES.map((tf) =>
           tf === '30일' ? (
-            <span key={tf} className="glass rim rim-float rounded-full px-3 py-1 text-[12px] font-semibold text-ink-1">
+            <span key={tf} className="cloud-s rim rounded-full px-3 py-1 text-[12px] font-semibold text-ink-1">
               {tf}
             </span>
           ) : (
@@ -134,7 +134,7 @@ function Sparkline({ series }: { series: readonly PricePoint[] }) {
   return (
     <figure className="flex flex-col gap-1">
       <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="w-full h-[120px]" role="img" aria-label="30일 종가 추이">
-        <path d={path.area} fill="rgba(251,250,246,0.06)" />
+        <path d={path.area} fill="var(--chart-area)" />
         <path d={path.line} fill="none" stroke="var(--ink-2)" strokeWidth="1.5" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
       </svg>
       <figcaption className="flex justify-between num text-[11px] text-ink-3">

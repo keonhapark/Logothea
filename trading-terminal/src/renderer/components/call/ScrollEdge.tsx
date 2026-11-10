@@ -9,7 +9,7 @@ export default function ScrollEdge({ height }: { height: number }) {
       className="pointer-events-none absolute inset-x-0 top-0 z-[1]"
       style={{
         height,
-        background: 'linear-gradient(180deg, rgba(18,19,22,0.92) 0%, rgba(18,19,22,0.7) 55%, rgba(18,19,22,0) 100%)',
+        background: 'linear-gradient(180deg, rgb(var(--scrim-rgb) / 0.92) 0%, rgb(var(--scrim-rgb) / 0.7) 55%, rgb(var(--scrim-rgb) / 0) 100%)',
       }}
     />
   )

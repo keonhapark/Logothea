@@ -76,6 +76,9 @@ class LegacyPublishResult(BaseModel):
 
     legacy_published: bool = False
     enriched_published: bool = False
+    profile_published: bool = False
+    profile_channel: str | None = None
+    retry_queued: int = 0
     error: str | None = None
 
 

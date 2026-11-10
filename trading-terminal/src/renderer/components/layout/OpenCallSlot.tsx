@@ -42,7 +42,7 @@ export default function OpenCallSlot({ active }: { active: boolean }) {
 
   return (
     <div
-      className={`glass rim rim-float group flex items-center gap-2 rounded-[20px] pl-3.5 pr-1.5 py-1.5
+      className={`cloud-s rim rim-float group flex items-center gap-2 rounded-[20px] pl-3.5 pr-1.5 py-1.5
                   ${active ? '' : 'opacity-90 hover:opacity-100'}`}
     >
       <button

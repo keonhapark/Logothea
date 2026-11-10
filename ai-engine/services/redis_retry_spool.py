@@ -57,5 +57,20 @@ class RedisRetrySpool:
     def count(self) -> int:
         return len(self.load())
 
+    def record_attempt(self, retry_id: str, *, error: str | None = None) -> None:
+        """Update one entry without overwriting messages appended during I/O."""
+        with self._lock:
+            entries = self.load()
+            remaining = []
+            for entry in entries:
+                if entry.get("retry_id") == retry_id:
+                    if error is None:
+                        continue
+                    entry["attempts"] = int(entry.get("attempts", 0)) + 1
+                    entry["last_error"] = error
+                    entry["updated_at"] = int(time.time())
+                remaining.append(entry)
+            self.replace(remaining)
+
 
 __all__ = ["RedisRetrySpool"]

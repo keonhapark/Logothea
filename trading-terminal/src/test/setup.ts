@@ -87,6 +87,11 @@ vi.mock('electron', () => {
       handle: vi.fn(),
       on: vi.fn(),
     },
+    nativeTheme: {
+      themeSource: 'system',
+      shouldUseDarkColors: true,
+      on: vi.fn(),
+    },
   }
 })
 

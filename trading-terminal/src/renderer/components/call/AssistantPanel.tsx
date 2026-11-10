@@ -161,7 +161,7 @@ function ScopeHeader({
     )
   }
   return (
-    <div className="shrink-0 rounded-[18px] px-4 py-3 flex flex-col gap-1.5 bg-white/[0.05] border border-white/10">
+    <div className="shrink-0 rounded-[18px] px-4 py-3 flex flex-col gap-1.5 bg-wash/[0.05] border border-edge/10">
       <div className="flex items-center justify-between gap-2">
         <span className="text-[12px] font-semibold text-ink-2">이 대목에 대해 묻습니다</span>
         <button type="button" onClick={onClearAnchor} className="text-[12px] text-ink-3 hover:text-ink-1">
@@ -172,7 +172,7 @@ function ScopeHeader({
         <button
           type="button"
           onClick={() => onFocusSequence(anchor.sequence)}
-          className="text-left flex flex-col gap-0.5 rounded-[10px] hover:bg-white/[0.04]"
+          className="text-left flex flex-col gap-0.5 rounded-[10px] hover:bg-wash/[0.04]"
           title="자막에서 보기"
         >
           <span className="text-[11.5px] text-ink-3">
@@ -260,7 +260,7 @@ function TurnView({
 
   return (
     <article className="flex flex-col gap-2.5" aria-label={`질문: ${turn.question}`}>
-      <p className="self-end max-w-[88%] rounded-[16px] px-3.5 py-2 text-[13.5px] text-ink-1 leading-snug select-text bg-white/[0.07]">
+      <p className="self-end max-w-[88%] rounded-[16px] px-3.5 py-2 text-[13.5px] text-ink-1 leading-snug select-text bg-wash/[0.07]">
         {turn.question}
       </p>
 
@@ -271,7 +271,11 @@ function TurnView({
           <p className="text-[14px] text-ink-1 leading-[1.7] select-text whitespace-pre-wrap">
             {splitAnswer(visibleText(turn)).map((part, i) =>
               part.kind === 'text' ? (
-                <span key={i}>{part.text}</span>
+                part.strong ? (
+                  <strong key={i} className="font-semibold">{part.text}</strong>
+                ) : (
+                  <span key={i}>{part.text}</span>
+                )
               ) : (
                 <CiteChip
                   key={i}
@@ -331,7 +335,7 @@ function TurnView({
   )
 }
 
-/** 본문 속 근거 번호. 원문과 일치하는지 확인하지 못한 근거는 점선 테두리로 약하게 둔다. */
+/** 본문 속 근거 번호. 답의 수치를 원문에서 확인하지 못한 근거는 점선 테두리로 약하게 둔다. */
 function CiteChip({
   number,
   citation,
@@ -351,8 +355,10 @@ function CiteChip({
       onClick={onClick}
       disabled={!citation}
       className={`inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 mx-0.5 align-[2px] rounded-full text-[10.5px] font-semibold tabular-nums
-                  ${weak ? 'border border-dashed border-white/25 text-ink-3' : 'border border-white/20 text-ink-2 hover:text-ink-1 hover:border-white/40'}`}
-      aria-label={`근거 ${number ?? ''}${weak ? ' — 원문과 일치하지 않을 수 있음' : ''}`}
+                  ${weak ? 'border border-dashed border-edge/25 text-ink-3' : 'border border-edge/20 text-ink-2 hover:text-ink-1 hover:border-edge/40'}`}
+      aria-label={`근거 ${number ?? ''}${
+        !weak ? '' : !citation || citation.type === null ? ' — 근거 목록에 없는 표시' : ' — 수치를 원문에서 확인하지 못함'
+      }`}
     >
       {number ?? '·'}
     </button>
@@ -391,8 +397,8 @@ function CitationList({
                 else refs.current.delete(c.marker)
               }}
               className={`rounded-[14px] px-3 py-2 flex gap-2.5 transition-colors duration-500 ${
-                flashMarker === c.marker ? 'bg-white/[0.08]' : 'bg-white/[0.03]'
-              } ${weak ? 'border border-dashed border-white/15' : ''}`}
+                flashMarker === c.marker ? 'bg-wash/[0.08]' : 'bg-wash/[0.03]'
+              } ${weak ? 'border border-dashed border-edge/15' : ''}`}
             >
               <span className="text-[11px] font-semibold tabular-nums text-ink-3 pt-px w-4 shrink-0 text-right">
                 {numbers.get(c.marker)}
@@ -412,9 +418,14 @@ function CitationList({
                 </span>
                 {c.title && <span className="text-[12.5px] text-ink-1 font-medium leading-snug">{c.title}</span>}
                 {c.quote && (
-                  <p className={`text-[12.5px] leading-snug select-text line-clamp-3 ${weak ? 'text-ink-3' : 'text-ink-2'}`}>{c.quote}</p>
+                  <p className="text-[12.5px] leading-snug select-text line-clamp-3 text-ink-2">{c.quote}</p>
                 )}
-                {weak && <span className="text-[11px] text-ink-3">원문과 일치하지 않을 수 있습니다</span>}
+                {/* verified=false 는 인용문이 틀렸다는 뜻이 아니다. 답 문장의 수치를 이 근거 원문에서 찾지 못했다는 뜻이다 */}
+                {weak && (
+                  <span className="text-[11px] text-ink-3">
+                    {c.type === null ? '근거 목록에 없는 표시입니다' : '이 근거를 단 문장의 수치를 원문에서 확인하지 못했습니다'}
+                  </span>
+                )}
                 {Number.isFinite(sequence) && (
                   <button
                     type="button"
@@ -463,7 +474,7 @@ function Composer({
   }
 
   return (
-    <div className="shrink-0 flex flex-col gap-2 pt-3 border-t border-white/[0.08]">
+    <div className="shrink-0 flex flex-col gap-2 pt-3 border-t border-edge/[0.08]">
       <p className="text-[11.5px] text-ink-3 leading-snug">{ASSISTANT_DISCLAIMER}</p>
 
       {remaining <= 0 && !streaming ? (
@@ -539,7 +550,8 @@ const STATUS_ANNOUNCE: Record<AssistantTurn['status'], string> = {
 
 /** 스트리밍 중에는 끝에 아직 닫히지 않은 근거 표시(`[S2` 처럼)가 걸릴 수 있어 그 조각을 숨긴다. */
 function visibleText(turn: AssistantTurn): string {
-  return turn.status === 'streaming' ? turn.text.replace(/\[[A-Z]?\d*$/, '') : turn.text
+  // 스트리밍 중 아직 닫히지 않은 근거 표시(`[S1`)와 반쯤 온 강조 기호(`*`)는 다음 조각이 올 때까지 숨긴다
+  return turn.status === 'streaming' ? turn.text.replace(/\[[A-Z]?\d*$/, '').replace(/(?<!\*)\*$/, '') : turn.text
 }
 
 const KST_TIME = new Intl.DateTimeFormat('ko-KR', { timeZone: 'Asia/Seoul', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit' })

@@ -330,7 +330,9 @@ def test_analyze_and_persist_endpoint_returns_envelope_and_storage(monkeypatch) 
     client = TestClient(main.app)
     fake_repo = _FakeRepository()
     main.app.state.event_store_repository = fake_repo
-    monkeypatch.setattr(main.app.state, 'dispatch_analysis', _fake_dispatch)
+    # pytest 9.2 의 monkeypatch.setattr 는 starlette State 의 속성을 찾지 못하고, 복원할 때 원래 값을 지운다.
+    # State 가 값을 담는 _state 딕셔너리를 직접 바꿔 버전과 무관하게 복원되게 한다.
+    monkeypatch.setitem(main.app.state._state, 'dispatch_analysis', _fake_dispatch)
 
     resp = client.post(
         '/v1/engine/analyze-and-persist',

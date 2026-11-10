@@ -90,7 +90,9 @@ export function applyRefraction(el: HTMLElement, bezel: number): () => void {
         const nx = sdRoundRect(px + e, py, hw, hh, radius) - sdRoundRect(px - e, py, hw, hh, radius)
         const ny = sdRoundRect(px, py + e, hw, hh, radius) - sdRoundRect(px, py - e, hw, hh, radius)
         const nl = Math.hypot(nx, ny) || 1
-        const k = Math.pow(1 - Math.max(0, d) / edge, 2.2)
+        // 원형 단면 렌즈 — 가장자리로 갈수록 기울기가 가팔라 뒤의 장면이 볼록 렌즈처럼 휜다
+        const t = 1 - Math.max(0, d) / edge
+        const k = 1 - Math.sqrt(Math.max(0, 1 - t * t))
         dx = (nx / nl) * k
         dy = (ny / nl) * k
       }
@@ -138,10 +140,10 @@ export function applyRefraction(el: HTMLElement, bezel: number): () => void {
   filter.append(feImage, feDisp)
   filterDefs().appendChild(filter)
 
-  // 색상 유리 버튼은 채도 · 밝기를 더 올리고, 서리 유리는 원래의 짙은 흐림을 지킨다 (tokens.css)
+  // 색상 유리 버튼은 채도 · 밝기를 더 올리고, 읽는 유리는 짙은 흐림을 지킨다 (tokens.css)
   const tinted = /\bgbtn-(lapis|olive|porphyra)\b/.test(el.className)
-  const frosted = /\bfrost\b/.test(el.className)
-  const base = frosted ? 'var(--frost-filter)' : tinted ? 'var(--tint-filter)' : 'var(--glass-filter)'
+  const reading = /\bread\b/.test(el.className)
+  const base = reading ? 'var(--read-filter)' : tinted ? 'var(--tint-filter)' : 'var(--glass-filter)'
   el.style.backdropFilter = `url(#${id}) ${base}`
 
   return () => {

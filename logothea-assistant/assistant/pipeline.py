@@ -11,12 +11,12 @@ import logging
 import time
 from collections.abc import AsyncIterator, Callable
 from contextlib import aclosing
-from datetime import UTC, datetime
 from typing import Any
 
-from assistant.citations import verify_citations
+from assistant.agent import AgentAnswerer, AgentFinished
+from assistant.citations import MARKER_RE, verify_citations
 from assistant.classifier import Classification, GlossaryProvider, classify, glossary_answer
-from assistant.context import ContextAssembler, ContextError
+from assistant.context import BaseSources, ContextAssembler, ContextError, Evidence, meta_payload
 from assistant.llm import LLMClient, LLMError, StreamDone, TextDelta, Usage
 from assistant.prompts import NO_EVIDENCE_PHRASE, REFUSAL_SUGGESTIONS, REFUSAL_TEXTS, build_generation_messages
 from assistant.schemas import AskRequest
@@ -41,11 +41,12 @@ def error_event(code: str) -> Event:
 
 class AnswerPipeline:
     def __init__(self, *, llm: LLMClient, assembler: ContextAssembler, glossary: GlossaryProvider,
-                 clock: Callable[[], float] = time.monotonic) -> None:
+                 clock: Callable[[], float] = time.monotonic, agent: AgentAnswerer | None = None) -> None:
         self._llm = llm
         self._assembler = assembler
         self._glossary = glossary
         self._clock = clock
+        self._agent = agent
 
     async def run(self, request: AskRequest) -> AsyncIterator[Event]:
         started = self._clock()
@@ -53,7 +54,7 @@ class AnswerPipeline:
         base_task = asyncio.create_task(self._assembler.gather_base(request))
         try:
             try:
-                classification, classify_usage = await classify(self._llm, request)
+                classification, classify_usage = await classify(self._llm, request, await self._anchor(request, base_task))
             except LLMError as exc:
                 logger.warning("질의응답 실패 code=%s", exc.code, exc_info=True)
                 yield error_event(exc.code)
@@ -62,7 +63,7 @@ class AnswerPipeline:
             category = classification.category
 
             if category in REFUSAL_TEXTS:
-                yield "meta", _meta(request, request.as_of_sequence, request.anchor_sequence, [])
+                yield "meta", meta_payload(request, request.as_of_sequence, request.anchor_sequence, [])
                 yield "delta", {"text": REFUSAL_TEXTS[category]}
                 yield self._done(started, usage, category, status="refused", refusal_reason=category,
                                  suggested=REFUSAL_SUGGESTIONS[category])
@@ -71,11 +72,17 @@ class AnswerPipeline:
             if category == "glossary":
                 entry = await self._glossary_entry(classification)
                 if entry is not None:
-                    yield "meta", _meta(request, request.as_of_sequence, request.anchor_sequence, [])
+                    yield "meta", meta_payload(request, request.as_of_sequence, request.anchor_sequence, [])
                     yield "delta", {"text": glossary_answer(entry)}
                     yield self._done(started, usage, category, status="answered")
                     return
                 category = "answer"
+
+            if self._agent is not None:
+                async with aclosing(self._run_agent(request, base_task, category, usage, started)) as agent_events:
+                    async for event in agent_events:
+                        yield event
+                return
 
             try:
                 base = await base_task
@@ -86,7 +93,7 @@ class AnswerPipeline:
                 yield error_event(exc.code)
                 return
 
-            yield "meta", _meta(request, bundle.as_of_sequence, bundle.anchor_sequence, bundle.missing_sources)
+            yield "meta", meta_payload(request, bundle.as_of_sequence, bundle.anchor_sequence, bundle.missing_sources)
             parts: list[str] = []
             try:
                 # 소비하는 쪽이 끊으면 aclosing 이 LLM 스트림을 닫아 공급자 연결과 과금을 멈춘다.
@@ -103,12 +110,55 @@ class AnswerPipeline:
                 return
 
             answer = "".join(parts)
-            result = verify_citations(answer, bundle.evidence)
-            yield "citations", result.citations
-            status = "no_evidence" if NO_EVIDENCE_PHRASE in answer and not result.citations else "answered"
-            yield self._done(started, usage, category, status=status, warnings=result.warnings)
+            for event in self._finish(started, usage, category, answer, bundle.evidence, []):
+                yield event
         finally:
             _discard(base_task)
+
+    async def _run_agent(self, request: AskRequest, base_task: asyncio.Task[BaseSources], category: str,
+                         usage: Usage, started: float) -> AsyncIterator[Event]:
+        assert self._agent is not None
+        finished: AgentFinished | None = None
+        try:
+            base = await base_task
+            async with aclosing(self._agent.run(request, base, category, usage)) as events:
+                async for event in events:
+                    if isinstance(event, AgentFinished):
+                        finished = event
+                    else:
+                        yield event
+            if finished is None:
+                raise LLMError("llm_failed", "에이전트가 최종 결과 없이 끝났습니다")
+        except (ContextError, LLMError) as exc:
+            logger.warning("질의응답 실패 code=%s", exc.code, exc_info=True)
+            yield error_event(exc.code)
+            return
+        for event in self._finish(started, usage, category, finished.answer, finished.evidence, finished.warnings):
+            yield event
+
+    def _finish(self, started: float, usage: Usage, category: str, answer: str, evidence: dict[str, Evidence],
+                extra_warnings: list[str]) -> list[Event]:
+        result = verify_citations(answer, evidence)
+        plain_answer = " ".join(MARKER_RE.sub("", answer).split()).rstrip(" .")
+        missing_answer = f"이번 콜과 제공된 자료에서 {NO_EVIDENCE_PHRASE}"
+        status = "no_evidence" if plain_answer in {
+            NO_EVIDENCE_PHRASE,
+            missing_answer,
+            f"{missing_answer}. 아직 콜에서 언급되지 않았습니다",
+        } else "answered"
+        return [("citations", result.citations),
+                self._done(started, usage, category, status=status, warnings=[*extra_warnings, *result.warnings])]
+
+    async def _anchor(self, request: AskRequest, base_task: asyncio.Task[BaseSources]) -> dict[str, Any] | None:
+        """고른 대목의 원문. 대목이 없거나 근거를 못 읽었으면 None — 그 오류는 생성 단계에서 다시 알린다."""
+        if request.anchor_sequence is None or request.suggested_question_id is not None:
+            return None
+        try:
+            base = await base_task
+        except ContextError:
+            return None
+        return next((row for row in base.segments.get("segments", [])
+                     if int(row["sequence"]) == request.anchor_sequence), None)
 
     async def _glossary_entry(self, classification: Classification) -> dict[str, Any] | None:
         glossary = await self._glossary.get()
@@ -122,12 +172,6 @@ class AnswerPipeline:
                     list(warnings))
         return "done", {"status": status, "refusal_reason": refusal_reason, "suggested_question_ids": list(suggested),
                         "warnings": list(warnings), "usage": usage.as_dict(), "latency_ms": latency_ms}
-
-
-def _meta(request: AskRequest, as_of_sequence: int, anchor: int | None, missing: list[str]) -> dict[str, Any]:
-    as_of_time = datetime.fromtimestamp(request.as_of_epoch, UTC).isoformat().replace("+00:00", "Z")
-    return {"scope": "anchor" if anchor is not None else "call", "as_of_sequence": as_of_sequence,
-            "as_of_time": as_of_time, "anchor_sequence": anchor, "missing_sources": list(missing)}
 
 
 def _discard(task: asyncio.Task[Any]) -> None:

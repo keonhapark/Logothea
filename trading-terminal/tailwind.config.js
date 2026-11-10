@@ -1,85 +1,87 @@
 /** @type {import('tailwindcss').Config} */
-// 값의 기준은 src/renderer/styles/tokens.css 다. 여기서는 같은 값을 클래스 이름으로 노출한다.
-// 예전 이름(surface · accent · buy · sell 등)은 화면 코드가 그대로 쓰도록 남기고 값만 새 토큰으로 바꿨다.
-// 화면 이슈(#155~#159)에서 화면을 다시 만들 때 새 이름(ink · gold · up · down · ok · danger)으로 옮긴다.
-const rgb = (v) => `rgb(${v} / <alpha-value>)`
+// 값의 기준은 src/renderer/styles/tokens.css 다. 여기서는 그 변수를 클래스 이름으로 노출한다.
+// 예전 이름(surface · accent · buy · sell 등)은 화면 코드가 그대로 쓰도록 남기고 값만 토큰을 가리키게 했다.
+// 채널(`--x-rgb`)을 가리키는 색은 `bg-ok/15` 같은 투명도 수식이 동작한다. 완성 값(`var(--x)`)을 가리키는 색은
+// 이미 투명도가 들어 있어 수식이 먹지 않는다.
+const c = (name) => `rgb(var(--${name}-rgb) / <alpha-value>)`
+const ink = (alpha) => `rgb(var(--ink-rgb) / ${alpha})`
 
 module.exports = {
   content: ['./src/renderer/**/*.{ts,tsx,html}'],
   theme: {
     extend: {
       colors: {
-        // 바탕 — 단색 #1d1e22. surface 는 바탕 위 불투명 면(목록 · 입력 · 펼침 메뉴)
+        // 바탕 — 단색. surface 는 바탕 위 불투명 면(목록 · 입력 · 펼침 메뉴)
         bg: {
-          base: '#1d1e22',
+          base: c('bg'),
         },
         surface: {
-          0: '#212226',
-          1: '#26272b',
-          2: '#2d2e33',
-          3: '#35363b',
+          0: c('surface-0'),
+          1: c('surface-1'),
+          2: c('surface-2'),
+          3: c('surface-3'),
         },
 
-        // 글자 — ink-1 · ink-2(82%) · ink-3(58%) · ink-4(40%)
+        // 글자 — ink-1 · ink-2 · ink-3 · ink-4
         ink: {
-          1: '#fbfaf6',
-          2: 'rgba(251,250,246,0.82)',
-          3: 'rgba(251,250,246,0.58)',
-          4: 'rgba(251,250,246,0.4)',
+          1: c('ink'),
+          2: 'var(--ink-2)',
+          3: 'var(--ink-3)',
+          4: 'var(--ink-4)',
         },
         text: {
-          primary: '#fbfaf6',
-          secondary: 'rgba(251,250,246,0.82)',
-          tertiary: 'rgba(251,250,246,0.58)',
-          disabled: 'rgba(251,250,246,0.4)',
+          primary: c('ink'),
+          secondary: 'var(--ink-2)',
+          tertiary: 'var(--ink-3)',
+          disabled: 'var(--ink-4)',
         },
 
         // 금 — 금테 · 포커스 · 선택 표시. 예전 accent(에메랄드) 자리를 금이 받는다
         gold: {
-          hi: '#fff1c4',
-          DEFAULT: '#e2bd62',
-          lo: '#8a6420',
+          hi: c('gold-hi'),
+          DEFAULT: c('gold'),
+          lo: c('gold-lo'),
         },
         accent: {
           300: '#f3dc9a',
           400: '#ebcd7c',
-          500: '#e2bd62',
+          500: c('gold'),
           600: '#c49a43',
           700: '#a57e2f',
-          800: '#8a6420',
+          800: c('gold-lo'),
           900: '#5e4416',
-          DEFAULT: '#e2bd62',
-          foreground: '#1d1e22',
+          DEFAULT: c('gold'),
+          foreground: c('bg'),
         },
 
         // 색상 유리 — 버튼 면에만
-        lapis: rgb('92 140 255'),
-        olive: rgb('176 204 82'),
-        porphyra: rgb('232 102 192'),
+        lapis: c('lapis'),
+        olive: c('olive'),
+        porphyra: c('porphyra'),
 
         // 가격 — 한국 관례. 매수 = 상승 빨강, 매도 = 하락 파랑
-        up: '#ff5a5f',
-        down: '#5b9bff',
+        up: c('up'),
+        down: c('down'),
         buy: {
-          DEFAULT: '#ff5a5f',
+          DEFAULT: c('up'),
           hover: '#ff7478',
-          subtle: 'rgba(255,90,95,0.12)',
+          subtle: 'rgb(var(--up-rgb) / 0.12)',
         },
         sell: {
-          DEFAULT: '#5b9bff',
+          DEFAULT: c('down'),
           hover: '#79aeff',
-          subtle: 'rgba(91,155,255,0.12)',
+          subtle: 'rgb(var(--down-rgb) / 0.12)',
         },
 
         // 상태 — 정상 · 오류 · 주의
-        ok: '#b0cc52',
+        ok: c('ok'),
         danger: {
-          DEFAULT: '#ff8a5c',
-          subtle: 'rgba(255,138,92,0.12)',
+          DEFAULT: c('danger'),
+          subtle: 'rgb(var(--danger-rgb) / 0.12)',
         },
         warning: {
-          DEFAULT: '#e2bd62',
-          subtle: 'rgba(226,189,98,0.12)',
+          DEFAULT: c('caution'),
+          subtle: 'rgb(var(--caution-rgb) / 0.12)',
         },
         info: {
           DEFAULT: '#c9c8c5',
@@ -91,16 +93,21 @@ module.exports = {
         },
 
         border: {
-          DEFAULT: 'rgba(251,250,246,0.14)',
-          subtle: 'rgba(251,250,246,0.08)',
-          strong: 'rgba(251,250,246,0.14)',
-          focus: '#fff1c4',
+          DEFAULT: ink(0.14),
+          subtle: ink(0.08),
+          strong: ink(0.14),
+          focus: c('gold-hi'),
         },
 
-        connected: '#b0cc52',
-        connecting: '#e2bd62',
-        reconnecting: '#e2bd62',
-        disconnected: '#ff8a5c',
+        // 옅은 면 · 옅은 테두리 · 표 머리
+        wash: c('wash'),
+        edge: c('edge'),
+        'table-head': c('table-head'),
+
+        connected: c('ok'),
+        connecting: c('caution'),
+        reconnecting: c('caution'),
+        disconnected: c('danger'),
       },
       fontFamily: {
         sans: ['Pretendard Variable', '-apple-system', 'BlinkMacSystemFont', 'Apple SD Gothic Neo', 'system-ui', 'sans-serif'],
@@ -127,11 +134,12 @@ module.exports = {
         sheet: '30px',
       },
       boxShadow: {
-        sm: '0 1px 2px rgba(0,0,0,0.4)',
-        md: '0 4px 10px rgba(0,0,0,0.45)',
-        lg: '0 14px 34px -12px rgba(0,0,0,0.55)',
-        xl: '0 24px 60px -16px rgba(0,0,0,0.7)',
-        dialog: '0 24px 60px -16px rgba(0,0,0,0.7)',
+        sm: 'var(--shadow-sm)',
+        md: 'var(--shadow-md)',
+        lg: 'var(--shadow-lg)',
+        xl: 'var(--shadow-xl)',
+        dialog: 'var(--shadow-dialog)',
+        side: 'var(--shadow-side)',
       },
       transitionTimingFunction: {
         spring: 'cubic-bezier(0.3, 1.35, 0.5, 1)',
@@ -151,8 +159,8 @@ module.exports = {
           '100%': { opacity: '1' },
         },
         borderPulse: {
-          '0%, 100%': { borderColor: 'rgba(255,138,92,0.4)' },
-          '50%': { borderColor: 'rgba(255,138,92,1)' },
+          '0%, 100%': { borderColor: 'rgb(var(--danger-rgb) / 0.4)' },
+          '50%': { borderColor: 'rgb(var(--danger-rgb) / 1)' },
         },
       },
     },

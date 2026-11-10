@@ -9,9 +9,11 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.WebSocket;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 /**
  * 단일 Finnhub API 키로 최대 50 심볼을 구독하는 WebSocket 클라이언트.
@@ -28,6 +30,9 @@ public class FinnhubWebSocketClient implements Runnable {
     private final StockPriceCache priceCache;
     private final ObjectMapper objectMapper;
     private final String label;
+    // 재연결마다 새로 만들면 클라이언트마다 셀렉터 스레드가 생기고, GC 가 클라이언트를 회수할 때까지 남는다.
+    // 연결 실패가 며칠 이어지면 스레드가 계속 쌓이므로 하나를 만들어 재사용한다.
+    private final HttpClient httpClient = HttpClient.newHttpClient();
 
     private volatile WebSocket webSocket;
 
@@ -62,11 +67,18 @@ public class FinnhubWebSocketClient implements Runnable {
 
     private void connect() throws Exception {
         CountDownLatch closeLatch = new CountDownLatch(1);
-        HttpClient httpClient = HttpClient.newHttpClient();
 
-        webSocket = httpClient.newWebSocketBuilder()
-                .buildAsync(URI.create(WS_BASE + apiKey), new Listener(closeLatch))
-                .get(15, TimeUnit.SECONDS);
+        CompletableFuture<WebSocket> pending = httpClient.newWebSocketBuilder()
+                .buildAsync(URI.create(WS_BASE + apiKey), new Listener(closeLatch));
+        try {
+            webSocket = pending.get(15, TimeUnit.SECONDS);
+        } catch (TimeoutException e) {
+            // 핸드셰이크가 늦게 끝나면 아무도 닫지 않는 연결이 남고, 재시도가 같은 키로 연결을 하나 더 연다.
+            pending.whenComplete((ws, ex) -> {
+                if (ws != null) ws.abort();
+            });
+            throw e;
+        }
 
         closeLatch.await();
         log.info("[Finnhub-{}] 연결 종료 — 재연결 준비", label);

@@ -59,6 +59,9 @@ class Settings(BaseSettings):
     gemini_response_mime_type: str = "application/json"
     gemini_temperature: float = Field(default=0.15, alias="GEMINI_TEMPERATURE")
     gemini_max_tokens: int = Field(default=2048, alias="GEMINI_MAX_TOKENS")
+    gemini_request_timeout_seconds: float = Field(default=20.0, gt=0, le=120, alias="GEMINI_REQUEST_TIMEOUT_SECONDS")
+    gemini_attempt_timeout_seconds: float = Field(default=10.0, gt=0, le=120, alias="GEMINI_ATTEMPT_TIMEOUT_SECONDS")
+    gemini_model_rpm: int = Field(default=15, ge=1, alias="GEMINI_MODEL_RPM")
     gemini_max_retries: int = Field(default=3, alias="GEMINI_MAX_RETRIES")
     gemini_base_retry_delay: float = Field(default=1.5, alias="GEMINI_BASE_RETRY_DELAY")
     # 임베딩 배치의 각 항목이 요청 1건으로 계산된다. 무료 등급 분당 한도를 넘지 않도록
@@ -142,68 +145,68 @@ class Settings(BaseSettings):
     qdrant_path: str = Field(default="", alias="QDRANT_PATH")
     qdrant_collection_name: str = Field(default="earningwhisperer_evidence", alias="QDRANT_COLLECTION_NAME")
     evidence_postgres_enabled: bool = Field(
-    default=False,
-    alias="EVIDENCE_POSTGRES_ENABLED",
-)
-evidence_auto_bootstrap: bool = Field(
-    default=False,
-    alias="EVIDENCE_AUTO_BOOTSTRAP",
-)
-evidence_schema_path: str = Field(
-    default="sql/ai_engine_evidence_schema.sql",
-    alias="EVIDENCE_SCHEMA_PATH",
-)
+        default=False,
+        alias="EVIDENCE_POSTGRES_ENABLED",
+    )
+    evidence_auto_bootstrap: bool = Field(
+        default=False,
+        alias="EVIDENCE_AUTO_BOOTSTRAP",
+    )
+    evidence_schema_path: str = Field(
+        default="sql/ai_engine_evidence_schema.sql",
+        alias="EVIDENCE_SCHEMA_PATH",
+    )
 
-company_intelligence_store_path: str = Field(
-    default="data/runtime/company_intelligence.json",
-    alias="COMPANY_INTELLIGENCE_STORE_PATH",
-)
+    company_intelligence_store_path: str = Field(
+        default="data/runtime/company_intelligence.json",
+        alias="COMPANY_INTELLIGENCE_STORE_PATH",
+    )
 
-live_session_store_path: str = Field(
-    default="data/runtime/live_sessions",
-    alias="LIVE_SESSION_STORE_PATH",
-)
-live_session_retention_hours: int = Field(
-    default=168,
-    alias="LIVE_SESSION_RETENTION_HOURS",
-)
-live_session_max_sessions: int = Field(
-    default=500,
-    alias="LIVE_SESSION_MAX_SESSIONS",
-)
-live_session_max_fact_checks_per_chunk: int = Field(
-    default=3,
-    alias="LIVE_SESSION_MAX_FACT_CHECKS_PER_CHUNK",
-)
-live_session_redis_publish_enabled: bool = Field(
-    default=True,
-    alias="LIVE_SESSION_REDIS_PUBLISH_ENABLED",
-)
+    live_session_store_path: str = Field(
+        default="data/runtime/live_sessions",
+        alias="LIVE_SESSION_STORE_PATH",
+    )
+    live_session_retention_hours: int = Field(
+        default=168,
+        alias="LIVE_SESSION_RETENTION_HOURS",
+    )
+    live_session_max_sessions: int = Field(
+        default=500,
+        alias="LIVE_SESSION_MAX_SESSIONS",
+    )
+    live_session_max_fact_checks_per_chunk: int = Field(
+        default=3,
+        alias="LIVE_SESSION_MAX_FACT_CHECKS_PER_CHUNK",
+    )
+    live_session_redis_publish_enabled: bool = Field(
+        default=True,
+        alias="LIVE_SESSION_REDIS_PUBLISH_ENABLED",
+    )
 
-evidence_sec_user_agent: str = Field(
-    default="",
-    alias="EVIDENCE_SEC_USER_AGENT",
-)
-evidence_http_user_agent: str = Field(
-    default="EarningWhisperer/9.6 evidence-ingestion",
-    alias="EVIDENCE_HTTP_USER_AGENT",
-)
-evidence_http_timeout_seconds: float = Field(
-    default=15.0,
-    alias="EVIDENCE_HTTP_TIMEOUT_SECONDS",
-)
-evidence_sync_enabled: bool = Field(
-    default=False,
-    alias="EVIDENCE_SYNC_ENABLED",
-)
-evidence_sync_interval_seconds: int = Field(
-    default=21600,
-    alias="EVIDENCE_SYNC_INTERVAL_SECONDS",
-)
-evidence_sync_tickers: str = Field(
-    default="",
-    alias="EVIDENCE_SYNC_TICKERS",
-)
+    evidence_sec_user_agent: str = Field(
+        default="",
+        alias="EVIDENCE_SEC_USER_AGENT",
+    )
+    evidence_http_user_agent: str = Field(
+        default="EarningWhisperer/9.6 evidence-ingestion",
+        alias="EVIDENCE_HTTP_USER_AGENT",
+    )
+    evidence_http_timeout_seconds: float = Field(
+        default=15.0,
+        alias="EVIDENCE_HTTP_TIMEOUT_SECONDS",
+    )
+    evidence_sync_enabled: bool = Field(
+        default=False,
+        alias="EVIDENCE_SYNC_ENABLED",
+    )
+    evidence_sync_interval_seconds: int = Field(
+        default=21600,
+        alias="EVIDENCE_SYNC_INTERVAL_SECONDS",
+    )
+    evidence_sync_tickers: str = Field(
+        default="",
+        alias="EVIDENCE_SYNC_TICKERS",
+    )
     qdrant_transcript_collection_name: str = Field(default="earningwhisperer_transcripts", alias="QDRANT_TRANSCRIPT_COLLECTION_NAME")
     embedding_provider: str = Field(default="hash", alias="EMBEDDING_PROVIDER")
     embedding_model: str = Field(default="text-embedding-3-small", alias="EMBEDDING_MODEL")
@@ -221,6 +224,12 @@ evidence_sync_tickers: str = Field(
     fact_check_max_evidence: int = Field(default=5, alias="FACT_CHECK_MAX_EVIDENCE")
     fact_check_strong_relevance_score: float = Field(default=0.42, alias="FACT_CHECK_STRONG_RELEVANCE_SCORE")
     fact_check_moderate_relevance_score: float = Field(default=0.34, alias="FACT_CHECK_MODERATE_RELEVANCE_SCORE")
+    # One request budget includes ticker-lock wait and all three processing stages.
+    # Keep below the backend's default 50-second read timeout.
+    fact_check_total_timeout_seconds: float = Field(
+        default=45.0, gt=0.0, le=45.0, allow_inf_nan=False,
+        alias="FACT_CHECK_TOTAL_TIMEOUT_SECONDS",
+    )
     fact_check_retrieval_timeout_seconds: float = Field(default=3.0, alias="FACT_CHECK_RETRIEVAL_TIMEOUT_SECONDS")
     fact_check_llm_timeout_seconds: float = Field(default=8.0, alias="FACT_CHECK_LLM_TIMEOUT_SECONDS")
     fact_check_max_output_tokens: int = Field(default=1024, alias="FACT_CHECK_MAX_OUTPUT_TOKENS")
@@ -238,25 +247,25 @@ evidence_sync_tickers: str = Field(
     redis_reconnect_delay: float = Field(default=2.0, alias="REDIS_RECONNECT_DELAY")
     redis_socket_timeout_seconds: float = Field(default=1.0, alias="REDIS_SOCKET_TIMEOUT_SECONDS")
     redis_profile_publish_enabled: bool = Field(
-    default=True,
-    alias="REDIS_PROFILE_PUBLISH_ENABLED",
-)
-redis_profile_enriched_suffix: str = Field(
-    default=":enriched",
-    alias="REDIS_PROFILE_ENRICHED_SUFFIX",
-)
-redis_retry_spool_path: str = Field(
-    default="data/redis_retry_spool.jsonl",
-    alias="REDIS_RETRY_SPOOL_PATH",
-)
-redis_retry_max_entries: int = Field(
-    default=5000,
-    alias="REDIS_RETRY_MAX_ENTRIES",
-)
-redis_retry_auto_flush_limit: int = Field(
-    default=20,
-    alias="REDIS_RETRY_AUTO_FLUSH_LIMIT",
-)
+        default=True,
+        alias="REDIS_PROFILE_PUBLISH_ENABLED",
+    )
+    redis_profile_enriched_suffix: str = Field(
+        default=":enriched",
+        alias="REDIS_PROFILE_ENRICHED_SUFFIX",
+    )
+    redis_retry_spool_path: str = Field(
+        default="data/redis_retry_spool.jsonl",
+        alias="REDIS_RETRY_SPOOL_PATH",
+    )
+    redis_retry_max_entries: int = Field(
+        default=5000,
+        alias="REDIS_RETRY_MAX_ENTRIES",
+    )
+    redis_retry_auto_flush_limit: int = Field(
+        default=20,
+        alias="REDIS_RETRY_AUTO_FLUSH_LIMIT",
+    )
 
 
     app_host: str = Field(default="0.0.0.0", alias="APP_HOST")
@@ -300,11 +309,11 @@ redis_retry_auto_flush_limit: int = Field(
 
     @property
     def evidence_sync_tickers_list(self) -> list[str]:
-    return [
-        part.strip().upper()
-        for part in self.evidence_sync_tickers.split(",")
-        if part.strip()
-    ]
+        return [
+            part.strip().upper()
+            for part in self.evidence_sync_tickers.split(",")
+            if part.strip()
+        ]
 
     @model_validator(mode="before")
     @classmethod

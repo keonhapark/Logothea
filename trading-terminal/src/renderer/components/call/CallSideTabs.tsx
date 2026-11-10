@@ -41,7 +41,7 @@ export default function CallSideTabs({ diffItems, onFocusSequence, price, ask, t
   const ordered = useMemo(() => [...diffItems].sort((a, b) => a.sequence - b.sequence), [diffItems])
 
   return (
-    <section className="frost relative h-full rounded-[28px] overflow-hidden flex flex-col" style={{ paddingTop: topInset }}>
+    <section className="cloud relative h-full rounded-[28px] overflow-hidden flex flex-col" style={{ paddingTop: topInset }}>
       <ScrollEdge height={topInset + 12} />
       <div className="px-5 pt-4 pb-3 shrink-0">
         <SegmentedControl items={TABS} activeId={tab} onChange={onTabChange} />
@@ -75,7 +75,7 @@ export default function CallSideTabs({ diffItems, onFocusSequence, price, ask, t
                       <button
                         type="button"
                         onClick={() => onFocusSequence(item.sequence)}
-                        className="w-full text-left rounded-[14px] px-3 py-2 hover:bg-white/[0.05] flex flex-col gap-0.5"
+                        className="w-full text-left rounded-[14px] px-3 py-2 hover:bg-wash/[0.05] flex flex-col gap-0.5"
                       >
                         <span className="text-[12.5px] font-semibold" style={{ color: meta.color }}>
                           {meta.symbol} {meta.label} · <span className="text-ink-2 font-medium">{topicLabel(item.topic)}</span>

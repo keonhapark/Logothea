@@ -104,8 +104,8 @@ IP(`43.200.26.70`)로 직접 붙는 경로는 2026-09-18 에 닫았습니다. `h
 Node 20 이상이 필요합니다. `node -v` 로 먼저 확인해 주세요.
 
 ```bash
-git clone git@github.com:keonha123/Earning-Whisperer.git
-cd Earning-Whisperer/trading-terminal
+git clone git@github.com:keonhapark/Logothea.git
+cd Logothea/trading-terminal
 npm install
 ```
 
@@ -657,12 +657,21 @@ Cloudflare 는 도메인을 원가로 판매하므로 등록 대행 마진이 �
 
 ### 메모리 제한 설정
 
-t3.micro(1GB) 시절에 맞춘 값들이고, t3.small 로 올린 뒤에도 그대로 두었습니다. 지금 값으로 충분히 돌아갑니다.
+t3.micro(1GB) 시절에 맞춘 값들이고, t3.small 로 올린 뒤에도 대부분 그대로 두었습니다.
+
+JVM 은 두 가지를 바꿨습니다(2026-11-09).
+
+- 메타스페이스 상한을 128MB 에서 192MB 로 올렸습니다. 백엔드는 기동 직후 메타스페이스를 약 107MB 쓰고,
+  128MB 상한에서는 2026-10-26 배포 후 3일 만에 `OutOfMemoryError: Metaspace` 가 났습니다. 운영에서 무엇이 약
+  21MB 를 더 늘렸는지는 확인하지 못했습니다. 재배포 후 증가 추세를 보고 192MB 가 충분한지 판단합니다.
+- `-XX:+ExitOnOutOfMemoryError` 를 넣었습니다. 이전에는 OOM 뒤에도 JVM 이 살아 있어 systemd 의
+  `Restart=always` 가 동작하지 않았고, 8일 동안 헬스체크에 응답하지 못했습니다. 이제 OOM 이 나면 프로세스가
+  끝나고 10초 뒤 다시 뜹니다.
 
 | 대상 | 설정 |
 |---|---|
 | 스왑 | `/swapfile` 2GB, fstab 등록 |
-| JVM | `-Xms128m -Xmx384m -XX:MaxMetaspaceSize=128m -XX:+UseSerialGC -Xss512k` |
+| JVM | `-Xms128m -Xmx384m -XX:MaxMetaspaceSize=192m -XX:+UseSerialGC -Xss512k -XX:+ExitOnOutOfMemoryError` |
 | MySQL | buffer pool 64M, performance_schema OFF, max_connections 30, mem_limit 300m |
 | Redis | maxmemory 48mb, allkeys-lru, RDB 저장 끔, mem_limit 64m |
 | PostgreSQL | shared_buffers 32M, max_connections 20, mem_limit 200m |
@@ -773,7 +782,7 @@ sudo systemctl enable --now cloudflared
 - **서버가 켜져 있지 않으면 터널도 없습니다.** Cloudflare 엣지는 살아 있지만 연결할 곳이 없어 `530`(Argo Tunnel error)이 돌아옵니다. 인스턴스가 꺼져 있을 때의 정상 응답으로 보시면 됩니다.
 - **가용성은 터널 하나에 달려 있습니다.** `cloudflared` 가 죽으면 백엔드가 살아 있어도 외부에서 붙을 수 없습니다. `systemctl status cloudflared` 를 상태 확인 목록에 넣어 두었습니다 ([4장](#4-일상-운영)).
 - **백엔드와 ai-engine 은 평문 HTTP 입니다.** 둘 다 루프백만 바인딩해 서버 밖으로 평문이 나가지 않습니다. 같은 서버에 다른 사용자가 있다면 이 전제가 깨집니다.
-- **STOMP 는 인증된 연결만 받습니다** ([#136](https://github.com/keonha123/Earning-Whisperer/issues/136), 2026-10-01 배포). CONNECT 에 유효한 JWT 가 없으면 거부하고, 연결을 거친 세션인지는 Principal 로 판별합니다. 클라이언트가 서버로 보내는 SEND 프레임은 받지 않습니다 — Spring 이 목적지의 `{userId}` 를 그대로 믿어, 인증만 하면 남에게 위조 매매 신호를 보낼 수 있었습니다. 구독 권한은 "로그인했는가" 까지이고 토픽별 인가는 없습니다.
+- **STOMP 는 인증된 연결만 받습니다** ([#136](https://github.com/keonhapark/Logothea/issues/136), 2026-10-01 배포). CONNECT 에 유효한 JWT 가 없으면 거부하고, 연결을 거친 세션인지는 Principal 로 판별합니다. 클라이언트가 서버로 보내는 SEND 프레임은 받지 않습니다 — Spring 이 목적지의 `{userId}` 를 그대로 믿어, 인증만 하면 남에게 위조 매매 신호를 보낼 수 있었습니다. 구독 권한은 "로그인했는가" 까지이고 토픽별 인가는 없습니다.
 - **서버 STOMP heartbeat 가 꺼져 있습니다.** `enableSimpleBroker` 에 `TaskScheduler` 가 없어 죽은 커넥션 탐지가 TCP 에 맡겨져 있습니다.
 - **`ddl-auto: update` 를 쓰고 있습니다.** 운영이라면 `validate` + 마이그레이션 도구가 맞지만 시연 범위에서는 유지했습니다. 엔티티를 고치면 스키마가 자동 변경됩니다.
 - **`DemoReplayService` 가 기동과 함께 `mock-nvda-replay.json` 을 무한 재생합니다.** `/topic/live/demo` 로 브로드캐스트되며 구독자는 미배포 상태인 `frontend` 뿐이라 터미널 시연에는 영향이 없습니다. 현재 시연 경로(`DemoEarningsCallService`)와는 별개입니다.
@@ -819,7 +828,7 @@ sudo systemctl enable --now cloudflared
 인스톨러는 GitHub Releases 에서 내려받아 설치합니다. 설치 후에는 일반 Windows 프로그램과 같습니다 — 시작 메뉴 바로가기가 생기고 설정의 앱 목록에서 제거할 수 있습니다. Node 나 저장소 클론이 필요하지 않습니다.
 
 ```
-https://github.com/keonha123/Earning-Whisperer/releases
+https://github.com/keonhapark/Logothea/releases
 ```
 
 **이 저장소는 public 입니다.** 게시한 릴리스는 누구나 받을 수 있고, 설치본에는 시연 서버 주소가 박혀 있습니다. 팀 안에서만 돌릴 것은 draft 로 두면 협업자에게만 보입니다. draft 는 Releases 탭의 목록에 나타나지 않으므로 위 주소로 직접 들어가야 보입니다.
@@ -876,17 +885,25 @@ npm run postinstall     # electron-rebuild — keytar 를 현재 플랫폼용으
 
 ### 릴리스 올리기
 
+`v0.1.0-rc1` 의 설치 파일은 앱 이름을 Logothea 로 바꾸기 전에 빌드한 `EarningWhisperer.Terminal.Setup.0.1.0.exe` 입니다.
+지금 빌드하면 `Logothea Setup <버전>.exe` 가 나오고, GitHub 는 공백을 점으로 바꿔 `Logothea.Setup.<버전>.exe` 로
+올립니다. 기존 릴리스의 자산을 바꾸면 `docs/install/desktop-app.md` 와 `docs/overview/quick-start.md` 의 파일 이름과
+sha256 도 함께 고칩니다.
+
 ```bash
-# 자산 교체
-gh release delete-asset v0.1.0-rc1 "EarningWhisperer.Terminal.Setup.0.1.0.exe" --yes
-gh release upload     v0.1.0-rc1 "trading-terminal/dist/EarningWhisperer Terminal Setup 0.1.0.exe"
+# 새 릴리스에 설치 파일 올리기 (예: v0.1.0-rc2)
+gh release upload v0.1.0-rc2 "trading-terminal/dist/Logothea Setup 0.1.0.exe"
+
+# 같은 릴리스의 자산 교체
+gh release delete-asset v0.1.0-rc2 "Logothea.Setup.0.1.0.exe" --yes
+gh release upload       v0.1.0-rc2 "trading-terminal/dist/Logothea Setup 0.1.0.exe"
 
 # draft 로 두기 / 게시하기
-gh release edit v0.1.0-rc1 --draft=true
-gh release edit v0.1.0-rc1 --draft=false --prerelease
+gh release edit v0.1.0-rc2 --draft=true
+gh release edit v0.1.0-rc2 --draft=false --prerelease
 ```
 
-**서버를 배포할 때 인스톨러도 함께 봐야 합니다.** 터미널과 백엔드가 WebSocket 인증 규약을 공유해서, 한쪽만 갱신하면 설치본이 조용히 끊깁니다. 실제로 [#136](https://github.com/keonha123/Earning-Whisperer/issues/136) 수정 때 이전 설치본은 로그인 15분 뒤 실시간 화면이 멈추는 상태가 되었습니다.
+**서버를 배포할 때 인스톨러도 함께 봐야 합니다.** 터미널과 백엔드가 WebSocket 인증 규약을 공유해서, 한쪽만 갱신하면 설치본이 조용히 끊깁니다. 실제로 [#136](https://github.com/keonhapark/Logothea/issues/136) 수정 때 이전 설치본은 로그인 15분 뒤 실시간 화면이 멈추는 상태가 되었습니다.
 
 ### 검증 결과
 

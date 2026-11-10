@@ -151,13 +151,32 @@ class LiveNewsFactCheckService:
     async def submit_sentence(self, request: LiveFactCheckSentenceRequest) -> LiveFactCheckBatchResponse:
         ticker = request.ticker.strip().upper()
         sentence = " ".join(request.sentence.split())
-        ticker_lock = await self._lock_for(ticker)
-        async with ticker_lock:
-            batch, immediate = await self._buffer_sentence(request=request, ticker=ticker, sentence=sentence)
-            if immediate is not None:
-                return immediate
-            assert batch is not None
-            return await self._process_batch(ticker=ticker, batch=batch)
+        batch: list[_BufferedSentence] | None = None
+        deadline = asyncio.timeout(self.settings.fact_check_total_timeout_seconds)
+        try:
+            async with deadline:
+                ticker_lock = await self._lock_for(ticker)
+                async with ticker_lock:
+                    batch, immediate = await self._buffer_sentence(request=request, ticker=ticker, sentence=sentence)
+                    if immediate is not None:
+                        return immediate
+                    assert batch is not None
+                    return await self._process_batch(ticker=ticker, batch=batch)
+        except TimeoutError:
+            if not deadline.expired():
+                raise
+            # A consumed batch is discarded, not silently requeued or turned into
+            # a fabricated verdict. A request timing out before buffering can retry.
+            # Cancellation bounds this coroutine; to_thread SDK work may continue.
+            buffer = self._buffers.get(ticker)
+            return self._response(
+                ticker=ticker,
+                status=LiveFactCheckBatchStatus.DISCARDED if batch else LiveFactCheckBatchStatus.REJECTED,
+                buffered_count=len(buffer.sentences) if buffer else 0,
+                batch_start_sequence=batch[0].sequence if batch else None,
+                batch_end_sequence=batch[-1].sequence if batch else None,
+                warnings=["fact_check_total_timeout"],
+            )
 
     async def _lock_for(self, ticker: str) -> asyncio.Lock:
         async with self._registry_lock:

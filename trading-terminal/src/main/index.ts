@@ -1,6 +1,6 @@
 // 환경변수 로딩은 반드시 첫 import 여야 한다 (모듈 최상위 process.env 참조보다 먼저). 이유는 loadEnv.ts 참조.
 import { missingPackagedEnv } from './loadEnv'
-import { app, BrowserWindow, session, Tray, Menu, nativeImage, screen, dialog } from 'electron'
+import { app, BrowserWindow, session, Tray, Menu, nativeImage, nativeTheme, screen, dialog } from 'electron'
 import keytar from 'keytar'
 import { join } from 'path'
 
@@ -10,6 +10,7 @@ import { setRefreshFailedHandler } from './services/BackendClient'
 import { registerVaultHandlers } from './ipc/vaultHandlers'
 import { registerKisHandlers, onFillNotice } from './ipc/kisHandlers'
 import { registerSettingsHandlers } from './ipc/settingsHandlers'
+import { registerThemeHandlers } from './ipc/themeHandlers'
 import { registerWsHandlers } from './ipc/wsHandlers'
 import { registerMarketHandlers } from './ipc/marketHandlers'
 import { registerGlossaryHandlers } from './ipc/glossaryHandlers'
@@ -21,6 +22,7 @@ import { registerEarningsHandlers, stop as stopEarnings } from './ipc/earningsHa
 import { registerStockListHandlers } from './ipc/stockListHandlers'
 import { stop as stopPricePoller } from './services/PricePoller'
 import { OAuthService } from './services/OAuthService'
+import { startupWindowBackground, windowBackground } from './services/ThemePreference'
 import { kisLimiter } from './services/KisRateLimiter'
 import { migrateLegacyKeysIfNeeded } from './services/KisService'
 import { StompService } from './services/StompService'
@@ -64,7 +66,8 @@ function createWindow() {
     minWidth: 1024,
     minHeight: 680,
     titleBarStyle: process.platform === 'darwin' ? 'hidden' : 'default',
-    backgroundColor: '#1d1e22',
+    // 화면을 그리기 전 창 색. 마지막 테마 선택에 맞춰 시작할 때 번쩍이지 않게 한다.
+    backgroundColor: startupWindowBackground(),
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -115,7 +118,7 @@ function createTray() {
     ? nativeImage.createEmpty()
     : icon.resize({ width: TRAY_ICON_SIZE, height: TRAY_ICON_SIZE })
   tray = new Tray(trayIcon)
-  tray.setToolTip('EarningWhisperer Terminal')
+  tray.setToolTip('Logothea')
   tray.setContextMenu(
     Menu.buildFromTemplate([
       { label: '열기', click: () => mainWindow?.show() },
@@ -136,6 +139,7 @@ function registerAllHandlers() {
   registerVaultHandlers()
   registerKisHandlers()
   registerSettingsHandlers()
+  registerThemeHandlers()
   registerWsHandlers()
   registerMarketHandlers()
   registerGlossaryHandlers()
@@ -158,6 +162,10 @@ app.whenReady().then(async () => {
   await restorePaperTradingFlag()
   warnIfPackagedEnvMissing()
   registerAllHandlers()
+  // 선택이 바뀌거나, `system` 일 때 운영체제 설정이 바뀌면 창 바탕색도 맞춘다
+  nativeTheme.on('updated', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.setBackgroundColor(windowBackground())
+  })
   createWindow()
   createTray()
 })

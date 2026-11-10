@@ -51,7 +51,7 @@ export default function AssetSummary({
       <div className="flex flex-col gap-2">
         {/* 현금 · 주식은 범주라서 가격색 · 상태색을 쓰지 않고 무채 단계로 나눈다 */}
         <div
-          className="h-1.5 rounded-full overflow-hidden flex bg-white/[0.08]"
+          className="h-1.5 rounded-full overflow-hidden flex bg-wash/[0.08]"
           role="img"
           aria-label={`현금 ${(cashRatio * 100).toFixed(0)}%, 주식 ${(stockRatio * 100).toFixed(0)}%`}
         >

@@ -20,21 +20,21 @@ try:
     from repositories.live_session_repository import LiveSessionRepository
     from repositories.qdrant_evidence_repository import QdrantEvidenceRepository
     from services import (
-    CalibrationService,
-    CompanyIntelligenceService,
-    ControlPlaneService,
-    EarningsIntelligenceService,
-    EquityResearchReportService,
-    EvidenceIngestionScheduler,
-    EvidenceIngestionService,
-    EvidenceRetrievalService,
-    LiveEarningsSessionService,
-    LiveNewsFactCheckService,
-    NewsIngestionService,
-    RegressionService,
-    TranscriptDiffService,
-    TranscriptIngestionService,
-)
+        CalibrationService,
+        CompanyIntelligenceService,
+        ControlPlaneService,
+        EarningsIntelligenceService,
+        EquityResearchReportService,
+        EvidenceIngestionScheduler,
+        EvidenceIngestionService,
+        EvidenceRetrievalService,
+        LiveEarningsSessionService,
+        LiveNewsFactCheckService,
+        NewsIngestionService,
+        RegressionService,
+        TranscriptDiffService,
+        TranscriptIngestionService,
+    )
     from services.redis_signal_publisher import RedisSignalPublisher
     from services.runtime_dispatch_service import dispatch_analysis
     from services.transcript_translation_service import TranscriptTranslationService
@@ -54,21 +54,22 @@ except ImportError:  # pragma: no cover
     from .repositories.live_session_repository import LiveSessionRepository
     from .repositories.qdrant_evidence_repository import QdrantEvidenceRepository
     from .services import (
-    CalibrationService,
-    CompanyIntelligenceService,
-    ControlPlaneService,
-    EarningsIntelligenceService,
-    EquityResearchReportService,
-    EvidenceIngestionScheduler,
-    EvidenceIngestionService,
-    EvidenceRetrievalService,
-    LiveEarningsSessionService,
-    LiveNewsFactCheckService,
-    NewsIngestionService,
-    RegressionService,
-    TranscriptDiffService,
-    TranscriptIngestionService,
-)
+        CalibrationService,
+        CompanyIntelligenceService,
+        ControlPlaneService,
+        EarningsIntelligenceService,
+        EquityResearchReportService,
+        EvidenceIngestionScheduler,
+        EvidenceIngestionService,
+        EvidenceRetrievalService,
+        LiveEarningsSessionService,
+        LiveNewsFactCheckService,
+        NewsIngestionService,
+        RegressionService,
+        TranscriptDiffService,
+        TranscriptIngestionService,
+    )
+    from .services.redis_signal_publisher import RedisSignalPublisher
     from .services.runtime_dispatch_service import dispatch_analysis
     from .services.transcript_translation_service import TranscriptTranslationService
     from .repositories.transcript_statement_repository import InMemoryTranscriptStatementRepository, QdrantTranscriptStatementRepository
@@ -207,19 +208,19 @@ def _persist_or_raise(repository: EventStoreRepository, envelope: dict[str, Any]
 def create_app() -> FastAPI:
     settings = get_settings()
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    await app.state.evidence_ingestion_scheduler.start()
-    try:
-        yield
-    finally:
-        await app.state.evidence_ingestion_scheduler.stop()
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        await app.state.evidence_ingestion_scheduler.start()
+        try:
+            yield
+        finally:
+            await app.state.evidence_ingestion_scheduler.stop()
 
-app = FastAPI(
-    title="EarningWhisperer AI Engine",
-    version=settings.app_version,
-    lifespan=lifespan,
-)
+    app = FastAPI(
+        title="EarningWhisperer AI Engine",
+        version=settings.app_version,
+        lifespan=lifespan,
+    )
 
     app.config = {
         "GEMINI_FAST_MODEL": settings.gemini_primary_model,
@@ -235,18 +236,18 @@ app = FastAPI(
     persistence_executor = None
 
     if settings.evidence_postgres_enabled:
-    persistence_executor = PsycopgExecutor(
-        dsn=settings.database_url,
-        connect_timeout_seconds=settings.database_connect_timeout_seconds,
-        failure_cooldown_seconds=settings.database_failure_cooldown_seconds,
-    )
+        persistence_executor = PsycopgExecutor(
+            dsn=settings.database_url,
+            connect_timeout_seconds=settings.database_connect_timeout_seconds,
+            failure_cooldown_seconds=settings.database_failure_cooldown_seconds,
+        )
     app.state.company_intelligence_repository = _build_company_repository(
-    settings,
-    persistence_executor,
+        settings,
+        persistence_executor,
     )
 
     app.state.company_intelligence_service = CompanyIntelligenceService(
-    app.state.company_intelligence_repository
+        app.state.company_intelligence_repository
     )
     app.state.transcript_repository = _build_transcript_repository(settings)
     app.state.evidence_service = EvidenceRetrievalService(repository=app.state.evidence_repository)
@@ -270,6 +271,11 @@ app = FastAPI(
         external_retriever=app.state.analysis_service.external_retriever,
         company_service=app.state.company_intelligence_service,
     )
+    app.state.evidence_ingestion_scheduler = EvidenceIngestionScheduler(
+        service=app.state.evidence_ingestion_service, settings=settings,
+    )
+    if settings.evidence_postgres_enabled and settings.evidence_auto_bootstrap:
+        app.state.company_intelligence_repository.bootstrap_schema()
     app.state.news_ingestion_service = NewsIngestionService(app.state.analysis_service.external_retriever)
     app.state.live_news_fact_check_service = LiveNewsFactCheckService(
         retriever=app.state.analysis_service.external_retriever,

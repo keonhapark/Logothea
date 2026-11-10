@@ -77,13 +77,8 @@ def ingestion_status(request: Request) -> dict:
 @router.post("/v1/engine/evidence/bootstrap-schema")
 def bootstrap_evidence_schema(request: Request) -> dict:
     bootstrap = getattr(request.app.state.evidence_repository, "bootstrap_schema", None)
-evidence_applied = bootstrap() if callable(bootstrap) else False
-request.app.state.company_intelligence_repository.bootstrap_schema()
-
-return {
-    "status": "ok",
-    "evidence_schema_applied": evidence_applied,
-}
+    evidence_applied = bootstrap() if callable(bootstrap) else False
+    request.app.state.company_intelligence_repository.bootstrap_schema()
     return {"status": "ok", "evidence_schema_applied": evidence_applied}
 
 

@@ -5,21 +5,35 @@
  * 근거 번호 칩으로 바꾸고, 같은 번호의 근거 목록과 짝짓는다.
  */
 
-export type AnswerPart = { kind: 'text'; text: string } | { kind: 'cite'; marker: string }
+export type AnswerPart =
+  | { kind: 'text'; text: string; strong?: true }
+  | { kind: 'cite'; marker: string }
 
 /** 근거 표시: 대괄호 안의 영문 대문자 하나 + 숫자. 스트리밍 중 아직 닫히지 않은 `[S1` 은 글자로 둔다. */
 const MARKER = /\[([A-Z]\d+)\]/g
 
+/**
+ * 모델이 강조를 마크다운 `**…**` 로 쓰기도 한다. 기호는 지우고 그 사이를 굵게 표시한다.
+ * 강조가 근거 표시를 사이에 두고 이어질 수 있어 상태를 본문 전체에서 이어 간다.
+ * 스트리밍 중 아직 닫히지 않은 `**` 는 그 뒤를 굵게 두었다가 닫히면 끝낸다.
+ */
 export function splitAnswer(text: string): AnswerPart[] {
   const parts: AnswerPart[] = []
+  let strong = false
+  const pushText = (chunk: string) => {
+    chunk.split('**').forEach((piece, i) => {
+      if (i > 0) strong = !strong
+      if (piece) parts.push(strong ? { kind: 'text', text: piece, strong: true } : { kind: 'text', text: piece })
+    })
+  }
   let cursor = 0
   for (const m of text.matchAll(MARKER)) {
     const at = m.index ?? 0
-    if (at > cursor) parts.push({ kind: 'text', text: text.slice(cursor, at) })
+    if (at > cursor) pushText(text.slice(cursor, at))
     parts.push({ kind: 'cite', marker: m[1] })
     cursor = at + m[0].length
   }
-  if (cursor < text.length) parts.push({ kind: 'text', text: text.slice(cursor) })
+  if (cursor < text.length) pushText(text.slice(cursor))
   return parts
 }
 

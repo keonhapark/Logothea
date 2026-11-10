@@ -59,7 +59,7 @@ export default function ShellStatus({ onOpenSettings }: { onOpenSettings: () => 
         <button
           type="button"
           onClick={onOpenSettings}
-          className="rounded-full hover:bg-white/[0.04] transition-colors text-left"
+          className="rounded-full hover:bg-wash/[0.04] transition-colors text-left"
           title="설정에서 KIS 연결을 확인합니다"
           aria-label={`KIS ${kis.text} — 설정에서 확인`}
         >

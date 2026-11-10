@@ -22,6 +22,9 @@
     font-family: var(--font-sans);
     font-size: 0.875rem;
     background-color: var(--bg);
+    /* 앱 바탕에 브랜드 세 색과 금의 옅은 빛을 깐다 — 투명 유리 너머로 보인다 */
+    background-image: var(--backdrop);
+    background-attachment: fixed;
     color: var(--ink-1);
     -webkit-font-smoothing: antialiased;
     font-feature-settings: 'ss06';
@@ -42,47 +45,95 @@
   /* 스크롤바 */
   ::-webkit-scrollbar { width: 6px; height: 6px; }
   ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: rgba(251, 250, 246, 0.14); border-radius: 999px; }
-  ::-webkit-scrollbar-thumb:hover { background: rgba(251, 250, 246, 0.24); }
+  ::-webkit-scrollbar-thumb { background: rgb(var(--ink-rgb) / 0.14); border-radius: 999px; }
+  ::-webkit-scrollbar-thumb:hover { background: rgb(var(--ink-rgb) / 0.24); }
 }
 
 @layer components {
   /* ── 재질 ─────────────────────────────────────────────────────────────
-     .glass  맑은 유리. 조작층(메뉴 · 콜 바 · 버튼 · 세그먼트 · 시트 · 팝오버)에만 쓴다.
-     .rim    금테. --rim 으로 굵기(1 · 1.4 · 2.2px)를 고른다. 뜻을 싣지 않는 장식이다.
-     .frost  서리 유리. 자막 · 판단 본문처럼 길게 읽는 면.
-     굴절은 lib/refraction.ts 의 useRefraction 이 요소의 backdrop-filter 앞에 덧붙인다. */
-  .glass {
+     읽는 면은 구름(클레이), 그 위에 떠서 조작하는 것은 투명 유리다(docs/design/design-system.md 재질).
+     .cloud    구름 판. 자막 · 판단 · 목록처럼 넓게 읽는 면. 불투명이라 흐림을 쓰지 않는다.
+     .cloud-s  작은 구름. 판 안의 칩 · 카드 · 배지 · 전환 손잡이.
+     .dent     눌린 자리. 전환의 바탕 · 입력칸.
+     .glass    투명 유리. 메뉴 · 콜 바 · 버튼처럼 위에 뜨는 조작층. 채움이 거의 없고 굴절 · 가장자리
+               반사광 · 떨어지는 그림자 · 가장자리 두께로 유리임을 보인다.
+     .read     읽는 유리. 글 위에 뜨는 팝오버 · 시트 · 모달. 흐림과 채움을 더해 아래 글자와 구분한다.
+     .rim      금테. 작은 항목(칩 · 배지 · 전환 손잡이 · 열린 콜 자리)에만 두른다.
+     유리 안의 유리는 바탕을 보지 못한다(브라우저가 바깥 유리만 보여 준다). 그래서 유리 안의 유리 · 버튼은
+     흐림을 끄고 반사광 · 두께만 남긴다. 굴절은 lib/refraction.ts 의 useRefraction 이 덧붙인다. */
+  .cloud {
+    background: var(--cloud);
+    box-shadow: var(--puff-big);
+  }
+  .cloud-s {
+    position: relative;
+    background: var(--cloud);
+    box-shadow: var(--puff-small);
+  }
+  .dent {
+    background: var(--dent-bg);
+    box-shadow: var(--press);
+  }
+
+  .glass,
+  .read {
     position: relative;
     isolation: isolate;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03));
+    background: var(--glass-fill);
     -webkit-backdrop-filter: var(--glass-filter);
     backdrop-filter: var(--glass-filter);
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.65),
-      inset 0 -1px 0 rgba(255, 255, 255, 0.18),
-      inset 1px 0 0 rgba(255, 255, 255, 0.22),
-      inset -1px 0 0 rgba(255, 255, 255, 0.08),
-      inset 0 0 22px rgba(255, 255, 255, 0.06),
-      0 14px 34px -12px rgba(0, 0, 0, 0.55);
+      var(--glass-cast),
+      var(--glass-thick),
+      inset 0 0 0 0.5px rgb(255 255 255 / calc(var(--glass-spec) * 0.28));
   }
-  /* 광원은 왼쪽 위 하나 — 모든 유리의 반사광이 이 위치를 따른다 */
-  .glass::before {
+  .read {
+    background: var(--read-fill);
+    -webkit-backdrop-filter: var(--read-filter);
+    backdrop-filter: var(--read-filter);
+  }
+  /* 안쪽 가장자리의 옅은 빛 — 두께감 */
+  .glass::before,
+  .read::before {
     content: '';
     position: absolute;
     inset: 0;
     border-radius: inherit;
     pointer-events: none;
     z-index: -1;
-    background: radial-gradient(70% 55% at 22% 0%, rgba(255, 255, 255, 0.26), rgba(255, 255, 255, 0) 60%);
-    mix-blend-mode: screen;
-  }
-  /* 판처럼 넓은 유리는 그림자를 줄인다 — 화면을 꽉 채우는 면에 큰 그림자는 무겁다 */
-  .glass-flat {
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.4),
-      inset 1px 0 0 rgba(255, 255, 255, 0.12),
-      inset 0 0 22px rgba(255, 255, 255, 0.04);
+      inset 2px 3px 6px rgb(255 255 255 / calc(var(--glass-spec) * 0.18)),
+      inset -2px -3px 8px rgb(255 255 255 / calc(var(--glass-spec) * 0.1));
+  }
+  /* 가장자리 반사광 — 빛은 왼쪽 위에서 들고 맞은편 아래 가장자리에도 되비친다 */
+  .glass::after,
+  .read::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    padding: 1.2px;
+    background: linear-gradient(
+      135deg,
+      rgb(255 255 255 / var(--glass-spec)) 0%,
+      rgb(255 255 255 / calc(var(--glass-spec) * 0.25)) 22%,
+      rgb(255 255 255 / 0) 42%,
+      rgb(255 255 255 / 0) 58%,
+      rgb(255 255 255 / calc(var(--glass-spec) * 0.3)) 80%,
+      rgb(255 255 255 / calc(var(--glass-spec) * 0.75)) 100%
+    );
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+  }
+  /* 유리 안의 유리 · 버튼 — 흐림을 끄고 떨어지는 그림자를 줄인다 */
+  :is(.glass, .read) :is(.glass, .gbtn) {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    box-shadow:
+      var(--glass-thick),
+      inset 0 0 0 0.5px rgb(255 255 255 / calc(var(--glass-spec) * 0.28));
   }
 
   .rim::after {
@@ -110,24 +161,15 @@
   .rim-float { --rim: 1.4px; }
   .rim-heavy { --rim: 2.2px; }
 
-  .frost {
-    background: rgba(18, 19, 22, 0.58);
-    -webkit-backdrop-filter: var(--frost-filter);
-    backdrop-filter: var(--frost-filter);
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.18),
-      inset 0 0 0 1px rgba(255, 255, 255, 0.08);
-  }
-
-  /* 유리 위 글자는 뒤가 밝아져도 대비를 지키도록 그림자를 준다 */
-  .on-glass { text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55); }
+  /* 유리 위 글자는 뒤가 밝아져도 대비를 지키도록 그림자를 준다(라이트는 없음) */
+  .on-glass { text-shadow: var(--glass-text-shadow); }
 
   /* ── 버튼 ─────────────────────────────────────────────────────────────
-     .gbtn 맑은 유리 보조 버튼. .gbtn-lapis(주 행동) · .gbtn-olive(확인) · .gbtn-porphyra(위험)
+     .gbtn 투명 유리 보조 버튼. .gbtn-lapis(주 행동) · .gbtn-olive(확인) · .gbtn-porphyra(위험)
      는 색상 유리. 색은 덮지 않고 가장자리 테 · 바닥 투과광 · 바깥 글로우로 빛처럼 더한다.
-     색상 유리 주 버튼은 한 화면에 하나만 둔다. */
+     색상 유리 주 버튼은 한 화면에 하나만 둔다. 버튼에는 금테를 두르지 않는다. */
   .gbtn {
-    @apply glass rim;
+    @apply glass;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -141,13 +183,13 @@
     color: var(--ink-1);
     white-space: nowrap;
     cursor: pointer;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+    text-shadow: var(--gbtn-text-shadow);
     transition:
       transform 220ms var(--spring),
       filter 200ms var(--ease),
       opacity 200ms;
   }
-  .gbtn:hover { filter: brightness(1.15) saturate(1.1); }
+  .gbtn:hover { filter: brightness(var(--gbtn-hover)) saturate(1.1); }
   .gbtn:active { transform: scale(0.97); filter: brightness(0.94); }
   .gbtn:disabled,
   .gbtn[aria-disabled='true'] {
@@ -162,32 +204,52 @@
   .gbtn-icon { width: 44px; height: 44px; padding: 0; }
   .gbtn-icon.gbtn-sm { width: 36px; height: 36px; padding: 0; }
 
-  .gbtn-lapis { --c: var(--lapis); }
-  .gbtn-olive { --c: var(--olive); }
-  .gbtn-porphyra { --c: var(--porphyra); }
+  .gbtn-lapis { --c: var(--lapis-rgb); color: var(--on-lapis); }
+  .gbtn-olive { --c: var(--olive-rgb); color: var(--on-olive); }
+  .gbtn-porphyra { --c: var(--porphyra-rgb); color: var(--on-porphyra); }
   .gbtn-lapis,
   .gbtn-olive,
   .gbtn-porphyra {
     background:
-      radial-gradient(120% 130% at 50% 125%, rgba(var(--c), 0.42), rgba(var(--c), 0) 62%),
-      linear-gradient(180deg, rgba(var(--c), 0.14), rgba(var(--c), 0.06));
+      radial-gradient(120% 130% at 50% 125%, rgb(var(--c) / calc(0.42 * var(--tint-k))), rgb(var(--c) / 0) 62%),
+      linear-gradient(180deg, rgb(var(--c) / calc(0.14 * var(--tint-k))), rgb(var(--c) / calc(0.06 * var(--tint-k))));
     -webkit-backdrop-filter: var(--tint-filter);
     backdrop-filter: var(--tint-filter);
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.9),
-      inset 0 0 0 1px rgba(var(--c), 0.6),
-      inset 0 0 14px rgba(var(--c), 0.32),
-      inset 0 -7px 12px -7px rgba(var(--c), 0.75),
-      0 6px 22px -6px rgba(var(--c), 0.5),
-      0 12px 26px -14px rgba(0, 0, 0, 0.55);
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 0 10px rgba(var(--c), 0.45);
+      inset 0 1px 0 rgb(255 255 255 / 0.9),
+      inset 0 0 0 1px rgb(var(--c) / 0.6),
+      inset 0 0 14px rgb(var(--c) / 0.32),
+      inset 0 -7px 12px -7px rgb(var(--c) / 0.75),
+      0 6px 22px -6px rgb(var(--c) / var(--tint-glow)),
+      var(--tint-drop);
+    text-shadow: 0 1px 2px rgb(0 0 0 / var(--tint-ts-shade)), 0 0 10px rgb(var(--c) / var(--tint-ts-glow));
+  }
+  /* 유리 안의 색상 버튼 — 부모 유리가 이미 흐리므로 흐림과 떨어지는 그림자는 끄고 색 면 · 색 테두리만 남긴다 */
+  :is(.glass, .read) :is(.gbtn-lapis, .gbtn-olive, .gbtn-porphyra) {
+    background:
+      radial-gradient(120% 130% at 50% 125%, rgb(var(--c) / calc(0.42 * var(--tint-k))), rgb(var(--c) / 0) 62%),
+      linear-gradient(180deg, rgb(var(--c) / calc(0.14 * var(--tint-k))), rgb(var(--c) / calc(0.06 * var(--tint-k))));
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.9),
+      inset 0 0 0 1px rgb(var(--c) / 0.6),
+      inset 0 0 14px rgb(var(--c) / 0.32),
+      inset 0 -7px 12px -7px rgb(var(--c) / 0.75);
+  }
+  /* 색을 더 채운 색상 유리. 작은 버튼은 기본 색상 유리의 옅은 색이 잘 보이지 않아 색 비율을 높인다 */
+  .gbtn-strong.gbtn-lapis,
+  .gbtn-strong.gbtn-olive,
+  .gbtn-strong.gbtn-porphyra {
+    color: var(--on-strong);
+    background:
+      radial-gradient(120% 130% at 50% 125%, rgb(var(--c) / 0.7), rgb(var(--c) / 0.12) 70%),
+      linear-gradient(180deg, rgb(var(--c) / 0.34), rgb(var(--c) / 0.2));
   }
   .gbtn-lapis::before,
   .gbtn-olive::before,
   .gbtn-porphyra::before {
     background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0) 46%),
-      radial-gradient(60% 70% at 24% 0%, rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0) 60%);
+      linear-gradient(180deg, rgb(255 255 255 / 0.34), rgb(255 255 255 / 0) 46%),
+      radial-gradient(60% 70% at 24% 0%, rgb(255 255 255 / 0.4), rgb(255 255 255 / 0) 60%);
   }
 
   /* 입력 */
@@ -195,7 +257,7 @@
     @apply w-full px-3.5 py-2.5 bg-surface-1 text-text-primary text-base placeholder:text-text-disabled
            focus:outline-none transition-colors duration-100;
     border-radius: var(--radius-field);
-    border: 1px solid rgba(251, 250, 246, 0.12);
+    border: 1px solid rgb(var(--ink-rgb) / 0.12);
   }
   .input-base:focus { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold); }
   .input-error { @apply input-base; border-color: var(--danger); }
@@ -235,18 +297,18 @@
            transition-colors duration-100 disabled:opacity-30 disabled:cursor-not-allowed num;
   }
   .pagination-btn-active {
-    @apply pagination-btn glass rim text-text-primary;
+    @apply pagination-btn cloud-s rim text-text-primary;
   }
 
   /* Toast — IPC error 알림 */
-  .toast-ipc-error   { @apply glass rim text-text-primary text-sm px-4 py-3; border-radius: 20px; }
-  .toast-ipc-warning { @apply glass rim text-text-primary text-sm px-4 py-3; border-radius: 20px; }
+  .toast-ipc-error   { @apply read text-text-primary text-sm px-4 py-3; border-radius: 20px; }
+  .toast-ipc-warning { @apply read text-text-primary text-sm px-4 py-3; border-radius: 20px; }
   .toast-ipc-action  { @apply mt-2 text-xs text-gold-hi underline cursor-pointer hover:text-ink-1; }
 
   /* 불러오는 중 — 자리와 크기를 미리 잡은 흐린 막대 */
   .skeleton {
     border-radius: 8px;
-    background: linear-gradient(90deg, rgba(251, 250, 246, 0.05), rgba(251, 250, 246, 0.1), rgba(251, 250, 246, 0.05));
+    background: linear-gradient(90deg, rgb(var(--ink-rgb) / 0.05), rgb(var(--ink-rgb) / 0.1), rgb(var(--ink-rgb) / 0.05));
     background-size: 200% 100%;
     animation: skeleton-shimmer 1.6s ease-in-out infinite;
   }
@@ -255,6 +317,23 @@
 @keyframes skeleton-shimmer {
   0% { background-position: 100% 0; }
   100% { background-position: -100% 0; }
+}
+
+/* 테마별 그림(로그인 화면 로고처럼 바탕에 따라 파일이 다른 것). 보이지 않는 쪽은 접근성 트리에서도 빠진다 */
+:root[data-theme='light'] .theme-dark-only,
+:root:not([data-theme='light']) .theme-light-only {
+  display: none;
+}
+
+/*
+ * 테마를 바꾸는 순간에는 색 transition 을 끈다(lib/theme.ts). 요소마다 색이 따로 늦게 바뀌지 않게.
+ * 자리 이동(transform · width)은 남긴다 — 테마를 고른 전환 손잡이가 그 순간 미끄러지는 중이다.
+ */
+.theme-switching,
+.theme-switching *,
+.theme-switching *::before,
+.theme-switching *::after {
+  transition-property: transform, width !important;
 }
 
 /* 움직임 줄이기 · 투명도 줄이기 설정을 따른다 */
@@ -270,12 +349,12 @@
 @media (prefers-reduced-transparency: reduce) {
   .glass,
   .gbtn {
-    background: #2d2e33;
+    background: var(--solid-glass);
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
   }
-  .frost {
-    background: #18191c;
+  .read {
+    background: var(--solid-frost);
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
   }

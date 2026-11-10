@@ -28,7 +28,7 @@ function getNeedleCoords(cx: number, cy: number, length: number, angleDeg: numbe
 
 export default function RawScoreGauge({ score }: RawScoreGaugeProps) {
   const safeScore = score ?? 0
-  const arcColor = score !== null ? getArcColor(safeScore) : 'rgba(251,250,246,0.08)'
+  const arcColor = score !== null ? getArcColor(safeScore) : 'var(--chart-grid)'
   const dashOffset = ARC_LENGTH * (1 - safeScore)
   const needleAngleDeg = -180 + safeScore * 180
   const { x2, y2 } = getNeedleCoords(100, 100, 65, needleAngleDeg)
@@ -40,7 +40,7 @@ export default function RawScoreGauge({ score }: RawScoreGaugeProps) {
         <path
           d={describeArc(100, 100, 80)}
           fill="none"
-          stroke="rgba(251,250,246,0.08)"
+          stroke="var(--chart-grid)"
           strokeWidth={12}
           strokeLinecap="round"
         />
@@ -85,7 +85,7 @@ export default function RawScoreGauge({ score }: RawScoreGaugeProps) {
           y={108}
           textAnchor="middle"
           fontSize={9}
-          fill="#475569"
+          fill="var(--chart-label)"
           fontFamily="sans-serif"
         >
           AI Score

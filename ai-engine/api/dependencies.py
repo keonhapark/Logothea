@@ -14,15 +14,15 @@ try:
     from models.storage_models import PersistEnvelopeResponse
     from repositories.event_store_repository import EventStoreRepository
     from services import (
-    CalibrationService,
-    CompanyIntelligenceService,
-    ControlPlaneService,
-    EarningsIntelligenceService,
-    EvidenceIngestionService,
-    LiveEarningsSessionService,
-    RegressionService,
-    TranscriptDiffService,
-)
+        CalibrationService,
+        CompanyIntelligenceService,
+        ControlPlaneService,
+        EarningsIntelligenceService,
+        EvidenceIngestionService,
+        LiveEarningsSessionService,
+        RegressionService,
+        TranscriptDiffService,
+    )
     from services.equity_report_service import EquityResearchReportService
     from services.evidence_retrieval_service import EvidenceRetrievalService
     from services.live_news_fact_check_service import LiveNewsFactCheckService
@@ -34,16 +34,16 @@ except ImportError:  # pragma: no cover
     from ..models.request_models import AnalyzeRequest
     from ..models.storage_models import PersistEnvelopeResponse
     from ..repositories.event_store_repository import EventStoreRepository
-   from ..services import (
-    CalibrationService,
-    CompanyIntelligenceService,
-    ControlPlaneService,
-    EarningsIntelligenceService,
-    EvidenceIngestionService,
-    LiveEarningsSessionService,
-    RegressionService,
-    TranscriptDiffService,
-)
+    from ..services import (
+        CalibrationService,
+        CompanyIntelligenceService,
+        ControlPlaneService,
+        EarningsIntelligenceService,
+        EvidenceIngestionService,
+        LiveEarningsSessionService,
+        RegressionService,
+        TranscriptDiffService,
+    )
     from ..services.equity_report_service import EquityResearchReportService
     from ..services.evidence_retrieval_service import EvidenceRetrievalService
     from ..services.live_news_fact_check_service import LiveNewsFactCheckService

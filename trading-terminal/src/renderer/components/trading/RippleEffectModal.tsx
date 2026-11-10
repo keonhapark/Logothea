@@ -13,9 +13,9 @@ interface RippleEffectModalProps {
 /** impact 값에 따른 색상. */
 function impactColor(impact: number): string {
   if (impact >= 0.5) return 'var(--up)'   // 강 긍정 — 상승 빨강
-  if (impact >= 0.1) return 'rgba(var(--up-rgb),0.65)'   // 약 긍정
+  if (impact >= 0.1) return 'rgb(var(--up-rgb) / 0.65)'   // 약 긍정
   if (impact <= -0.3) return 'var(--down)'  // 강 부정 — 하락 파랑
-  if (impact < 0) return 'rgba(var(--down-rgb),0.65)'      // 약 부정
+  if (impact < 0) return 'rgb(var(--down-rgb) / 0.65)'      // 약 부정
   return 'var(--ink-3)'                      // 중립
 }
 
@@ -125,7 +125,7 @@ export default function RippleEffectModal({
                     {/* 노드 원 */}
                     <circle
                       cx={x} cy={y} r={r}
-                      fill="#212226"
+                      fill="var(--chart-ring)"
                       stroke={color}
                       strokeWidth={isCenter ? 2 : 1.5}
                     />
@@ -191,7 +191,7 @@ export default function RippleEffectModal({
                         </div>
                         <span
                           className="shrink-0 px-1.5 py-px rounded text-[9px] font-bold border"
-                          style={{ color, background: 'rgba(var(--ink-rgb),0.06)', borderColor: `color-mix(in srgb, ${color} 33%, transparent)` }}
+                          style={{ color, background: 'rgb(var(--ink-rgb) / 0.06)', borderColor: `color-mix(in srgb, ${color} 33%, transparent)` }}
                         >
                           {impactLabel(node.impact)}
                         </span>
@@ -229,8 +229,8 @@ export default function RippleEffectModal({
           <span className="text-[10px] text-text-disabled">파급 강도:</span>
           {[
             { color: 'var(--up)', label: '강 수혜' },
-            { color: 'rgba(var(--up-rgb),0.65)', label: '수혜' },
-            { color: 'rgba(var(--down-rgb),0.65)', label: '약 부정' },
+            { color: 'rgb(var(--up-rgb) / 0.65)', label: '수혜' },
+            { color: 'rgb(var(--down-rgb) / 0.65)', label: '약 부정' },
             { color: 'var(--down)', label: '부정' },
           ].map(({ color, label }) => (
             <span key={label} className="flex items-center gap-1">

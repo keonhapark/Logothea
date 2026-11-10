@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ipc, IPC_CHANNELS } from '../lib/ipc'
 import { usePortfolioStore } from '../store/usePortfolioStore'
@@ -11,9 +11,10 @@ import { useWatchlist } from '../hooks/useWatchlist'
 import { usePrices } from '../hooks/usePrices'
 import { useEarningsTimeline } from '../hooks/useEarningsTimeline'
 import { ACCOUNT_LABELS, useOrderAccount } from '../hooks/useOrderAccount'
-import { DEMO_START_PARAM, DEMO_START_VALUE, DEMO_TICKER } from '../constants/demo'
 import { showIpcErrorToast } from '../components/common/Toast'
 import { ComingSoon, EmptyState, LoadingBlock } from '../components/common/StateView'
+import Pagination from '../components/common/Pagination'
+import { paginateSchedule, type SchedulePageGroup } from '../lib/homeSchedule'
 import { isIpcError } from '../../lib/types/ipcError'
 import type {
   EarningsEvent,
@@ -28,7 +29,7 @@ type MineTag = '보유' | '관심'
  * 홈 — 어닝콜 중심 첫 화면 (docs/design/screens/home.md).
  *
  * 주인공은 진행 중인 콜과 내 종목(관심 + 보유)의 다가오는 콜이다. 전체 일정과 지난 콜이 뒤따르고,
- * 시장 지수와 계좌 요약은 오른쪽 좁은 열에 둔다. 시연 재생의 진입점은 이 화면 하나뿐이다.
+ * 시장 지수와 계좌 요약은 오른쪽 좁은 열에 둔다.
  *
  * 잔고 동기화(KIS_GET_BALANCE → 보유 종목 시세 폴링 등록)는 앱 첫 화면인 이 화면이 맡는다.
  */
@@ -42,7 +43,6 @@ export default function HomePage() {
   const holdings = usePortfolioStore((s) => s.holdings)
   const { data: timeline, status: timelineStatus, retry: retryTimeline } = useEarningsTimeline()
 
-  const stockList = useStockMarketStore((s) => s.list)
   const loadStockList = useStockMarketStore((s) => s.loadList)
   useEffect(() => {
     void loadStockList()
@@ -62,30 +62,10 @@ export default function HomePage() {
   }, [timeline, mineTags])
 
   const openCall = (ticker: string) => navigate(`/call?ticker=${encodeURIComponent(ticker)}`)
-  const startDemo = () =>
-    navigate(`/call?ticker=${DEMO_TICKER}&${DEMO_START_PARAM}=${DEMO_START_VALUE}`)
-
-  const demoName = stockList.find((s) => s.ticker === DEMO_TICKER)?.companyName ?? 'Walmart'
-  // 색상 유리 주 버튼은 화면에 하나 — 진행 중인 콜이 있으면 그쪽, 없으면 시연 재생.
-  const liveIsPrimary = timeline.live != null
-
   return (
     <div className="flex flex-col gap-6 max-w-[1320px]">
       <header className="flex items-center justify-between gap-4 pt-2">
         <h1 className="text-[24px] font-bold tracking-[-0.02em] text-ink-1">홈</h1>
-        <div className="flex items-center gap-3">
-          <span className="text-[12.5px] text-ink-3">
-            시연 · <span className="num">{DEMO_TICKER}</span> {demoName} 실적 콜 재생
-          </span>
-          <button
-            type="button"
-            onClick={startDemo}
-            className={`gbtn rim gbtn-sm ${liveIsPrimary ? '' : 'gbtn-lapis'}`}
-          >
-            <PlayIcon />
-            시연 재생
-          </button>
-        </div>
       </header>
 
       <div className="grid grid-cols-[minmax(0,1fr)_300px] gap-6 items-start">
@@ -107,7 +87,7 @@ export default function HomePage() {
               <EmptyState
                 message="관심 종목이나 보유 종목이 없습니다. 종목 브리핑에서 관심 종목을 더하면 여기에 콜 일정이 모입니다."
                 action={
-                  <button type="button" className="gbtn rim gbtn-sm" onClick={() => navigate('/stocks')}>
+                  <button type="button" className="gbtn gbtn-sm" onClick={() => navigate('/stocks')}>
                     종목 찾기
                   </button>
                 }
@@ -127,13 +107,7 @@ export default function HomePage() {
             ) : timeline.groups.every((g) => g.events.length === 0) ? (
               <EmptyState message="예정된 실적 콜이 없습니다." />
             ) : (
-              <div className="flex flex-col pb-2">
-                {timeline.groups
-                  .filter((g) => g.events.length > 0)
-                  .map((g) => (
-                    <GroupBlock key={g.kind} group={g} tags={mineTags} onPick={openDrawer} />
-                  ))}
-              </div>
+              <SchedulePager groups={timeline.groups} tags={mineTags} onPick={openDrawer} />
             )}
           </Panel>
 
@@ -226,7 +200,7 @@ function LiveCallCard({
 }) {
   return (
     <section
-      className="glass glass-flat rim rim-float rounded-[28px] px-6 py-5 flex items-center gap-6"
+      className="cloud rounded-[28px] px-6 py-5 flex items-center gap-6"
       aria-label="진행 중인 콜"
     >
       <div className="flex flex-col gap-1.5 min-w-0 flex-1">
@@ -245,19 +219,56 @@ function LiveCallCard({
           <span className="num">{event.elapsed}</span>
         </span>
       </div>
-      <button type="button" onClick={onOpen} className="gbtn gbtn-lapis rim">
+      <button type="button" onClick={onOpen} className="gbtn gbtn-lapis">
         콜 화면 열기
       </button>
     </section>
   )
 }
 
-function GroupBlock({
+/** 전체 일정 한 페이지의 행 수. 판이 화면을 넘지 않을 만큼만 둔다. */
+const SCHEDULE_PAGE_SIZE = 8
+
+/**
+ * 전체 일정 — 행 수로 페이지를 나눠 넘긴다. 시즌에는 수백 건이라 한 판에 다 그리면 홈이 끝없이 길어진다.
+ * 판 높이는 한 페이지 분량으로 잡아, 마지막 페이지가 짧아도 페이지 버튼이 위로 튀지 않게 한다.
+ */
+function SchedulePager({
+  groups,
+  tags,
+  onPick,
+}: {
+  groups: readonly EarningsGroup[]
+  tags: ReadonlyMap<string, MineTag>
+  onPick: (ticker: string) => void
+}) {
+  const pages = useMemo(() => paginateSchedule(groups, SCHEDULE_PAGE_SIZE), [groups])
+  const [page, setPage] = useState(0)
+  // 일정이 갱신돼 페이지 수가 줄면 마지막 페이지로 맞춘다
+  const current = Math.min(page, Math.max(0, pages.length - 1))
+
+  return (
+    <div className="flex flex-col">
+      <div className="flex flex-col pb-2 min-h-[456px]">
+        {(pages[current] ?? []).map((g) => (
+          <ScheduleGroupBlock key={`${g.kind}-${g.continued}`} group={g} tags={tags} onPick={onPick} />
+        ))}
+      </div>
+      {pages.length > 1 && (
+        <div className="border-t border-edge/[0.06]">
+          <Pagination page={current} totalPages={pages.length} onPageChange={setPage} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ScheduleGroupBlock({
   group,
   tags,
   onPick,
 }: {
-  group: EarningsGroup
+  group: SchedulePageGroup<EarningsEvent>
   tags: ReadonlyMap<string, MineTag>
   onPick: (ticker: string) => void
 }) {
@@ -267,7 +278,8 @@ function GroupBlock({
     <div className="flex flex-col">
       <h3 className="px-5 pt-3 pb-1.5 text-[12.5px] font-semibold text-ink-3">
         {group.label}
-        <span className="ml-1.5 font-normal tabular-nums">{group.events.length}</span>
+        <span className="ml-1.5 font-normal tabular-nums">{group.total}</span>
+        {group.continued && <span className="ml-1.5 font-normal">· 이어서</span>}
       </h3>
       <EventList events={group.events} tags={tags} showDate={showDate} onPick={onPick} />
     </div>
@@ -296,7 +308,7 @@ function EventList({
               onClick={() => onPick(e.ticker)}
               className="w-full grid grid-cols-[176px_64px_minmax(0,1fr)_auto_20px] items-center gap-3
                          px-3 py-2.5 rounded-[14px] text-left transition-colors duration-100
-                         hover:bg-white/[0.05] focus-visible:outline focus-visible:outline-1 focus-visible:outline-gold"
+                         hover:bg-wash/[0.05] focus-visible:outline focus-visible:outline-1 focus-visible:outline-gold"
             >
               <span className="text-[13px] text-ink-2 tabular-nums">
                 {showDate ? formatDateTime(e.scheduledAt) : formatClock(e.scheduledAt)}
@@ -319,7 +331,7 @@ function TimelineError({ onRetry }: { onRetry: () => void }) {
     <EmptyState
       message="실적 콜 일정을 불러오지 못했습니다."
       action={
-        <button type="button" className="gbtn rim gbtn-sm" onClick={onRetry}>
+        <button type="button" className="gbtn gbtn-sm" onClick={onRetry}>
           다시 시도
         </button>
       }
@@ -331,7 +343,7 @@ function Tag({ tag }: { tag: MineTag }) {
   return (
     <span
       className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11.5px] font-semibold border
-                  ${tag === '보유' ? 'text-ink-1 border-white/25' : 'text-ink-3 border-white/10'}`}
+                  ${tag === '보유' ? 'text-ink-1 border-edge/25' : 'text-ink-3 border-edge/10'}`}
     >
       {tag}
     </span>
@@ -377,7 +389,7 @@ function AccountSummary({
         ) : neverSynced && balanceFetchError ? (
           <div className="flex flex-col items-start gap-3">
             <p className="text-[13px] text-ink-3">잔고를 불러오지 못했습니다.</p>
-            <button type="button" className="gbtn rim gbtn-sm" onClick={onRetry} disabled={isSyncing}>
+            <button type="button" className="gbtn gbtn-sm" onClick={onRetry} disabled={isSyncing}>
               다시 시도
             </button>
           </div>
@@ -411,14 +423,14 @@ function AccountSummary({
                 <span style={{ color: 'var(--caution)' }}>
                   동기화 실패 · {lastSyncedAt ? `${formatSyncTime(lastSyncedAt)} 값` : '이전 값'}
                 </span>
-                <button type="button" className="gbtn rim gbtn-sm" onClick={onRetry} disabled={isSyncing}>
+                <button type="button" className="gbtn gbtn-sm" onClick={onRetry} disabled={isSyncing}>
                   다시 시도
                 </button>
               </div>
             )}
           </>
         )}
-        <button type="button" className="gbtn rim gbtn-sm self-start" onClick={onMore}>
+        <button type="button" className="gbtn gbtn-olive gbtn-strong gbtn-sm self-start" onClick={onMore}>
           포트폴리오에서 자세히
         </button>
       </div>
@@ -453,7 +465,7 @@ function IndexRow({ item }: { item: MarketIndexItem }) {
   // 금리처럼 % 로 표시하는 지표의 등락은 %p 다.
   const chgLabel = `${sign}${Math.abs(chg).toFixed(2)}${item.format === 'percent' ? '%p' : '%'}`
   return (
-    <li className="flex items-baseline gap-3 py-2 border-b border-white/[0.06] last:border-b-0">
+    <li className="flex items-baseline gap-3 py-2 border-b border-edge/[0.06] last:border-b-0">
       <span className="num text-[12.5px] font-semibold text-ink-3 w-10">{item.symbol}</span>
       <span className="flex-1 text-right text-[14px] tabular-nums text-ink-1">{price}</span>
       <span
@@ -470,7 +482,7 @@ function IndexRow({ item }: { item: MarketIndexItem }) {
 
 function Panel({ title, meta, children }: { title: string; meta?: string; children: React.ReactNode }) {
   return (
-    <section className="glass glass-flat rim rounded-[28px] flex flex-col" aria-label={title}>
+    <section className="cloud rounded-[28px] flex flex-col" aria-label={title}>
       <div className="flex items-baseline justify-between gap-3 px-5 pt-4 pb-2">
         <h2 className="text-[16px] font-semibold text-ink-1 on-glass">{title}</h2>
         {meta && <span className="text-[12px] text-ink-3">{meta}</span>}
@@ -488,14 +500,6 @@ function BellIcon() {
         <path d="M4 11V7a4 4 0 0 1 8 0v4l1 1.5H3L4 11zM6.5 14a1.5 1.5 0 0 0 3 0" strokeLinejoin="round" />
       </svg>
     </span>
-  )
-}
-
-function PlayIcon() {
-  return (
-    <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden>
-      <path d="M5 3.2v9.6a.6.6 0 0 0 .9.5l7.6-4.8a.6.6 0 0 0 0-1L5.9 2.7a.6.6 0 0 0-.9.5z" />
-    </svg>
   )
 }
 
