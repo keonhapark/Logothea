@@ -194,6 +194,11 @@ describe('createWebIpc — 막는 채널', () => {
     IPC_CHANNELS.AUTH_LOGIN,
     IPC_CHANNELS.WATCHLIST_ADD,
     IPC_CHANNELS.SETTINGS_SET_THEME,
+    IPC_CHANNELS.KIS_GET_ASSET_TIMESERIES,
+    IPC_CHANNELS.TRADES_GET,
+    IPC_CHANNELS.WATCHLIST_GET,
+    IPC_CHANNELS.HOLDINGS_TICKERS_UPDATE,
+    IPC_CHANNELS.VAULT_SAVE,
     'terminal:없는:채널',
   ])('연결하지 않은 채널은 거절한다: %s', async (channel) => {
     const { ipc } = setup()

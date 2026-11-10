@@ -3,6 +3,7 @@ import { ipc as terminalIpcImport } from '@terminal/renderer/lib/ipc'
 import { useGlossaryStore } from '@terminal/renderer/store/useGlossaryStore'
 import { useAssistantStore } from '@terminal/renderer/store/useAssistantStore'
 import { useTranscriptStore } from '@terminal/renderer/store/useTranscriptStore'
+import { useStockMarketStore } from '@terminal/renderer/store/useStockMarketStore'
 import { webIpc } from './data/runtime'
 
 /**
@@ -56,5 +57,17 @@ describe('터미널 store × 웹 연결', () => {
     const turn = useAssistantStore.getState().conversation!.turns[0]
     expect(turn.status).toBe('answered')
     expect(turn.text).toBe('매출이 늘었습니다')
+  })
+
+  it('종목 목록 store 가 웹 http 로 S&P 500 목록을 받는다', async () => {
+    const fetch = vi.fn(async () =>
+      new Response(JSON.stringify([{ ticker: 'WMT', companyName: 'Walmart', sector: null, marketCapUsd: null, currentPrice: 100, changePercent: 1 }]), { status: 200 }),
+    )
+    vi.stubGlobal('fetch', fetch)
+    await useStockMarketStore.getState().loadList()
+
+    expect(useStockMarketStore.getState()).toMatchObject({ isLoaded: true, error: null })
+    expect(useStockMarketStore.getState().list.map((s) => s.ticker)).toEqual(['WMT'])
+    expect((fetch.mock.calls[0] as unknown as [string])[0]).toBe('http://backend.test/api/v1/stocks/sp500')
   })
 })

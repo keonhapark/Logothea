@@ -16,7 +16,7 @@ import type { AuthProvider } from './auth'
  * - 모바일에서는 화면 잠금 · 망 전환 뒤 소켓이 열린 채 죽는 일이 흔하다. 백엔드 simple broker 가 heart-beat 를
  *   0 으로 협상해 클라이언트가 이를 알아챌 수단이 없으므로, `reconnectNow()` 로 강제로 새로 붙는다
  *   (pageLifecycle.ts 가 화면 복귀 · 온라인 복귀 때 부른다).
- * - 시장 지수 · 시세 토픽은 구독하지 않는다. 웹은 어닝콜 토픽만 쓴다.
+ * - 연결하자마자 시장 지수 · 시세 토픽을 구독하지 않는다. 모든 토픽은 화면이 필요할 때 subscribe 로 건다.
  */
 
 export type WsStatus = 'DISCONNECTED' | 'CONNECTING' | 'CONNECTED' | 'RECONNECTING'

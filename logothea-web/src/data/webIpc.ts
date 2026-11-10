@@ -5,13 +5,14 @@ import type { SpeakerProfile } from '@terminal/renderer/types/speakerProfile'
 import type { AssistantStream } from './assistant'
 import type { HttpClient } from './http'
 import type { StompBridge } from './stomp'
+import { registerMarketChannels, type MarketChannelDeps } from './marketChannels'
 
 /**
  * 터미널 `ipc.invoke` / `ipc.on` 의 브라우저 구현.
  *
  * 터미널 훅 · store 는 Electron main 프로세스에 채널 이름으로 요청하고 push 를 받는다. 웹에는 main 이 없으므로
- * 같은 채널 이름을 받아 백엔드 REST · STOMP 로 직접 보낸다. 어닝콜 채널만 연결하고 나머지(주문 · 계좌 · KIS ·
- * 관심종목 · 설정 등)는 거절한다. 거절에 쓸 전용 코드가 IpcErrorCode 에 없어 BUSINESS_RULE 에 details.unsupported 를 싣는다.
+ * 같은 채널 이름을 받아 백엔드 REST · STOMP 로 직접 보낸다. 어닝콜 채널과 홈 · 시장 · 종목 브리핑 채널
+ * (marketChannels.ts)만 연결하고 나머지(주문 · 계좌 · 포트폴리오 · KIS · 관심종목 · 설정 · 로그인)는 거절한다. 거절에 쓸 전용 코드가 IpcErrorCode 에 없어 BUSINESS_RULE 에 details.unsupported 를 싣는다.
  */
 
 export interface WebIpc {
@@ -23,6 +24,8 @@ export interface WebIpcDeps {
   http: Pick<HttpClient, 'getJson'>
   stomp: StompBridge
   assistant: AssistantStream
+  /** 폴링 · 캐시 시간. 테스트에서 바꿔 끼운다. */
+  timers?: Pick<MarketChannelDeps, 'setInterval' | 'clearInterval' | 'now'>
 }
 
 /** SUBSCRIBE 채널 → STOMP 토픽 접두사와 메시지를 내보낼 채널. 터미널 StompService 의 토픽과 같다. */
@@ -66,12 +69,13 @@ const MAX_QUESTION_CHARS = 500
 const MAX_HISTORY_MESSAGES = 6
 
 export function createWebIpc(deps: WebIpcDeps): WebIpc {
-  const listeners = new Map<string, Set<(payload: unknown) => void>>()
+  // 같은 함수를 두 번 등록해도 따로 센다(Electron ipcRenderer.on 과 같음). 그래서 함수가 아니라 등록 단위로 담는다.
+  const listeners = new Map<string, Set<{ fn: (payload: unknown) => void }>>()
 
   function emit(channel: string, payload: unknown) {
     for (const listener of listeners.get(channel) ?? []) {
       try {
-        listener(payload)
+        listener.fn(payload)
       } catch (e) {
         console.error(`[webIpc] ${channel} 리스너 오류:`, e)
       }
@@ -81,6 +85,9 @@ export function createWebIpc(deps: WebIpcDeps): WebIpc {
   deps.stomp.onStatus((status) => emit(IPC_CHANNELS.WS_STATUS_CHANGED, { status }))
 
   const handlers = new Map<string, (payload: unknown) => Promise<unknown>>()
+  /** push 채널 → 리스너가 생길 때 켜는 함수(끄는 함수를 돌려준다). */
+  const sources = new Map<string, () => () => void>()
+  const runningSources = new Map<string, () => void>()
 
   for (const route of TOPIC_CHANNELS) {
     handlers.set(route.subscribe, async (payload) => {
@@ -108,10 +115,17 @@ export function createWebIpc(deps: WebIpcDeps): WebIpc {
     })
   }
 
+  // disconnect 는 STOMP 구독 목록을 비운다. 그 뒤 다시 연결하면 듣고 있는 push 채널(지수 · 시세)을 다시 켠다.
+  let disconnectedByIpc = false
   handlers.set(IPC_CHANNELS.WS_CONNECT, async () => {
+    if (disconnectedByIpc) {
+      disconnectedByIpc = false
+      restartSources()
+    }
     await deps.stomp.connect()
   })
   handlers.set(IPC_CHANNELS.WS_DISCONNECT, async () => {
+    disconnectedByIpc = true
     deps.stomp.disconnect()
   })
 
@@ -151,6 +165,35 @@ export function createWebIpc(deps: WebIpcDeps): WebIpc {
     })
   }
 
+  registerMarketChannels(
+    {
+      handle: (channel, handler) => handlers.set(channel, handler),
+      source: (channel, start) => sources.set(channel, start),
+      emit,
+    },
+    { http: deps.http, stomp: deps.stomp, ...deps.timers },
+  )
+
+  function startSource(channel: string) {
+    const start = sources.get(channel)
+    if (!start || runningSources.has(channel)) return
+    runningSources.set(channel, start())
+  }
+
+  function restartSources() {
+    for (const channel of [...runningSources.keys()]) {
+      stopSource(channel)
+      startSource(channel)
+    }
+  }
+
+  function stopSource(channel: string) {
+    const stop = runningSources.get(channel)
+    if (!stop) return
+    runningSources.delete(channel)
+    stop()
+  }
+
   return {
     invoke: <T = unknown>(channel: string, payload?: unknown): Promise<T> => {
       const handler = handlers.get(channel)
@@ -163,9 +206,12 @@ export function createWebIpc(deps: WebIpcDeps): WebIpc {
         set = new Set()
         listeners.set(channel, set)
       }
-      set.add(listener)
+      const entry = { fn: listener }
+      set.add(entry)
+      startSource(channel)
       return () => {
-        set.delete(listener)
+        if (!set.delete(entry)) return
+        if (set.size === 0) stopSource(channel)
       }
     },
   }
