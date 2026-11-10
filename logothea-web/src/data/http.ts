@@ -6,6 +6,7 @@ import type { AuthProvider } from './auth'
  *
  * - 토큰을 Authorization 헤더로 싣는다. 쿠키는 보내지 않는다(credentials: 'omit').
  * - 401 이면 토큰을 한 번 갱신해 다시 보낸다. 갱신 결과가 없으면 401 응답을 그대로 돌려준다.
+ * - 토큰을 받지 못한 일시 장애(getAccessToken reject)여도 요청은 토큰 없이 보낸다. 401 이면 그 장애를 던진다.
  * - 실패는 터미널과 같은 IpcError 코드로 바꾼다. 터미널 store 가 그 코드로 분기하기 때문이다
  *   (예: 용어 사전은 AUTH_EXPIRED 만 다르게 다룬다).
  */
@@ -47,10 +48,19 @@ export function createHttpClient(deps: HttpDeps): HttpClient {
   }
 
   async function request(path: string, options: RequestOptions = {}): Promise<Response> {
-    const token = await deps.auth.getAccessToken()
+    // 토큰을 받지 못해도(게스트 발급 장애) 인증이 필요 없는 경로(지수 · 종목 목록 · 시세)는 토큰 없이 보낸다.
+    // 인증이 필요한 경로라 401 이 오면 그때 토큰 장애를 그대로 알린다(NETWORK).
+    let token: string | null = null
+    let tokenError: unknown = null
+    try {
+      token = await deps.auth.getAccessToken()
+    } catch (e) {
+      tokenError = e
+    }
     const response = await send(path, options, token)
     if (response.status !== 401) return response
-    const refreshed = await deps.auth.refresh()
+    if (tokenError) throw tokenError
+    const refreshed = await deps.auth.refresh(token)
     if (!refreshed || options.signal?.aborted) return response
     return send(path, options, refreshed)
   }

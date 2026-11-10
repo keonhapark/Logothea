@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { IPC_CHANNELS } from '@terminal/lib/ipcChannels'
 import { IpcError } from '@terminal/lib/types/ipcError'
 import { createWebIpc } from './webIpc'
-import { TIMELINE_DAYS, TIMELINE_POLL_MS } from './marketChannels'
+import { REFRESH_TIMELINE, TIMELINE_DAYS, TIMELINE_POLL_MS } from './marketChannels'
 import type { StompBridge, WsStatus } from './stomp'
 
 function setup(getJson: (path: string) => Promise<unknown> = async () => []) {
@@ -85,6 +85,14 @@ describe('어닝콜 일정', () => {
     intervals[0].fn()
     await flush()
     expect(listener).not.toHaveBeenCalled()
+  })
+
+  it('다시 받기 채널은 일정을 지금 받아 UPDATE 로 민다(연결이 되살아났을 때)', async () => {
+    const { ipc } = setup(async () => [liveItem()])
+    const listener = vi.fn()
+    ipc.on(IPC_CHANNELS.EARNINGS_TIMELINE_UPDATE, listener)
+    await ipc.invoke(REFRESH_TIMELINE)
+    expect(listener).toHaveBeenCalledWith(expect.objectContaining({ live: expect.objectContaining({ ticker: 'WMT' }) }))
   })
 
   it('리스너가 여럿이어도 폴링은 하나이고, 마지막 리스너가 떠날 때 멈춘다', () => {

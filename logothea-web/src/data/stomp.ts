@@ -89,6 +89,8 @@ export function createStompBridge(deps: StompDeps): StompBridge {
   /** 갱신해도 새 토큰을 받을 수 없다. 페이지를 새로 열기 전까지 다시 붙지 않는다. */
   let authExhausted = false
   let connecting: Promise<void> | null = null
+  /** 지금 연결에 쓴 토큰. 인증 실패 때 어떤 토큰이 거부됐는지 갱신 쪽에 알린다. */
+  let connectedToken: string | null = null
   /** 인증 실패 뒤 토큰을 갱신하는 중. 그사이 connect() 가 옛 토큰으로 붙지 않게 이것을 기다리게 한다. */
   let refreshing: Promise<void> | null = null
 
@@ -161,7 +163,7 @@ export function createStompBridge(deps: StompDeps): StompBridge {
     setStatus('RECONNECTING')
     let token: string | null
     try {
-      token = await deps.auth.refresh()
+      token = await deps.auth.refresh(connectedToken)
     } catch (e) {
       // 갱신 요청 자체의 실패는 일시 장애로 본다. 다음 시도에서 다시 갱신할 수 있게 플래그를 되돌린다.
       console.error('[stomp] 토큰 갱신 실패:', e)
@@ -197,6 +199,7 @@ export function createStompBridge(deps: StompDeps): StompBridge {
     cancelTimer()
     detach()
     setStatus('CONNECTING')
+    connectedToken = token
 
     const created: StompClientLike = createClient({
       url: deps.url,

@@ -36,9 +36,11 @@ interface SheetState {
   token: number
   /** 닫은 뒤 포커스를 돌려줄 곳. null 이면 지금 화면의 제목으로 옮긴다. */
   opener: HTMLElement | null
+  /** 연 뒤 내용이 정한 높이(예: 브리핑이 오류면 짧게). 없으면 spec.size. */
+  sizeOverride: SheetSize | null
 }
 
-const useSheetStore = create<SheetState>(() => ({ spec: null, token: 0, opener: null }))
+const useSheetStore = create<SheetState>(() => ({ spec: null, token: 0, opener: null, sizeOverride: null }))
 let nextToken = Date.now()
 /** history.back() 을 부르고 popstate 를 기다리는 중. 그사이 다시 닫으라고 해도 한 번만 뒤로 간다. */
 let closing = false
@@ -57,10 +59,10 @@ export function openSheet(spec: SheetSpec): void {
   closing = false
   if (current.spec) {
     window.history.replaceState({ ...(window.history.state ?? {}), sheet: token }, '')
-    useSheetStore.setState({ spec, token })
+    useSheetStore.setState({ spec, token, sizeOverride: null })
   } else {
     window.history.pushState({ sheet: token }, '')
-    useSheetStore.setState({ spec, token, opener: focusableOpener() })
+    useSheetStore.setState({ spec, token, opener: focusableOpener(), sizeOverride: null })
   }
 }
 
@@ -102,6 +104,16 @@ export function installSheetHistory(): () => void {
   }
 }
 
+/**
+ * 열린 시트의 높이를 내용에 맞게 바꾼다. 긴 시트로 열었는데 오류처럼 내용이 짧으면 짧은 시트(내용 높이)로 줄인다.
+ * 시트 본문 안에서 부른다. 시트가 바뀌면(다시 열면) 되돌아간다.
+ */
+export function useSheetSize(size: SheetSize | null): void {
+  useEffect(() => {
+    useSheetStore.setState({ sizeOverride: size })
+  }, [size])
+}
+
 /** 지금 시트가 열려 있는지(훅 밖에서 읽을 때). */
 export function isSheetOpen(): boolean {
   return useSheetStore.getState().spec !== null
@@ -118,6 +130,7 @@ const CLOSE_VELOCITY = 0.6 // px/ms
 export function SheetHost() {
   const spec = useSheetStore((s) => s.spec)
   const token = useSheetStore((s) => s.token)
+  const sizeOverride = useSheetStore((s) => s.sizeOverride)
   const sheetRef = useRef<HTMLDivElement>(null)
   const titleRef = useRef<HTMLHeadingElement>(null)
   const dragStart = useRef<{ y: number; t: number } | null>(null)
@@ -207,7 +220,7 @@ export function SheetHost() {
   const footer = useMemo(() => spec?.footer?.(), [spec])
 
   if (!spec) return null
-  const size = spec.size ?? 'short'
+  const size = sizeOverride ?? spec.size ?? 'short'
   const titleId = `sheet-title-${token}`
   return (
     <>

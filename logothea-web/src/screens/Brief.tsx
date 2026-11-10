@@ -13,7 +13,8 @@ import {
   pickChartDirection,
 } from '@terminal/renderer/lib/companyDetailFormatters'
 import type { StockDetailResponsePayload } from '@terminal/lib/types/stockDetail'
-import { closeSheetAndGo, openSheet } from '../app/sheet'
+import { isIpcError } from '@terminal/lib/types/ipcError'
+import { closeSheetAndGo, openSheet, useSheetSize } from '../app/sheet'
 import { BROADCAST_TICKER, useBroadcastView } from '../app/broadcast'
 import { kstFullDateTime } from '../lib/format'
 
@@ -58,14 +59,7 @@ function BriefBody({ ticker }: { ticker: string }) {
       </>
     )
   }
-  if (error || !data) {
-    return (
-      <>
-        <BriefHead ticker={ticker} />
-        <p className="brief-muted">종목 정보를 불러오지 못했습니다. 잠시 뒤 다시 열어 주세요.</p>
-      </>
-    )
-  }
+  if (error || !data) return <BriefError ticker={ticker} error={error} />
 
   const price = live?.currentPrice ?? data.currentPrice
   const prevClose = live?.previousClose || closeBefore(data)
@@ -76,6 +70,31 @@ function BriefBody({ ticker }: { ticker: string }) {
       <EarningsReaction data={data} />
       <Chart30d data={data} />
       <BasicInfo data={data} />
+    </>
+  )
+}
+
+/**
+ * 브리핑 실패 문구. 게스트는 서버에 저장된 S&P 500 종목만 볼 수 있어, 그 밖의 종목은 404 `stock not available` 이다
+ * (Contract 7.1.1). 그때는 다시 열어도 같은 결과라 다시 시도를 권하지 않는다.
+ */
+export function briefErrorMessage(error: unknown): string {
+  if (isIpcError(error)) {
+    const status = (error.details as { status?: unknown } | undefined)?.status
+    if (status === 404 && error.message === 'stock not available') return '이 종목은 전시 버전에서 브리핑을 볼 수 없습니다.'
+    // 접속이 끝났다(게스트 발급이 꺼짐 등). 다시 열어도 같아서 새로 고침을 권한다
+    if (error.code === 'AUTH_EXPIRED') return '지금은 서버에 연결할 수 없습니다. 잠시 뒤 페이지를 새로 고쳐 주세요.'
+  }
+  return '종목 정보를 불러오지 못했습니다. 잠시 뒤 다시 열어 주세요.'
+}
+
+/** 오류일 때는 내용이 두 줄뿐이라 긴 시트가 빈 채로 화면 끝까지 오르지 않게 짧은 시트로 줄인다. */
+function BriefError({ ticker, error }: { ticker: string; error: unknown }) {
+  useSheetSize('short')
+  return (
+    <>
+      <BriefHead ticker={ticker} />
+      <p className="brief-muted">{briefErrorMessage(error)}</p>
     </>
   )
 }

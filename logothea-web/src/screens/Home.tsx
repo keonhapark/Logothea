@@ -10,6 +10,8 @@ import type { EarningsEvent, EarningsTimelineData } from '@terminal/lib/types/ea
 import { navigate } from '../app/router'
 import { BROADCAST_TICKER, useBroadcastView, type BroadcastView } from '../app/broadcast'
 import { openBrief } from './Brief'
+import ServerNotice from '../components/ServerNotice'
+import { isGuestBlocked, useGuestStatus } from '../app/guestStatus'
 import { elapsedLabel, kstClock, kstShortDateTime, priceDirClass, signedPercent } from '../lib/format'
 
 /**
@@ -20,6 +22,7 @@ export default function Home() {
   return (
     <main className="screen">
       <h1 className="large-title" tabIndex={-1}>홈</h1>
+      <ServerNotice />
       <LiveCallCard />
       <Indices />
       <Schedule />
@@ -190,6 +193,8 @@ export function limitRows<G extends { events: readonly unknown[] }>(groups: read
 
 function Schedule() {
   const { data, status, retry } = useEarningsTimeline()
+  // 토큰을 받지 못한 동안 일정 조회는 빈 일정으로 끝난다. 그때 "예정된 콜이 없습니다" 라고 쓰면 일정이 없는 것처럼 읽힌다
+  const blocked = isGuestBlocked(useGuestStatus())
   const [limit, setLimit] = useState(PAGE)
   const groups = useMemo(() => scheduleRows(data), [data])
   const total = groups.reduce((n, g) => n + g.events.length, 0)
@@ -214,7 +219,7 @@ function Schedule() {
           </button>
         </div>
       ) : total === 0 ? (
-        <p className="state">예정된 실적 콜이 없습니다.</p>
+        <p className="state">{blocked ? '서버에 연결되면 일정을 보여 줍니다.' : '예정된 실적 콜이 없습니다.'}</p>
       ) : (
         <>
           {shown.map((g) => {

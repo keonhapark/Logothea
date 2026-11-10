@@ -1,5 +1,5 @@
 import { createAssistantStream } from './assistant'
-import { createDevTokenProvider, type AuthProvider } from './auth'
+import { createDevTokenProvider, createGuestTokenProvider, type AuthProvider, type GuestTokenProvider } from './auth'
 import { backendUrl, stompUrl } from './config'
 import { createHttpClient } from './http'
 import { installPageLifecycle } from './pageLifecycle'
@@ -12,13 +12,11 @@ import { isRetiredPayload } from '../app/callFeed'
 /**
  * 앱 전체가 함께 쓰는 연결 묶음. 터미널 훅 · store 는 `bridge/ipc.ts` 를 거쳐 여기의 webIpc 를 받는다.
  *
- * 인증을 바꿔 끼우는 자리는 아래 `auth` 한 줄이다. 게스트 토큰 발급 API 가 생기면 그 구현으로 바꾼다.
+ * 인증은 게스트 토큰이고, 개발 서버에서 개발 토큰을 넣었으면 그것을 쓴다.
  * 개발 토큰은 개발 서버에서만 읽는다. `import.meta.env.DEV` 가 false 인 빌드에서는 이 분기가 지워져
  * 토큰 문자열이 번들에 남지 않는다(vite.config.ts 의 빌드 가드가 한 번 더 막는다).
  */
-const auth: AuthProvider = createDevTokenProvider(
-  import.meta.env.DEV ? import.meta.env.VITE_DEV_ACCESS_TOKEN : undefined,
-)
+const devToken = import.meta.env.DEV ? import.meta.env.VITE_DEV_ACCESS_TOKEN?.trim() : undefined
 
 /**
  * 개발 서버에서 `VITE_FIXTURES=1` 이면 가짜 서버(dev/fixtures.ts)로 그린다. 배포용 빌드에서는 DEV 가 false 라
@@ -27,6 +25,13 @@ const auth: AuthProvider = createDevTokenProvider(
 const useFixtures = import.meta.env.DEV && import.meta.env.VITE_FIXTURES === '1'
 
 const baseUrl = backendUrl()
+
+/**
+ * 게스트 토큰(Contract 7.1.1). 개발 서버에 개발 토큰이 있으면 그것을 먼저 쓴다(로그인 사용자 권한으로 확인할 때).
+ * 화면은 guest 의 상태로 "서버에 연결할 수 없습니다" 같은 짧은 안내를 띄운다(개발 토큰이면 null).
+ */
+export const guest: GuestTokenProvider | null = devToken ? null : createGuestTokenProvider({ baseUrl })
+const auth: AuthProvider = devToken ? createDevTokenProvider(devToken) : (guest as GuestTokenProvider)
 export const http = useFixtures ? createFixtureHttp() : createHttpClient({ baseUrl, auth })
 export const stomp = useFixtures ? createFixtureStomp() : createStompBridge({ url: stompUrl(baseUrl), auth })
 export const assistant = createAssistantStream({ http })
