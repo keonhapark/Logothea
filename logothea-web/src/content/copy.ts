@@ -1,6 +1,6 @@
 /**
  * 화면 문구. 첫 방문 안내 · 고지는 모바일 화면 명세(.scratch/web-mobile-spec.md) 그대로이고,
- * `Logothea 소개` · `데이터 출처 · 고지` 는 web 세션 초안이다(uiux 확인 대기). `만든 사람들` 은 이름을 사용자 확인 뒤에 채운다.
+ * `Logothea 소개` · `데이터 출처 · 고지` 는 web 세션 초안이다(uiux 확인 대기). `팀 소개` 의 실명은 확인되는 대로 채운다.
  */
 
 export const DISCLAIMER = '시연용으로 다시 재생하는 콜과 실제 시세입니다. 투자 권유가 아닙니다. 주문 기능은 없습니다.'
@@ -29,9 +29,21 @@ export const SOURCES: readonly { title: string; body: string }[] = [
   { title: '고지', body: '이 페이지의 어떤 내용도 투자 권유가 아닙니다. 주문 기능은 없습니다.' },
 ]
 
-/** 만든 사람들 — 이름은 사용자 확인 뒤에 채운다. 비어 있으면 자리만 보인다. */
-export const MAKERS: readonly { role: string; names: readonly string[] }[] = [
-  { role: '기획 · 서버 · 터미널', names: [] },
-  { role: 'AI 분석', names: [] },
-  { role: '데이터 수집', names: [] },
+export interface TeamMember {
+  github: string
+  /** 실명. 확인되지 않았으면 비워 두고 GitHub 아이디만 보인다. */
+  name?: string
+}
+
+/** 팀 소개 — 사람마다 `실명 (GitHub 아이디)`. 실명은 확인된 사람만 채운다(2026-11-11 기준 yytss3 만 확인). */
+export const TEAM: readonly { role: string; members: readonly TeamMember[] }[] = [
+  { role: '기획 · 서버 · 터미널', members: [{ github: 'keonhapark' }] },
+  { role: 'AI 분석', members: [{ github: 'james10419' }, { github: 'yytss3', name: '전현규' }] },
+  { role: '데이터 수집', members: [{ github: 'dheorb' }] },
 ]
+
+/** `실명 (아이디)`, 실명이 없으면 아이디만. */
+export function memberLabel(m: TeamMember): string {
+  const name = m.name?.trim()
+  return name ? `${name} (${m.github})` : m.github
+}

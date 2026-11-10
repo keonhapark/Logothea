@@ -3,9 +3,9 @@ import type { ThemeChoice } from '@terminal/lib/theme'
 import { closeSheet, openSheet } from '../app/sheet'
 import { setThemeChoice, THEME_LABELS, useThemeChoice } from '../app/theme'
 import { usePrefs, type Prefs } from '../app/prefs'
-import { ABOUT, LOGIN_NOTICE, MAKERS, SOURCES } from '../content/copy'
+import { ABOUT, LOGIN_NOTICE, SOURCES, TEAM, memberLabel } from '../content/copy'
 
-/** 내 정보. 로그인 카드(안내 시트) · 설정(테마 · 번역 · 용어 밑줄) · 정보(소개 · 만든 사람들 · 출처 · 고지). */
+/** 내 정보. 로그인 카드(안내 시트) · 설정(테마 · 번역 · 용어 밑줄) · 정보(소개 · 팀 소개 · 출처 · 고지). */
 export default function Me() {
   return (
     <main className="screen">
@@ -112,7 +112,7 @@ function Info() {
   return (
     <Group label="정보">
       <InfoRow label="Logothea 소개" open={() => openSheet({ title: 'Logothea 소개', body: () => ABOUT.map((p) => <p key={p}>{p}</p>) })} />
-      <InfoRow label="만든 사람들" open={() => openSheet({ title: '만든 사람들', body: () => <Makers /> })} />
+      <InfoRow label="팀 소개" open={() => openSheet({ title: '팀 소개', body: () => <Team /> })} />
       <InfoRow
         label="데이터 출처 · 고지"
         open={() =>
@@ -146,13 +146,13 @@ function InfoRow({ label, open }: { label: string; open: () => void }) {
   )
 }
 
-function Makers() {
+function Team() {
   return (
     <dl className="sources">
-      {MAKERS.map((m) => (
-        <div key={m.role}>
-          <dt>{m.role}</dt>
-          <dd>{m.names.length > 0 ? m.names.join(' · ') : '이름을 확인하고 있습니다.'}</dd>
+      {TEAM.map((group) => (
+        <div key={group.role}>
+          <dt>{group.role}</dt>
+          <dd>{group.members.map(memberLabel).join(' · ')}</dd>
         </div>
       ))}
     </dl>
