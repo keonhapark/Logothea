@@ -3,6 +3,7 @@ import { mainState } from '../store/mainState'
 import type { StockDetailResponsePayload } from '../../lib/types/stockDetail'
 import type { Sp500Stock, StockPriceEntry } from '../../lib/types/stockList'
 import { axiosErrorToIpcError } from '../../lib/types/ipcError'
+import type { EarningsTimelineItem } from '../../lib/types/earningsTimeline'
 
 // Phase 5: StockDetailResponsePayload 정의를 src/lib/types/stockDetail.ts 로 이동.
 // 본 모듈의 외부 import 호환을 위해 type re-export.
@@ -552,12 +553,5 @@ export interface AssetHistoryPoint {
   totalAssetUsd: number
 }
 
-export interface EarningsTimelineItem {
-  ticker: string
-  companyName: string
-  /** epoch seconds UTC */
-  scheduledAt: number
-  confirmed: boolean
-  /** Finnhub hour 필드: "bmo"(장전) | "amc"(장후) | "dmh"(장중) | null */
-  marketSession: string | null
-}
+// 어닝콜 일정 원본 항목. 웹과 함께 쓰는 그룹핑(src/lib/earningsTimeline)이 쓰므로 src/lib/types 로 옮겼다.
+export type { EarningsTimelineItem }
