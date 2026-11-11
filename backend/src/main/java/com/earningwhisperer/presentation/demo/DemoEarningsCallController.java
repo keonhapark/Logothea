@@ -135,7 +135,8 @@ public class DemoEarningsCallController {
     /**
      * 콜 참가자 명부 조회.
      *
-     * <p>터미널의 발화자 프로필이 쓴다. 스크립트에 명부가 없으면 빈 배열 — 그 경우 터미널은
+     * <p>터미널의 발화자 프로필이 쓴다. {@code ticker} 를 주면 그 종목이 재생할 대본의 명부이고, 없으면 기본
+     * 스크립트(전시 웹)의 명부다. 스크립트에 명부가 없으면 빈 배열 — 그 경우 터미널은
      * 프로필 진입점을 띄우지 않는다. 재생 중 여부와 무관하게 응답한다.
      *
      * <p>스크립트를 읽지 못하면 500 이다. 빈 배열로 내려보내면 "명부를 안 넣었다" 와
@@ -146,10 +147,10 @@ public class DemoEarningsCallController {
      * 않게 하는 것이 이 필드의 목적이다.
      */
     @GetMapping("/speakers")
-    public ResponseEntity<?> speakers() {
+    public ResponseEntity<?> speakers(@RequestParam(required = false) String ticker) {
         List<DemoEarningsCallScript.Speaker> speakers;
         try {
-            speakers = service.speakers();
+            speakers = service.speakers(ticker);
         } catch (IOException e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Map.of("error", "발화자 명부를 읽지 못했습니다: " + e.getMessage()));

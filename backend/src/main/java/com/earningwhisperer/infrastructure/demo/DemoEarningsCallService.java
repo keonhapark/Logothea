@@ -63,6 +63,8 @@ public class DemoEarningsCallService {
     private final CallAnalysisService callAnalysis;
     private final ObjectMapper objectMapper;
     private final String scriptPath;
+    /** 종목별 대본 폴더(classpath). {@code <폴더>/<종목 소문자>.json} 이 있으면 그 종목은 이 대본을 쓴다. */
+    private final String scriptDir;
     private final long intervalMs;
 
     /** ticker → 진행 중인 세션. 같은 종목의 중복 재생을 막는다. */
@@ -89,6 +91,7 @@ public class DemoEarningsCallService {
             CallAnalysisService callAnalysis,
             ObjectMapper objectMapper,
             @Value("${demo.earnings-call.script-path:data/demo-earnings-call.json}") String scriptPath,
+            @Value("${demo.earnings-call.script-dir:data/demo}") String scriptDir,
             @Value("${demo.earnings-call.interval-ms:6000}") long intervalMs
     ) {
         this.transcriptService = transcriptService;
@@ -96,6 +99,7 @@ public class DemoEarningsCallService {
         this.callAnalysis = callAnalysis;
         this.objectMapper = objectMapper;
         this.scriptPath = scriptPath;
+        this.scriptDir = scriptDir;
         // 음수 간격은 Thread.sleep 에서 IllegalArgumentException 이 되고, 재생이 세그먼트
         // 0개로 조용히 끝난다. 설정 오타를 기동 시점에 잡는다.
         if (intervalMs < 0) {
@@ -107,15 +111,16 @@ public class DemoEarningsCallService {
     /**
      * 재생을 시작한다.
      *
-     * @param requestedTicker 재생할 종목. null/공백이면 스크립트의 기본 종목을 쓴다.
+     * @param requestedTicker 재생할 종목. null/공백이면 기본 스크립트의 종목을 쓴다. 그 종목의 대본이
+     *                        있으면 그 대본을, 없으면 기본 스크립트를 재생한다({@link #loadScript(String)}).
      * @return 시작 결과. 이미 재생 중이면 {@link StartResult#alreadyRunning}.
      */
     public StartResult start(String requestedTicker) {
         DemoEarningsCallScript script;
         try {
-            script = loadScript();
+            script = loadScript(requestedTicker);
         } catch (IOException e) {
-            log.error("[DemoCall] 스크립트 로드 실패 - path={} error={}", scriptPath, e.getMessage(), e);
+            log.error("[DemoCall] 스크립트 로드 실패 - ticker={} error={}", requestedTicker, e.getMessage(), e);
             return StartResult.scriptUnavailable(e.getMessage());
         }
         String defect = validateSegments(script);
@@ -208,7 +213,7 @@ public class DemoEarningsCallService {
     }
 
     /**
-     * 스크립트에 적힌 콜 참가자 명부.
+     * 그 종목이 재생할 스크립트에 적힌 콜 참가자 명부. 고르는 규칙은 {@link #start(String)} 와 같다.
      *
      * <p>재생 중이 아니어도 읽을 수 있다 — 터미널은 트레이딩 룸에 들어가는 시점에 한 번
      * 가져다 두고, 세그먼트가 도착할 때마다 {@code match_key} 로 맞춰 붙인다.
@@ -218,11 +223,12 @@ public class DemoEarningsCallService {
      * 시연 중 프로필이 안 뜰 때 원인을 서버 로그로만 알 수 있게 된다. {@code start()} 도
      * 같은 조건을 {@code SCRIPT_UNAVAILABLE} 로 올린다.
      *
+     * @param ticker 종목. null/공백이면 기본 스크립트의 명부다.
      * @return 명부가 없으면 빈 리스트. null 원소는 걸러낸다.
      * @throws IOException 스크립트를 읽거나 파싱하지 못한 경우.
      */
-    public List<DemoEarningsCallScript.Speaker> speakers() throws IOException {
-        List<DemoEarningsCallScript.Speaker> speakers = loadScript().speakers();
+    public List<DemoEarningsCallScript.Speaker> speakers(String ticker) throws IOException {
+        List<DemoEarningsCallScript.Speaker> speakers = loadScript(ticker).speakers();
         if (speakers == null) {
             return List.of();
         }
@@ -429,10 +435,35 @@ public class DemoEarningsCallService {
     }
 
     DemoEarningsCallScript loadScript() throws IOException {
-        try (InputStream in = new ClassPathResource(scriptPath).getInputStream()) {
+        return readScript(new ClassPathResource(scriptPath));
+    }
+
+    /**
+     * 종목의 대본. {@code <scriptDir>/<종목 소문자>.json} 이 있으면 그것을, 없으면 기본 스크립트를 읽는다.
+     *
+     * <p>종목은 요청 본문에서 오므로 티커 모양({@link #TICKER_FILE_NAME})일 때만 경로에 넣는다. 그 밖의 값은 기본
+     * 스크립트로 돌아간다. 종목별 대본은 반복 방송과 겹치지 않는 부스 시연용이다. 반복 방송은 종목을 비워 두면
+     * 기본 스크립트를 쓴다.
+     */
+    DemoEarningsCallScript loadScript(String ticker) throws IOException {
+        String key = normalizeKey(ticker);
+        if (key != null && TICKER_FILE_NAME.matcher(key).matches()) {
+            ClassPathResource own = new ClassPathResource(scriptDir + "/" + key.toLowerCase() + ".json");
+            if (own.exists()) {
+                return readScript(own);
+            }
+        }
+        return loadScript();
+    }
+
+    private DemoEarningsCallScript readScript(ClassPathResource resource) throws IOException {
+        try (InputStream in = resource.getInputStream()) {
             return objectMapper.readValue(in, DemoEarningsCallScript.class);
         }
     }
+
+    /** 종목별 대본 파일 이름으로 쓸 수 있는 종목. 경로 구분자나 {@code ..} 가 들어가지 않는다. */
+    private static final java.util.regex.Pattern TICKER_FILE_NAME = java.util.regex.Pattern.compile("[A-Z][A-Z0-9]{0,9}");
 
     private static String normalizeTicker(String requested, String fallback) {
         if (requested != null && !requested.isBlank()) {

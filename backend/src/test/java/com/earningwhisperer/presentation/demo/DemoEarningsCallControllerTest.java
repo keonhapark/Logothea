@@ -255,4 +255,21 @@ class DemoEarningsCallControllerTest {
                 .andExpect(jsonPath("$.loop").value(true))
                 .andExpect(jsonPath("$.call_id").value("demo-wmt-3"));
     }
+
+    @Test
+    @DisplayName("명부는 요청 종목을 서비스에 넘기고, 종목이 없으면 기본 명부를 묻는다")
+    void speakers_종목별() throws Exception {
+        when(service.speakers("NVDA")).thenReturn(java.util.List.of(
+                new com.earningwhisperer.infrastructure.demo.DemoEarningsCallScript.Speaker(
+                        "Jensen Huang", "CEO · Jensen Huang", "CEO", "NVIDIA", false)));
+        when(service.speakers(null)).thenReturn(java.util.List.of());
+
+        mockMvc.perform(get("/api/v1/demo/earnings-call/speakers").param("ticker", "NVDA"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].name").value("Jensen Huang"))
+                .andExpect(jsonPath("$[0].match_key").value("CEO · Jensen Huang"));
+        mockMvc.perform(get("/api/v1/demo/earnings-call/speakers"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(0));
+    }
 }

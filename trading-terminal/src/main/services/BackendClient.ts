@@ -400,10 +400,11 @@ export const BackendClient = {
    * 콜 참가자 명부 조회.
    * 백엔드는 사실 항목만 (이름/직책/소속/애널리스트 여부) 돌려준다. 실패하면 빈 배열 —
    * 명부는 부가 정보라서, 못 가져왔다고 트레이딩 룸 진입을 막을 이유가 없다.
+   * `ticker` 를 주면 그 종목 시연 대본의 명부, 없으면 기본 대본의 명부다.
    */
-  async getEarningsSpeakers(): Promise<SpeakerProfilePayload[]> {
+  async getEarningsSpeakers(ticker?: string): Promise<SpeakerProfilePayload[]> {
     try {
-      const { data } = await http.get('/api/v1/demo/earnings-call/speakers')
+      const { data } = await http.get('/api/v1/demo/earnings-call/speakers', ticker ? { params: { ticker } } : undefined)
       if (!Array.isArray(data)) return []
       const seen = new Set<string>()
       return data.flatMap((raw) => {

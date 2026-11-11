@@ -1,0 +1,288 @@
+{
+  "_comment": "NVIDIA Q2 FY2027 어닝콜(2026-08-26) 실제 트랜스크립트 발췌입니다. 세그먼트 텍스트는 FactSet 교정본 원문 그대로이며 지어낸 문장은 없습니다. 구성: 실적(6) · 직전 콜 대비 변화(6) · 가이던스와 마진 재설정(9) · Q&A 공급 제약 질문과 답(6). 형식 규칙은 backend/src/main/resources/data/demo-earnings-call.json 의 _comment 와 같습니다.",
+  "ticker": "NVDA",
+  "company_name": "NVIDIA Corporation",
+  "session_label": "Q2 FY2027 Earnings Call",
+  "call_id_prefix": "demo-nvda-q2fy27",
+  "call_started_at": "2026-08-26T21:00:00Z",
+  "related_tickers": [
+    "AMD",
+    "TSM",
+    "MU",
+    "AMZN"
+  ],
+  "analyst_qa": {
+    "question": "Good afternoon. Thank you for taking my question. If you think about the 100% growth you talked about in terms of the plus unconstrained demand growth you're expecting, the 70% you expect to fulfill in terms of supply, can you maybe talk about some of the – or, rank order some of the most acute constraints, whether that be things like data center power and shell availability, DRAM, wafer foundry availability, et cetera? If you can maybe help us understand, which are the biggest among those, that would be very helpful. Thank you.",
+    "answer": "There's something funny I could say, but I'm going to just not. Last year, one of the funnest things to do is just to go figure out where I go for dinner and who I have dinner with, and their stock price doubles the next day. I think the answer is our entire supply chain is challenged, and everybody is really running flat out. And more capacity is coming online all the time, which is one of the advantages, what's going to happen this year. It's not going to come online in just an instance in time, but it's going to come online every day. Yields are going to get improved. We're going to be doing yield improvement. We're going to work hard on working with every one of our suppliers. And so, we're just – we have a – it's not even next year yet. And so, we've got lots and lots of time to work hard every day. And so, at this moment, we have supply for 70%, we have more supply than 70%, but about 70%. Our demand is much higher than that. And we've got to go work hard, or we're going to be disappointing customers. And we like not to disappoint our customers and we like to work hard for them. And so, I've got – I'm going to need the help of the entire supply chain to help me out here. But they all know that. What I'm telling you about our needs for next year is exactly consistent with what I've told them. Everybody's on the exact same song sheet, and I'm trying to be as transparent as we can because we're talking about big numbers."
+  },
+  "speakers": [
+    {
+      "name": "Toshiya Hari",
+      "match_key": "Toshiya Hari",
+      "title": "Vice President, Investor Relations & Strategic Finance",
+      "affiliation": "NVIDIA Corp.",
+      "analyst": false
+    },
+    {
+      "name": "Colette M. Kress",
+      "match_key": "CFO · Colette Kress",
+      "title": "Chief Financial Officer & Executive Vice President",
+      "affiliation": "NVIDIA Corp.",
+      "analyst": false
+    },
+    {
+      "name": "Jensen Huang",
+      "match_key": "CEO · Jensen Huang",
+      "title": "Founder, President, Chief Executive Officer & Director",
+      "affiliation": "NVIDIA Corp.",
+      "analyst": false
+    },
+    {
+      "name": "Joe Moore",
+      "match_key": "Joe Moore",
+      "title": "Analyst",
+      "affiliation": "Morgan Stanley & Co. LLC",
+      "analyst": true
+    },
+    {
+      "name": "CJ Muse",
+      "match_key": "CJ Muse",
+      "title": "Analyst",
+      "affiliation": "Cantor Fitzgerald & Co.",
+      "analyst": true
+    },
+    {
+      "name": "Stacy A. Rasgon",
+      "match_key": "Stacy A. Rasgon",
+      "title": "Analyst",
+      "affiliation": "Bernstein Institutional Services LLC",
+      "analyst": true
+    },
+    {
+      "name": "Vivek Arya",
+      "match_key": "Vivek Arya",
+      "title": "Analyst",
+      "affiliation": "BofA Securities, Inc.",
+      "analyst": true
+    },
+    {
+      "name": "Timothy Arcuri",
+      "match_key": "Timothy Arcuri",
+      "title": "Analyst",
+      "affiliation": "UBS Securities LLC",
+      "analyst": true
+    },
+    {
+      "name": "Ben Reitzes",
+      "match_key": "Ben Reitzes",
+      "title": "Analyst",
+      "affiliation": "Melius Research LLC",
+      "analyst": true
+    },
+    {
+      "name": "Jim Schneider",
+      "match_key": "Jim Schneider",
+      "title": "Analyst",
+      "affiliation": "Goldman Sachs & Co. LLC",
+      "analyst": true
+    },
+    {
+      "name": "Aaron Rakers",
+      "match_key": "Aaron Rakers",
+      "title": "Analyst",
+      "affiliation": "Wells Fargo Securities LLC",
+      "analyst": true
+    }
+  ],
+  "segments": [
+    {
+      "sequence": 0,
+      "start_ms": 0,
+      "end_ms": 15000,
+      "speaker": "CFO · Colette Kress",
+      "text": "We delivered another outstanding quarter with record revenue, operating income, and EPS."
+    },
+    {
+      "sequence": 1,
+      "start_ms": 15000,
+      "end_ms": 30000,
+      "speaker": "CFO · Colette Kress",
+      "text": "Total revenue of $96 billion, more than doubled year-over-year as growth accelerated for the fourth consecutive quarter."
+    },
+    {
+      "sequence": 2,
+      "start_ms": 30000,
+      "end_ms": 45000,
+      "speaker": "CFO · Colette Kress",
+      "text": "Q2 data center revenue increased 18% quarter-over-quarter to $89 billion with strong contributions from both subsegments; hyperscale and ACIE, which includes our neocloud, industrial, and enterprise customers."
+    },
+    {
+      "sequence": 3,
+      "start_ms": 45000,
+      "end_ms": 60000,
+      "speaker": "CFO · Colette Kress",
+      "text": "Hyperscale revenue of $49 billion grew 13% sequentially, driven by sustained strength in Blackwell."
+    },
+    {
+      "sequence": 4,
+      "start_ms": 60000,
+      "end_ms": 75000,
+      "speaker": "CFO · Colette Kress",
+      "text": "ACIE revenue of $40 billion increased 25% sequentially and 138% year-over-year."
+    },
+    {
+      "sequence": 5,
+      "start_ms": 75000,
+      "end_ms": 90000,
+      "speaker": "CFO · Colette Kress",
+      "text": "Building on its already vast installed base of NVIDIA Compute, AWS is deploying an additional 2 million GPUs starting this quarter through the second quarter of fiscal 2029."
+    },
+    {
+      "sequence": 6,
+      "start_ms": 90000,
+      "end_ms": 105000,
+      "speaker": "CFO · Colette Kress",
+      "text": "We commenced production shipments of Vera Rubin earlier this month."
+    },
+    {
+      "sequence": 7,
+      "start_ms": 105000,
+      "end_ms": 120000,
+      "speaker": "CFO · Colette Kress",
+      "text": "Having already received purchase orders from every major hyperscaler, AI cloud, and system OEM, we expect Vera Rubin to mark the fastest product ramp in NVIDIA's history."
+    },
+    {
+      "sequence": 8,
+      "start_ms": 120000,
+      "end_ms": 135000,
+      "speaker": "CFO · Colette Kress",
+      "text": "And based on our customer demand and improving supply outlook, our preliminary expectation is for CPU revenue to more than double in fiscal 2028, positioning us as one of the world's leading server CPU suppliers."
+    },
+    {
+      "sequence": 9,
+      "start_ms": 135000,
+      "end_ms": 150000,
+      "speaker": "CFO · Colette Kress",
+      "text": "GAAP and non-GAAP gross margins were both 75%, largely unchanged from last quarter due to a similar product mix."
+    },
+    {
+      "sequence": 10,
+      "start_ms": 150000,
+      "end_ms": 165000,
+      "speaker": "CFO · Colette Kress",
+      "text": "And given ongoing geopolitical uncertainty, there is no China data center compute revenue in our forward outlook."
+    },
+    {
+      "sequence": 11,
+      "start_ms": 165000,
+      "end_ms": 180000,
+      "speaker": "CFO · Colette Kress",
+      "text": "Relative to our plan to return 50% or more of free cash flow, we returned 60% on a year-to-date basis."
+    },
+    {
+      "sequence": 12,
+      "start_ms": 180000,
+      "end_ms": 195000,
+      "speaker": "CFO · Colette Kress",
+      "text": "Total revenue is expected to be $108 billion, plus or minus 2%."
+    },
+    {
+      "sequence": 13,
+      "start_ms": 195000,
+      "end_ms": 210000,
+      "speaker": "CFO · Colette Kress",
+      "text": "Looking ahead, our preliminary expectation is for fiscal year 2028 revenue to grow approximately 70% year-over-year."
+    },
+    {
+      "sequence": 14,
+      "start_ms": 210000,
+      "end_ms": 225000,
+      "speaker": "CFO · Colette Kress",
+      "text": "Although we will work to close the supply-demand gap, we expect supply to remain a bottleneck at least through the end of fiscal year 2028."
+    },
+    {
+      "sequence": 15,
+      "start_ms": 225000,
+      "end_ms": 240000,
+      "speaker": "CFO · Colette Kress",
+      "text": "As you are already aware, we are experiencing extreme pricing conditions in memory."
+    },
+    {
+      "sequence": 16,
+      "start_ms": 240000,
+      "end_ms": 255000,
+      "speaker": "CFO · Colette Kress",
+      "text": "The magnitude of the price increase has exceeded our prior expectations and are headed even higher into next year."
+    },
+    {
+      "sequence": 17,
+      "start_ms": 255000,
+      "end_ms": 270000,
+      "speaker": "CFO · Colette Kress",
+      "text": "As a result, we are resetting expectations today."
+    },
+    {
+      "sequence": 18,
+      "start_ms": 270000,
+      "end_ms": 285000,
+      "speaker": "CFO · Colette Kress",
+      "text": "For Q3, we expect GAAP and non-GAAP gross margins to be 74%, plus or minus 50 basis points."
+    },
+    {
+      "sequence": 19,
+      "start_ms": 285000,
+      "end_ms": 300000,
+      "speaker": "CFO · Colette Kress",
+      "text": "We expect margins to bottom in Q4 in the 71% to 72% range before settling at 72% to 73% in fiscal year 2028 as executed price increases take effect in Q1."
+    },
+    {
+      "sequence": 20,
+      "start_ms": 300000,
+      "end_ms": 315000,
+      "speaker": "CFO · Colette Kress",
+      "text": "We want to be direct about this rather than let it linger as an open question."
+    },
+    {
+      "sequence": 21,
+      "start_ms": 315000,
+      "end_ms": 330000,
+      "speaker": "Jim Schneider",
+      "text": "If you think about the 100% growth you talked about in terms of the plus unconstrained demand growth you're expecting, the 70% you expect to fulfill in terms of supply, can you maybe talk about some of the – or, rank order some of the most acute constraints, whether that be things like data center power and shell availability, DRAM, wafer foundry availability, et cetera?"
+    },
+    {
+      "sequence": 22,
+      "start_ms": 330000,
+      "end_ms": 345000,
+      "speaker": "Jim Schneider",
+      "text": "If you can maybe help us understand, which are the biggest among those, that would be very helpful."
+    },
+    {
+      "sequence": 23,
+      "start_ms": 345000,
+      "end_ms": 360000,
+      "speaker": "CEO · Jensen Huang",
+      "text": "There's something funny I could say, but I'm going to just not."
+    },
+    {
+      "sequence": 24,
+      "start_ms": 360000,
+      "end_ms": 375000,
+      "speaker": "CEO · Jensen Huang",
+      "text": "I think the answer is our entire supply chain is challenged, and everybody is really running flat out."
+    },
+    {
+      "sequence": 25,
+      "start_ms": 375000,
+      "end_ms": 390000,
+      "speaker": "CEO · Jensen Huang",
+      "text": "And so, at this moment, we have supply for 70%, we have more supply than 70%, but about 70%."
+    },
+    {
+      "sequence": 26,
+      "start_ms": 390000,
+      "end_ms": 405000,
+      "speaker": "CEO · Jensen Huang",
+      "text": "Our demand is much higher than that."
+    }
+  ]
+}

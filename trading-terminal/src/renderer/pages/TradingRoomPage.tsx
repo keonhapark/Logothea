@@ -20,7 +20,7 @@ import OrderSheet, { type OrderSubmitPayload } from "../components/call/OrderShe
 import CallTour from "../components/call/CallTour";
 import { isCallTourDone } from "../lib/callTour";
 import { useOrderAccount } from "../hooks/useOrderAccount";
-import { DEMO_TICKER } from "../constants/demo";
+import { isDemoTicker } from "../constants/demo";
 import { showIpcErrorToast } from "../components/common/Toast";
 import { applyTradeRecords, type SessionOrder, type TradeRecord } from "../lib/sessionOrders";
 import {
@@ -164,7 +164,7 @@ export default function TradingRoomPage() {
   // 서버가 시연 콜을 반복 방송하는 중이면(전시용 웹과 같은 방송) 이 화면에서 시작 · 중지하지 않는다.
   const { loop: demoLoop, markLoop: markDemoLoop, refresh: refreshDemoLoop } = useDemoLoop(
     ticker,
-    ticker === DEMO_TICKER,
+    isDemoTicker(ticker),
   );
 
   // 첫 사용 안내 — 실제 콜이 처음 시작된 화면에서 한 번만 띄운다. 시연 재생 · 반복 방송 중에는 띄우지 않는다.
@@ -588,7 +588,7 @@ export default function TradingRoomPage() {
           orderOpen={orderOpen}
           demo={{
             busy: demoBusy,
-            canStart: ticker === DEMO_TICKER,
+            canStart: isDemoTicker(ticker),
             onStart: () => void runDemo(restartDemo),
             onStop: () => void runDemo(stopDemo),
             onRestart: () => void runDemo(restartDemo),

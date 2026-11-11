@@ -33,6 +33,7 @@ import static org.awaitility.Awaitility.await;
 class DemoEarningsCallServiceTest {
 
     private static final String SCRIPT = "data/demo-earnings-call.json";
+    private static final String SCRIPT_DIR = "data/demo";
     /** 정상 종료 시 팩트체크 큐 대기시간의 기준. 테스트가 길어지지 않도록 짧게 둔다. */
     private static final long AI_TIMEOUT_MS = 200;
 
@@ -73,7 +74,7 @@ class DemoEarningsCallServiceTest {
                                                EarningsSummaryService summaryService,
                                                long intervalMs) {
         service = new DemoEarningsCallService(transcript, client,
-                analysis(client, publisher, noopDiffPublisher(), summaryService), new ObjectMapper(), SCRIPT, intervalMs);
+                analysis(client, publisher, noopDiffPublisher(), summaryService), new ObjectMapper(), SCRIPT, SCRIPT_DIR, intervalMs);
         return service;
     }
 
@@ -81,7 +82,7 @@ class DemoEarningsCallServiceTest {
                                                        TranscriptDiffPublisher diffPublisher,
                                                        long intervalMs) {
         service = new DemoEarningsCallService(new RecordingTranscriptService(), client,
-                analysis(client, noopPublisher(), diffPublisher, noopSummaryService()), new ObjectMapper(), SCRIPT, intervalMs);
+                analysis(client, noopPublisher(), diffPublisher, noopSummaryService()), new ObjectMapper(), SCRIPT, SCRIPT_DIR, intervalMs);
         return service;
     }
 
@@ -245,7 +246,7 @@ class DemoEarningsCallServiceTest {
     void 스크립트가_없으면_시작하지_않는다() {
         service = new DemoEarningsCallService(new RecordingTranscriptService(), disabledClient(),
                 analysis(disabledClient(), noopPublisher(), noopDiffPublisher(), noopSummaryService()),
-                new ObjectMapper(), "data/does-not-exist.json", 1);
+                new ObjectMapper(), "data/does-not-exist.json", SCRIPT_DIR, 1);
 
         DemoEarningsCallService.StartResult result = service.start("ORCL");
 
@@ -710,6 +711,74 @@ class DemoEarningsCallServiceTest {
             if (batch != null && batch.isCompleted() && batch.hasClaims()) {
                 published.add(callId);
             }
+        }
+    }
+    // ── 종목별 대본 ─────────────────────────────────────────────────────────────
+
+    @Test
+    void 종목별_대본이_있으면_그_대본을_재생한다() throws Exception {
+        RecordingTranscriptService transcript = new RecordingTranscriptService();
+        DemoEarningsCallService svc = newService(transcript, disabledClient(), noopPublisher(), 1);
+        DemoEarningsCallScript nvda = svc.loadScript("NVDA");
+
+        DemoEarningsCallService.StartResult result = svc.start("NVDA");
+
+        assertThat(result.outcome()).isEqualTo(DemoEarningsCallService.StartResult.Outcome.STARTED);
+        assertThat(result.segmentCount()).isEqualTo(nvda.segments().size());
+        assertThat(result.callId()).startsWith(nvda.callIdPrefix() + "-");
+        await().atMost(5, TimeUnit.SECONDS)
+                .untilAsserted(() -> assertThat(transcript.accepted).hasSize(result.segmentCount()));
+        assertThat(transcript.accepted.get(0).text()).isEqualTo(nvda.segments().get(0).text());
+        assertThat(transcript.accepted).allSatisfy(s -> assertThat(s.ticker()).isEqualTo("NVDA"));
+    }
+
+    @Test
+    void 종목별_대본을_고르는_규칙() throws Exception {
+        DemoEarningsCallService svc = newService(new RecordingTranscriptService(), disabledClient(),
+                noopPublisher(), 10_000);
+        String defaultTicker = svc.loadScript().ticker();
+
+        assertThat(svc.loadScript("NVDA").ticker()).isEqualTo("NVDA");
+        assertThat(svc.loadScript(" nvda ").ticker()).as("대소문자 · 공백은 정규화한다").isEqualTo("NVDA");
+        assertThat(svc.loadScript("ORCL").ticker()).as("대본이 없는 종목은 기본 스크립트").isEqualTo(defaultTicker);
+        assertThat(svc.loadScript(null).ticker()).isEqualTo(defaultTicker);
+        assertThat(svc.loadScript("../demo-earnings-call").ticker())
+                .as("티커 모양이 아니면 경로에 넣지 않는다").isEqualTo(defaultTicker);
+    }
+
+    @Test
+    void 명부도_종목의_대본을_따른다() throws Exception {
+        DemoEarningsCallService svc = newService(new RecordingTranscriptService(), disabledClient(),
+                noopPublisher(), 10_000);
+
+        assertThat(svc.speakers("NVDA")).extracting(DemoEarningsCallScript.Speaker::name).contains("Jensen Huang");
+        assertThat(svc.speakers(null)).extracting(DemoEarningsCallScript.Speaker::name)
+                .doesNotContain("Jensen Huang")
+                .containsExactlyElementsOf(svc.loadScript().speakers().stream()
+                        .map(DemoEarningsCallScript.Speaker::name).toList());
+    }
+
+    @Test
+    void 배포되는_종목별_대본은_모두_재생_조건을_지킨다() throws Exception {
+        // 파일 이름과 대본 종목이 어긋나면 그 종목을 고른 시연이 다른 종목 문장을 재생한다.
+        DemoEarningsCallService svc = newService(new RecordingTranscriptService(), disabledClient(),
+                noopPublisher(), 10_000);
+        var resources = new org.springframework.core.io.support.PathMatchingResourcePatternResolver()
+                .getResources("classpath:" + SCRIPT_DIR + "/*.json");
+        assertThat(resources).isNotEmpty();
+        for (var resource : resources) {
+            String file = resource.getFilename();
+            String ticker = file.substring(0, file.length() - ".json".length()).toUpperCase();
+            DemoEarningsCallScript script = svc.loadScript(ticker);
+
+            assertThat(script.ticker()).as(file).isEqualTo(ticker);
+            assertThat(DemoEarningsCallService.validateSegments(script)).as(file).isNull();
+            assertThat(script.segments().size() % 3).as(file + " 세그먼트 수는 3의 배수").isZero();
+            assertThatCode(() -> Instant.parse(script.callStartedAt())).as(file).doesNotThrowAnyException();
+            assertThat(script.speakers()).as(file).isNotEmpty();
+            assertThat(script.speakers().stream().map(DemoEarningsCallScript.Speaker::effectiveMatchKey).toList())
+                    .as(file + " 세그먼트 화자는 명부에 있어야 한다")
+                    .containsAll(script.segments().stream().map(DemoEarningsCallScript.Segment::speaker).toList());
         }
     }
 }
