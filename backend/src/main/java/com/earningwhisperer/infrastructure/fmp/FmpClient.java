@@ -1,6 +1,7 @@
 package com.earningwhisperer.infrastructure.fmp;
 
 import com.earningwhisperer.infrastructure.fmp.dto.FmpEarningsCalendarItem;
+import com.earningwhisperer.infrastructure.fmp.dto.FmpEarningsReport;
 import com.earningwhisperer.infrastructure.fmp.dto.FmpHistoricalBar;
 import com.earningwhisperer.infrastructure.fmp.dto.FmpProfile;
 import lombok.extern.slf4j.Slf4j;
@@ -125,6 +126,40 @@ public class FmpClient {
             return Collections.emptyList();
         } catch (RestClientException e) {
             log.warn("[FmpClient] earningsCalendar 호출 실패 from={} to={} reason={}", from, to, e.getMessage());
+            return Collections.emptyList();
+        }
+    }
+
+    /**
+     * `/stable/earnings?symbol={ticker}` 호출. 종목의 실적 발표 이력(실제 발표일 · EPS)을 최신순으로 반환한다.
+     *
+     * <p>Finnhub `/stock/earnings` 는 분기 말일(period)만 주고 발표일을 주지 않아, 발표일은 이쪽에서 가져온다.
+     * 무료 등급에서 막힌 종목(예: LLY)은 빈 목록이다.
+     */
+    public List<FmpEarningsReport> fetchEarningsReports(String ticker, FmpRateLimiter.Priority priority) {
+        try {
+            rateLimiter.acquire(priority);
+        } catch (RateLimitExceededException e) {
+            log.warn("[FmpClient] earnings rate limited ticker={} priority={} reason={}", ticker, priority, e.getMessage());
+            return Collections.emptyList();
+        }
+        try {
+            FmpEarningsReport[] body = restClient.get()
+                    .uri(b -> b.path("/stable/earnings")
+                            .queryParam("symbol", ticker)
+                            .queryParam("limit", 12)
+                            .queryParam("apikey", properties.apiKey())
+                            .build())
+                    .retrieve()
+                    .body(FmpEarningsReport[].class);
+            return body == null ? Collections.emptyList() : List.of(body);
+        } catch (HttpClientErrorException e) {
+            // 402 · 403: 무료 등급 밖 종목. 다른 4xx 도 이 종목만 비우고 넘어간다.
+            log.info("[FmpClient] earnings 조회 불가 ticker={} status={}", ticker, e.getStatusCode());
+            return Collections.emptyList();
+        } catch (RestClientException e) {
+            // 무료 등급 밖 종목은 200 + 문자열 본문으로 와서 역직렬화 단계에서 실패하기도 한다.
+            log.warn("[FmpClient] earnings 호출 실패 ticker={} reason={}", ticker, e.getMessage());
             return Collections.emptyList();
         }
     }

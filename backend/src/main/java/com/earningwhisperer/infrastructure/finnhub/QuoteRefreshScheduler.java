@@ -57,6 +57,9 @@ public class QuoteRefreshScheduler {
     /** 시세를 채우는 상위 순위 수. 시장 지도가 보여 주는 범위와 같다. */
     static final int TOP_N = 100;
 
+    /** 이 시간 안에 실시간 체결을 받은 구독 종목만 장중 REST 갱신에서 뺀다. 갱신 주기(5분)의 두 배. */
+    static final java.time.Duration LIVE_TICK_FRESHNESS = java.time.Duration.ofMinutes(10);
+
     private static final ZoneId MARKET_ZONE = ZoneId.of("America/New_York");
     private static final LocalTime MARKET_OPEN = LocalTime.of(9, 30);
     private static final LocalTime INTRADAY_START = LocalTime.of(9, 35);
@@ -107,7 +110,8 @@ public class QuoteRefreshScheduler {
     @Scheduled(cron = "0 */5 9-15 * * MON-FRI", zone = "America/New_York")
     public void refreshIntraday() {
         if (!isIntradayWindow()) return;
-        refresh("intraday", webSocketManager.subscribedTickers());
+        // 구독 종목이라도 최근 체결이 없으면 REST 로 갱신한다 (StockPriceCache#recentlyTicked 주석).
+        refresh("intraday", priceCache.recentlyTicked(webSocketManager.subscribedTickers(), LIVE_TICK_FRESHNESS));
     }
 
     @Async

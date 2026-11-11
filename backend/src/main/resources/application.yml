@@ -57,6 +57,10 @@ fmp:
   base-url: https://financialmodelingprep.com
   api-key: ${FMP_API_KEY:}       # 미설정 시 S&P 500 분기 동기화 스케줄러 비활성화
 
+earnings-result:
+  # 분기 말일을 발표일로 저장했던 예전 어닝 결과를 기동 직후 한 번 바로잡는다. 잘못된 행이 없으면 아무것도 하지 않는다.
+  repair-on-startup: ${EARNINGS_RESULT_REPAIR_ON_STARTUP:true}
+
 earnings-calendar:
   demo-overrides:
     # 공식 확인한 특정 행사만 기동 시 보정. FMP/다른 종목 수집은 그대로 유지한다.

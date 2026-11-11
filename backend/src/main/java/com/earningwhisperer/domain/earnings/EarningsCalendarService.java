@@ -116,7 +116,7 @@ public class EarningsCalendarService {
 
         if (survivor == null) {
             earningsCalendarRepository.save(EarningsCalendar.builder().stock(stock)
-                    .scheduledAt(entry.scheduledAt()).confirmed(true).marketSession(entry.marketSession())
+                    .scheduledAt(entry.scheduledAt()).confirmed(entry.isConfirmed()).marketSession(entry.marketSession())
                     .epsEstimate(eps).revenueEstimate(revenue).build());
             log.info("[EarningsCalendarCorrection] created ticker={} utc={}", entry.ticker(), entry.scheduledAt());
             return;
@@ -130,7 +130,7 @@ public class EarningsCalendarService {
             earningsCalendarRepository.flush();
         }
         Instant previous = survivor.getScheduledAt();
-        survivor.updateAll(entry.scheduledAt(), true, entry.marketSession(), eps, revenue);
+        survivor.updateAll(entry.scheduledAt(), entry.isConfirmed(), entry.marketSession(), eps, revenue);
         if (!previous.equals(entry.scheduledAt()) || !duplicates.isEmpty()) {
             log.info("[EarningsCalendarCorrection] corrected ticker={} keptId={} from={} to={} removed={}",
                     entry.ticker(), survivor.getId(), previous, entry.scheduledAt(),

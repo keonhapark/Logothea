@@ -1,6 +1,8 @@
 package com.earningwhisperer.infrastructure.finnhub;
 
+import com.earningwhisperer.domain.portfolio.PositionRepository;
 import com.earningwhisperer.domain.stock.Stock;
+import com.earningwhisperer.domain.stock.StockRepository;
 import com.earningwhisperer.domain.watchlist.WatchlistRepository;
 import com.earningwhisperer.global.common.SyncPriority;
 import lombok.RequiredArgsConstructor;
@@ -9,7 +11,10 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * 관심종목(Watchlist) unique ticker 의 어닝 결과(EPS surprise) 백필 스케줄러.
@@ -35,14 +40,16 @@ public class EarningsResultSyncScheduler {
 
     private final EarningsResultSyncService earningsResultSyncService;
     private final WatchlistRepository watchlistRepository;
+    private final PositionRepository positionRepository;
+    private final StockRepository stockRepository;
 
-    /** 매주 일요일 02:00 UTC — 관심종목 unique ticker 어닝 결과 백필. */
+    /** 매주 일요일 02:00 UTC — 관심 · 보유 종목 어닝 결과 백필. */
     @Scheduled(cron = "0 0 2 * * SUN", zone = "UTC")
     public void syncEarningsResults() {
-        List<Stock> uniqueStocks = watchlistRepository.findDistinctStocks();
+        List<Stock> uniqueStocks = targetStocks();
 
         if (uniqueStocks.isEmpty()) {
-            log.info("[EarningsResultSync] 관심종목 비어있음 — 동기화 skip");
+            log.info("[EarningsResultSync] 관심 · 보유 종목 비어있음 — 동기화 skip");
             return;
         }
 
@@ -69,6 +76,28 @@ public class EarningsResultSyncScheduler {
         }
 
         logCycleResult(total, success, failed, upserted);
+    }
+
+    /**
+     * 동기화 대상: 관심 종목 + 보유 종목. 보유 종목을 빼면 산 종목의 "최근 어닝 반응" 이 비어 있다.
+     */
+    List<Stock> targetStocks() {
+        Set<Long> seen = new HashSet<>();
+        List<Stock> result = new ArrayList<>();
+        for (Stock s : watchlistRepository.findDistinctStocks()) {
+            if (s != null && s.getId() != null && seen.add(s.getId())) {
+                result.add(s);
+            }
+        }
+        List<String> held = positionRepository.findDistinctTickers();
+        if (!held.isEmpty()) {
+            for (Stock s : stockRepository.findByTickerIn(held)) {
+                if (s != null && s.getId() != null && seen.add(s.getId())) {
+                    result.add(s);
+                }
+            }
+        }
+        return result;
     }
 
     private void logCycleResult(int total, int success, int failed, int upserted) {

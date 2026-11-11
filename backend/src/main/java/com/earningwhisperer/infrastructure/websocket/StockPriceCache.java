@@ -56,6 +56,9 @@ public class StockPriceCache {
      */
     private final ConcurrentHashMap<String, Double> quoteCloses = new ConcurrentHashMap<>();
 
+    /** 실시간 체결({@link #update})을 마지막으로 받은 시각(epoch ms). REST 시세는 여기에 기록하지 않는다. */
+    private final ConcurrentHashMap<String, Long> liveTickAt = new ConcurrentHashMap<>();
+
     void setClock(Clock clock) {
         this.clock = clock;
     }
@@ -221,7 +224,26 @@ public class StockPriceCache {
         long now = System.currentTimeMillis();
         if (cache.computeIfPresent(ticker, (t, existing) -> existing.withPrice(price, now)) != null) {
             dirtyTickers.add(ticker);
+            liveTickAt.put(ticker, now);
         }
+    }
+
+    /**
+     * {@code tickers} 중 최근 {@code within} 안에 실시간 체결을 받은 종목.
+     *
+     * <p>웹소켓에 구독만 하고 체결이 오지 않는 종목(연결은 살아 있으나 무료 등급에서 체결이 끊기는 경우 등)을
+     * REST 갱신에서 빼면 그 종목 시세가 장 시작 값에 멈춘다. 실제로 MSFT 가 하루 종일 장 시작 시세로 남았다.
+     */
+    public Set<String> recentlyTicked(Collection<String> tickers, java.time.Duration within) {
+        long cutoff = System.currentTimeMillis() - within.toMillis();
+        Set<String> result = new HashSet<>();
+        for (String ticker : tickers) {
+            Long at = liveTickAt.get(ticker);
+            if (at != null && at >= cutoff) {
+                result.add(ticker);
+            }
+        }
+        return result;
     }
 
     public Collection<StockPriceSnapshot> getAll() {

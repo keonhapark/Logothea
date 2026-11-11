@@ -100,10 +100,11 @@ class QuoteRefreshSchedulerTest {
     }
 
     @Test
-    @DisplayName("장중 창 안이면 WS 구독 집합을 빼고 부른다")
+    @DisplayName("장중 창 안이면 최근 체결을 받은 WS 구독 종목만 빼고 부른다")
     void 장중_창_안_실행() {
         givenRankedStocks(2);
         given(webSocketManager.subscribedTickers()).willReturn(Set.of("T1"));
+        given(priceCache.recentlyTicked(Set.of("T1"), QuoteRefreshScheduler.LIVE_TICK_FRESHNESS)).willReturn(Set.of("T1"));
         given(finnhubClient.fetchQuote(anyString(), any())).willReturn(Optional.of(QUOTE));
         given(priceCache.applyQuote(anyString(), anyDouble(), anyDouble(), anyBoolean())).willReturn(true);
 
@@ -111,6 +112,21 @@ class QuoteRefreshSchedulerTest {
 
         verify(finnhubClient, never()).fetchQuote(eq("T1"), any());
         verify(finnhubClient).fetchQuote("T2", FinnhubRateLimiter.Priority.LOW);
+    }
+
+    @Test
+    @DisplayName("구독 중이라도 최근 체결이 없는 종목은 장중 REST 갱신에 넣는다 (시세가 장 시작 값에 멈추지 않게)")
+    void 장중_구독했지만_체결_없음() {
+        givenRankedStocks(2);
+        given(webSocketManager.subscribedTickers()).willReturn(Set.of("T1", "T2"));
+        given(priceCache.recentlyTicked(Set.of("T1", "T2"), QuoteRefreshScheduler.LIVE_TICK_FRESHNESS)).willReturn(Set.of("T2"));
+        given(finnhubClient.fetchQuote(anyString(), any())).willReturn(Optional.of(QUOTE));
+        given(priceCache.applyQuote(anyString(), anyDouble(), anyDouble(), anyBoolean())).willReturn(true);
+
+        schedulerAt("2026-11-10T15:00:00Z").refreshIntraday();
+
+        verify(finnhubClient).fetchQuote("T1", FinnhubRateLimiter.Priority.LOW);
+        verify(finnhubClient, never()).fetchQuote(eq("T2"), any());
     }
 
     @Test

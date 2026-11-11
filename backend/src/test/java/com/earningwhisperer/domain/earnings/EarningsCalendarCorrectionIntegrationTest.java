@@ -70,7 +70,8 @@ class EarningsCalendarCorrectionIntegrationTest {
         flushAndClear();
 
         assertThat(stocks.count()).isGreaterThan(9);
-        assertThat(calendar.count()).isEqualTo(9);
+        // 보정표의 행사 중 시드 종목에 있는 것만 만들어진다. 공식 확인 9건은 반드시 있다.
+        assertThat(calendar.count()).isGreaterThanOrEqualTo(9);
         for (var call : VERIFIED_CALLS) {
             assertThat(onlyRow(call.ticker()).getScheduledAt()).isEqualTo(Instant.parse(call.utc()));
         }
@@ -152,8 +153,8 @@ class EarningsCalendarCorrectionIntegrationTest {
         seed(nvda, "2026-08-26T21:00:00Z", "1.0000", "100.00");
         seed(nvda, "2027-02-17T00:00:00Z", "2.0000", "200.00");
         seed(nvda, "2026-11-17T01:00:00Z", "3.0000", "300.00");
-        seed(stock("COST"), "2026-12-10T00:00:00Z", "4.0000", "400.00");
-        seed(stock("NKE"), "2026-12-17T00:00:00Z", "5.0000", "500.00");
+        seed(stock("MMM"), "2026-12-10T00:00:00Z", "4.0000", "400.00");
+        seed(stock("ORCL"), "2026-12-17T00:00:00Z", "5.0000", "500.00");
         flushAndClear();
         Map<Long, RowSnapshot> untouched = snapshot();
 
@@ -205,16 +206,16 @@ class EarningsCalendarCorrectionIntegrationTest {
     @Test
     void fmpStillAcceptsOtherQuartersAndUnverifiedCompaniesWithoutRewritingTheirTimes() {
         stock("NVDA");
-        stock("COST");
+        stock("MMM");
 
         service.upsert("NVDA", Instant.parse("2027-02-17T00:00:00Z"), false, null, new BigDecimal("3.0000"), null);
-        service.upsert("COST", Instant.parse("2026-12-10T00:00:00Z"), false, null, null, new BigDecimal("500.00"));
+        service.upsert("MMM", Instant.parse("2026-12-10T00:00:00Z"), false, null, null, new BigDecimal("500.00"));
         flushAndClear();
 
         assertThat(calendar.count()).isEqualTo(2);
         assertThat(onlyRow("NVDA").getScheduledAt()).isEqualTo(Instant.parse("2027-02-17T00:00:00Z"));
-        assertThat(onlyRow("COST").getScheduledAt()).isEqualTo(Instant.parse("2026-12-10T00:00:00Z"));
-        assertThat(onlyRow("COST").isConfirmed()).isFalse();
+        assertThat(onlyRow("MMM").getScheduledAt()).isEqualTo(Instant.parse("2026-12-10T00:00:00Z"));
+        assertThat(onlyRow("MMM").isConfirmed()).isFalse();
     }
 
     @Test

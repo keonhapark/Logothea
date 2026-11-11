@@ -43,6 +43,7 @@ class EarningsResultSyncServiceTest {
     @Mock private FinnhubClient finnhubClient;
     @Mock private StockRepository stockRepository;
     @Mock private EarningsResultRepository earningsResultRepository;
+    @Mock private EarningsReportDateResolver reportDateResolver;
 
     @InjectMocks
     private EarningsResultSyncService service;
@@ -52,6 +53,10 @@ class EarningsResultSyncServiceTest {
     @BeforeEach
     void setUp() {
         aapl = stockOf(1L, "AAPL");
+        // 실제 발표일. period(분기 말일)와 다르다.
+        org.mockito.Mockito.lenient().when(reportDateResolver.reports(eq("AAPL"), any())).thenReturn(List.of(
+                new EarningsReportDateResolver.Report(LocalDate.parse("2025-07-31"), new BigDecimal("1.50")),
+                new EarningsReportDateResolver.Report(LocalDate.parse("2025-05-01"), new BigDecimal("1.30"))));
     }
 
     @Test
@@ -68,8 +73,6 @@ class EarningsResultSyncServiceTest {
         given(finnhubClient.fetchEarningsHistory(eq("AAPL"), eq(FinnhubRateLimiter.Priority.LOW)))
                 .willReturn(List.of(r1, r2));
         given(stockRepository.findById(1L)).willReturn(Optional.of(aapl));
-        given(earningsResultRepository.findByStock_IdAndAnnouncedAt(eq(1L), any(Instant.class)))
-                .willReturn(Optional.empty());
 
         int inserted = service.syncTicker(1L, "AAPL", SyncPriority.LOW);
 
@@ -89,10 +92,10 @@ class EarningsResultSyncServiceTest {
     }
 
     @Test
-    @DisplayName("기존 row 가 있으면 updateActuals, save 미호출, 신규 카운트 0")
+    @DisplayName("같은 분기 라벨의 행이 있으면 updateActuals, 발표일 조회 · save 미호출, 신규 카운트 0")
     void 기존_row_update() {
-        Instant announcedAt = LocalDate.parse("2025-06-30")
-                .atTime(13, 0).toInstant(ZoneOffset.UTC);
+        Instant announcedAt = LocalDate.parse("2025-07-31")
+                .atTime(12, 0).toInstant(ZoneOffset.UTC);
         EarningsResult existing = EarningsResult.builder()
                 .stock(aapl)
                 .announcedAt(announcedAt)
@@ -111,8 +114,7 @@ class EarningsResultSyncServiceTest {
         given(finnhubClient.fetchEarningsHistory(eq("AAPL"), eq(FinnhubRateLimiter.Priority.LOW)))
                 .willReturn(List.of(row));
         given(stockRepository.findById(1L)).willReturn(Optional.of(aapl));
-        given(earningsResultRepository.findByStock_IdAndAnnouncedAt(1L, announcedAt))
-                .willReturn(Optional.of(existing));
+        given(earningsResultRepository.findByStock_Id(1L)).willReturn(List.of(existing));
 
         int inserted = service.syncTicker(1L, "AAPL", SyncPriority.LOW);
 
@@ -136,8 +138,6 @@ class EarningsResultSyncServiceTest {
         given(finnhubClient.fetchEarningsHistory(eq("AAPL"), eq(FinnhubRateLimiter.Priority.LOW)))
                 .willReturn(List.of(row));
         given(stockRepository.findById(1L)).willReturn(Optional.of(aapl));
-        given(earningsResultRepository.findByStock_IdAndAnnouncedAt(eq(1L), any(Instant.class)))
-                .willReturn(Optional.empty());
 
         int inserted = service.syncTicker(1L, "AAPL", SyncPriority.LOW);
 
@@ -164,8 +164,6 @@ class EarningsResultSyncServiceTest {
         given(finnhubClient.fetchEarningsHistory(eq("AAPL"), eq(FinnhubRateLimiter.Priority.LOW)))
                 .willReturn(List.of(rowNullActual));
         given(stockRepository.findById(1L)).willReturn(Optional.of(aapl));
-        given(earningsResultRepository.findByStock_IdAndAnnouncedAt(eq(1L), any(Instant.class)))
-                .willReturn(Optional.empty());
 
         service.syncTicker(1L, "AAPL", SyncPriority.LOW);
 
@@ -185,6 +183,96 @@ class EarningsResultSyncServiceTest {
                 new FinnhubEarningsRow("AAPL", LocalDate.parse("2025-06-30"),
                         new BigDecimal("0.10"), BigDecimal.ZERO, null, null, 2));
         assertThat(result).isNull();
+    }
+
+    @Test
+    @DisplayName("발표일은 분기 말일(period)이 아니라 실제 발표일로 저장한다")
+    void 실제_발표일로_저장() {
+        FinnhubEarningsRow row = new FinnhubEarningsRow(
+                "AAPL", LocalDate.parse("2025-06-30"),
+                new BigDecimal("1.50"), new BigDecimal("1.40"),
+                null, null, 3, 2025);
+        given(finnhubClient.fetchEarningsHistory(eq("AAPL"), eq(FinnhubRateLimiter.Priority.LOW)))
+                .willReturn(List.of(row));
+        given(stockRepository.findById(1L)).willReturn(Optional.of(aapl));
+
+        service.syncTicker(1L, "AAPL", SyncPriority.LOW);
+
+        ArgumentCaptor<EarningsResult> captor = ArgumentCaptor.forClass(EarningsResult.class);
+        verify(earningsResultRepository).save(captor.capture());
+        assertThat(captor.getValue().getAnnouncedAt())
+                .isEqualTo(LocalDate.parse("2025-07-31").atTime(12, 0).toInstant(ZoneOffset.UTC));
+        assertThat(captor.getValue().getFiscalPeriodLabel()).isEqualTo("Q3 FY25");
+    }
+
+    @Test
+    @DisplayName("발표일을 찾지 못한 분기는 period 로 대신 저장하지 않고 건너뛴다")
+    void 발표일_없으면_건너뜀() {
+        FinnhubEarningsRow row = new FinnhubEarningsRow(
+                "AAPL", LocalDate.parse("2024-12-31"),
+                new BigDecimal("2.40"), new BigDecimal("2.35"),
+                null, null, 1, 2025);
+        given(finnhubClient.fetchEarningsHistory(eq("AAPL"), eq(FinnhubRateLimiter.Priority.LOW)))
+                .willReturn(List.of(row));
+        given(stockRepository.findById(1L)).willReturn(Optional.of(aapl));
+
+        int inserted = service.syncTicker(1L, "AAPL", SyncPriority.LOW);
+
+        assertThat(inserted).isZero();
+        verify(earningsResultRepository, never()).save(any(EarningsResult.class));
+    }
+
+    @Test
+    @DisplayName("분기 라벨은 응답의 회계연도를 쓴다 (MSFT 2026-09-30 분기 = Q1 FY27)")
+    void 회계연도_라벨() {
+        FinnhubEarningsRow msft = new FinnhubEarningsRow(
+                "MSFT", LocalDate.parse("2026-09-30"),
+                new BigDecimal("4.89"), new BigDecimal("4.82"), null, null, 1, 2027);
+        assertThat(EarningsResultSyncService.buildFiscalLabel(msft)).isEqualTo("Q1 FY27");
+    }
+
+    @Test
+    @DisplayName("실제 발표일로 새 행을 넣으면 분기 말일로 저장된 예전 행을 지운다")
+    void 예전_행_교체() {
+        EarningsResult legacy = EarningsResult.builder().stock(aapl)
+                .announcedAt(Instant.parse("2025-06-30T13:00:00Z")).fiscalPeriodLabel("Q3 FY25").build();
+        given(earningsResultRepository.findByStock_Id(1L)).willReturn(List.of(legacy));
+        given(finnhubClient.fetchEarningsHistory(eq("AAPL"), eq(FinnhubRateLimiter.Priority.LOW)))
+                .willReturn(List.of(new FinnhubEarningsRow("AAPL", LocalDate.parse("2025-06-30"),
+                        new BigDecimal("1.50"), new BigDecimal("1.40"), null, null, 3, 2025)));
+        given(stockRepository.findById(1L)).willReturn(Optional.of(aapl));
+
+        int inserted = service.syncTicker(1L, "AAPL", SyncPriority.LOW);
+
+        assertThat(inserted).isEqualTo(1);
+        verify(earningsResultRepository).deleteAll(List.of(legacy));
+    }
+
+    @Test
+    @DisplayName("발표일을 하나도 찾지 못하면 예전 행을 지우지 않는다 (FMP 장애 · 한도)")
+    void 발표일_없으면_예전_행_유지() {
+        EarningsResult legacy = EarningsResult.builder().stock(aapl)
+                .announcedAt(Instant.parse("2025-06-30T13:00:00Z")).fiscalPeriodLabel("Q3 FY25").build();
+        given(earningsResultRepository.findByStock_Id(1L)).willReturn(List.of(legacy));
+        given(reportDateResolver.reports(eq("AAPL"), any())).willReturn(List.of());
+        given(finnhubClient.fetchEarningsHistory(eq("AAPL"), eq(FinnhubRateLimiter.Priority.LOW)))
+                .willReturn(List.of(new FinnhubEarningsRow("AAPL", LocalDate.parse("2025-06-30"),
+                        new BigDecimal("1.50"), new BigDecimal("1.40"), null, null, 3, 2025)));
+        given(stockRepository.findById(1L)).willReturn(Optional.of(aapl));
+
+        int inserted = service.syncTicker(1L, "AAPL", SyncPriority.LOW);
+
+        assertThat(inserted).isZero();
+        verify(earningsResultRepository, never()).deleteAll(any());
+    }
+
+    @Test
+    @DisplayName("분기 말일 13:00 UTC 행만 예전 행이다 — 실제 발표일(12:00)이 분기 말일이어도 예전 행이 아니다")
+    void 예전_행_판별() {
+        assertThat(EarningsResultSyncService.isLegacy(Instant.parse("2026-09-30T13:00:00Z"))).isTrue();
+        assertThat(EarningsResultSyncService.isLegacy(Instant.parse("2026-09-30T12:00:00Z"))).isFalse();
+        assertThat(EarningsResultSyncService.isLegacy(Instant.parse("2026-08-20T13:00:00Z"))).isFalse();
+        assertThat(EarningsResultSyncService.isLegacy(Instant.parse("2026-10-31T13:00:00Z"))).isFalse();
     }
 
     @Test
@@ -220,7 +308,7 @@ class EarningsResultSyncServiceTest {
     }
 
     @Test
-    @DisplayName("announcedAt 디폴트는 period.atTime(13:00, UTC)")
+    @DisplayName("announcedAt 은 실제 발표일의 12:00 UTC 다 (period 가 아니다)")
     void announcedAt_디폴트() {
         FinnhubEarningsRow row = new FinnhubEarningsRow(
                 "AAPL", LocalDate.parse("2025-06-30"),
@@ -230,14 +318,12 @@ class EarningsResultSyncServiceTest {
         given(finnhubClient.fetchEarningsHistory(eq("AAPL"), eq(FinnhubRateLimiter.Priority.LOW)))
                 .willReturn(List.of(row));
         given(stockRepository.findById(1L)).willReturn(Optional.of(aapl));
-        given(earningsResultRepository.findByStock_IdAndAnnouncedAt(eq(1L), any(Instant.class)))
-                .willReturn(Optional.empty());
 
         service.syncTicker(1L, "AAPL", SyncPriority.LOW);
 
         ArgumentCaptor<EarningsResult> captor = ArgumentCaptor.forClass(EarningsResult.class);
         verify(earningsResultRepository).save(captor.capture());
-        Instant expected = LocalDate.parse("2025-06-30").atTime(13, 0).toInstant(ZoneOffset.UTC);
+        Instant expected = LocalDate.parse("2025-07-31").atTime(12, 0).toInstant(ZoneOffset.UTC);
         assertThat(captor.getValue().getAnnouncedAt()).isEqualTo(expected);
     }
 
@@ -276,8 +362,6 @@ class EarningsResultSyncServiceTest {
         given(finnhubClient.fetchEarningsHistory(eq("AAPL"), eq(FinnhubRateLimiter.Priority.LOW)))
                 .willReturn(List.of(invalid, valid));
         given(stockRepository.findById(1L)).willReturn(Optional.of(aapl));
-        given(earningsResultRepository.findByStock_IdAndAnnouncedAt(eq(1L), any(Instant.class)))
-                .willReturn(Optional.empty());
 
         int inserted = service.syncTicker(1L, "AAPL", SyncPriority.LOW);
 
@@ -297,8 +381,6 @@ class EarningsResultSyncServiceTest {
                 .willReturn(List.of(row));
         given(stockRepository.findById(99L)).willReturn(Optional.empty());
         given(stockRepository.findByTicker("AAPL")).willReturn(Optional.of(aapl));
-        given(earningsResultRepository.findByStock_IdAndAnnouncedAt(eq(1L), any(Instant.class)))
-                .willReturn(Optional.empty());
 
         int inserted = service.syncTicker(99L, "AAPL", SyncPriority.LOW);
 
