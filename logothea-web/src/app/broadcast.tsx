@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo } from 'react'
 import { create } from 'zustand'
 import { DEMO_TICKER } from '@terminal/renderer/constants/demo'
 import { useLiveTranscript } from '@terminal/renderer/hooks/useLiveTranscript'
@@ -48,25 +48,40 @@ export function BroadcastFeeds() {
       window.clearInterval(timer)
     }
   }, [])
-  const { segments } = useLiveTranscript(BROADCAST_TICKER)
+  useLiveTranscript(BROADCAST_TICKER)
   const translation = useTranscriptTranslation(BROADCAST_TICKER)
   useEffect(() => {
     useCallFeed.setState({ translations: translation.items, glossaryStatus: translation.glossaryStatus })
   }, [translation.items, translation.glossaryStatus])
 
   // 새 회차가 시작되면 지난 회차의 대조 · 팩트체크 · 질문 대화 · 범위를 비운다. 판단은 "지난 회차" 로 남긴다.
-  const latestCallId = segments.length > 0 ? segments[segments.length - 1].callId : null
-  const seenCallId = useRef<string | null>(null)
-  useEffect(() => {
-    const next = trackRound(seenCallId.current, latestCallId)
-    seenCallId.current = next.seen
-    if (next.reset && next.retired) resetCallRound(next.retired)
-  }, [latestCallId])
+  useEffect(() => watchRounds(), [])
 
   useTranscriptDiff(BROADCAST_TICKER)
   useFactCheck(BROADCAST_TICKER)
   useEarningsSummary(BROADCAST_TICKER)
   return null
+}
+
+function latestCallIdOf(state: ReturnType<typeof useTranscriptStore.getState>): string | null {
+  const segments = state.byTicker.get(BROADCAST_TICKER)?.segments
+  return segments && segments.length > 0 ? segments[segments.length - 1].callId : null
+}
+
+/**
+ * 자막 store 를 지켜보다 새 회차의 첫 자막이 들어오는 순간 지난 회차를 비운다. 끄는 함수를 돌려준다.
+ *
+ * React effect 가 아니라 store 구독으로 하는 이유: 스냅샷(data/snapshot.ts)은 자막 · 번역 · 대조를 한 번에 연달아
+ * 흘려 넣는다. 화면이 다시 그려진 뒤에 비우면 방금 들어온 새 회차의 대조까지 지워진다. store 구독은 자막이 들어간
+ * 직후, 같은 스냅샷의 대조가 들어오기 전에 불린다.
+ */
+export function watchRounds(): () => void {
+  let seen = latestCallIdOf(useTranscriptStore.getState())
+  return useTranscriptStore.subscribe((state) => {
+    const next = trackRound(seen, latestCallIdOf(state))
+    seen = next.seen
+    if (next.reset && next.retired) resetCallRound(next.retired)
+  })
 }
 
 /**
@@ -84,7 +99,8 @@ export function resetCallRound(retiredCallId: string): void {
 export type BroadcastView =
   | { kind: 'unknown' }
   | { kind: 'idle' }
-  | { kind: 'between'; lastCallId: string | null }
+  /** loop 이면 회차 사이(다음 회차를 준비 중), 아니면 방송을 마쳤다. */
+  | { kind: 'between'; lastCallId: string | null; loop: boolean }
   | { kind: 'live'; callId: string | null; segments: readonly TranscriptSegment[] }
 
 /**
@@ -107,7 +123,7 @@ export function deriveBroadcastView(
     const callSegments = callId ? current.filter((s) => s.callId === callId) : current
     return { kind: 'live', callId, segments: callSegments }
   }
-  if (status?.kind === 'between') return { kind: 'between', lastCallId: status.callId }
+  if (status?.kind === 'between') return { kind: 'between', lastCallId: status.callId, loop: status.loop }
   if (status?.kind === 'idle') return { kind: 'idle' }
   return { kind: 'unknown' }
 }

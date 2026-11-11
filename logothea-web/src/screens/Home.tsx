@@ -7,6 +7,7 @@ import { useTranscriptTranslationStore } from '@terminal/renderer/store/useTrans
 import { useEarningsSummaryStore } from '@terminal/renderer/store/useEarningsSummaryStore'
 import type { MarketIndexItem } from '@terminal/renderer/store/useMarketIndicesStore'
 import type { EarningsEvent, EarningsTimelineData } from '@terminal/lib/types/earningsTimeline'
+import type { EarningsSummary } from '@terminal/renderer/types/earningsSummary'
 import { navigate } from '../app/router'
 import { BROADCAST_TICKER, useBroadcastView, type BroadcastView } from '../app/broadcast'
 import { openBrief } from './Brief'
@@ -42,7 +43,7 @@ function LiveCallCard() {
   const companyName = list.find((s) => s.ticker === BROADCAST_TICKER)?.companyName ?? null
 
   if (view.kind === 'live') return <OnAirCard view={view} companyName={companyName} />
-  if (view.kind === 'between') return <BetweenCard companyName={companyName} />
+  if (view.kind === 'between') return <BetweenCard view={view} companyName={companyName} />
   // 방송을 모르거나 재생한 적이 없으면 카드를 두지 않는다
   return null
 }
@@ -94,16 +95,27 @@ function OnAirCard({ view, companyName }: { view: Extract<BroadcastView, { kind:
   )
 }
 
-function BetweenCard({ companyName }: { companyName: string | null }) {
+/**
+ * 방송이 쉬는 중. 반복 방송이면 다음 회차를 기다리는 중이고, 아니면 방송을 마쳤다.
+ * 지난 회차 판단은 중간 입장 스냅샷이나 실시간으로 받은 것이며, 상태 API 의 마지막 회차와 같을 때만 보인다.
+ */
+export function betweenVerdict(summary: EarningsSummary | null, lastCallId: string | null): string | null {
+  if (!summary) return null
+  // 어느 쪽이든 회차를 모르면 같은 회차로 본다(데스크톱 deriveCallPhase 와 같은 규칙)
+  const sameRound = summary.callId === null || lastCallId === null || summary.callId === lastCallId
+  return sameRound ? (summary.gate?.positionIntentKo ?? summary.gate?.noTradeSummaryKo ?? null) : null
+}
+
+function BetweenCard({ view, companyName }: { view: Extract<BroadcastView, { kind: 'between' }>; companyName: string | null }) {
   const summary = useEarningsSummaryStore((s) => s.byTicker.get(BROADCAST_TICKER) ?? null)
-  const verdict = summary?.gate?.positionIntentKo ?? summary?.gate?.noTradeSummaryKo ?? null
+  const verdict = betweenVerdict(summary, view.lastCallId)
   return (
     <section className="hero cloud" aria-labelledby="hero-title">
       <span className="live" style={{ color: 'var(--ink-3)' }}>
-        회차 사이
+        {view.loop ? '회차 사이' : '방송 종료'}
       </span>
       <h2 id="hero-title">{callTitle(companyName)}</h2>
-      <span className="hero-meta">다음 회차를 준비하고 있습니다</span>
+      <span className="hero-meta">{view.loop ? '다음 회차를 준비하고 있습니다' : '방송을 마쳤습니다'}</span>
       {verdict && <p className="hero-snip">지난 회차 판단 · {verdict}</p>}
     </section>
   )

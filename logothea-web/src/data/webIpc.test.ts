@@ -224,3 +224,104 @@ describe('createWebIpc — 메시지 거르기', () => {
     expect(listener).toHaveBeenCalledWith({ call_id: 'new' })
   })
 })
+
+describe('createWebIpc — 중간 입장 스냅샷', () => {
+  function withSnapshot(snapshot = vi.fn(async () => ({ callId: 'c1', messages: [{ channel: IPC_CHANNELS.TRANSCRIPT_SEGMENT_RECEIVED, payload: { s: 0 } }] }))) {
+    const { stomp, handlers, setStatus } = fakeStomp()
+    const ipc = createWebIpc({ http: { getJson: vi.fn() } as never, stomp, assistant: { ask: vi.fn(), cancel: vi.fn() }, snapshot })
+    const received: unknown[] = []
+    ipc.on(IPC_CHANNELS.TRANSCRIPT_SEGMENT_RECEIVED, (p) => received.push(p))
+    const connect = () => {
+      stomp.status = 'CONNECTED'
+      setStatus('CONNECTED')
+    }
+    return { ipc, stomp, handlers, connect, snapshot, received }
+  }
+
+  it('자막을 구독한 종목만, 연결될 때 스냅샷을 받는다', async () => {
+    const { ipc, connect, snapshot } = withSnapshot()
+    await ipc.invoke(IPC_CHANNELS.FACTCHECK_SUBSCRIBE, { ticker: 'AAPL' })
+    await ipc.invoke(IPC_CHANNELS.TRANSCRIPT_SUBSCRIBE, { ticker: 'WMT' })
+    expect(snapshot).not.toHaveBeenCalled()
+    connect()
+    await vi.waitFor(() => expect(snapshot).toHaveBeenCalledTimes(1))
+    expect(snapshot).toHaveBeenCalledWith('WMT')
+  })
+
+  it('이미 연결된 뒤 구독하면 바로 받고, 다시 연결될 때마다 또 받는다', async () => {
+    const { ipc, connect, snapshot } = withSnapshot()
+    connect()
+    await ipc.invoke(IPC_CHANNELS.TRANSCRIPT_SUBSCRIBE, { ticker: 'WMT' })
+    await vi.waitFor(() => expect(snapshot).toHaveBeenCalledTimes(1))
+    // 같은 종목을 다시 구독해도 두 번 받지 않는다
+    await ipc.invoke(IPC_CHANNELS.TRANSCRIPT_SUBSCRIBE, { ticker: 'WMT' })
+    connect()
+    await vi.waitFor(() => expect(snapshot).toHaveBeenCalledTimes(2))
+  })
+
+  it('보류 중 온 실시간 메시지는 스냅샷 뒤에 나온다', async () => {
+    const { ipc, connect, handlers, received } = withSnapshot()
+    await ipc.invoke(IPC_CHANNELS.TRANSCRIPT_SUBSCRIBE, { ticker: 'WMT' })
+    connect()
+    handlers.get('/topic/transcript/WMT')!('{"s":1}')
+    expect(received).toEqual([])
+    await vi.waitFor(() => expect(received).toEqual([{ s: 0 }, { s: 1 }]))
+  })
+
+  it('구독을 풀었거나 연결을 끊은 종목은 다시 연결돼도 받지 않는다', async () => {
+    const { ipc, connect, snapshot } = withSnapshot()
+    await ipc.invoke(IPC_CHANNELS.TRANSCRIPT_SUBSCRIBE, { ticker: 'WMT' })
+    await ipc.invoke(IPC_CHANNELS.TRANSCRIPT_UNSUBSCRIBE, { ticker: 'WMT' })
+    connect()
+    await ipc.invoke(IPC_CHANNELS.TRANSCRIPT_SUBSCRIBE, { ticker: 'AAPL' })
+    await ipc.invoke(IPC_CHANNELS.WS_DISCONNECT)
+    connect()
+    await new Promise((r) => setTimeout(r, 0))
+    expect(snapshot).toHaveBeenCalledTimes(1)
+    expect(snapshot).toHaveBeenCalledWith('AAPL')
+  })
+
+  it('보류했다 푸는 메시지도 그때 dropMessage 로 거른다(스냅샷이 회차를 끝낸 뒤의 늦은 대조)', async () => {
+    const { stomp, handlers, setStatus } = fakeStomp()
+    const retired = new Set<string>()
+    const ipc = createWebIpc({
+      http: { getJson: vi.fn() } as never,
+      stomp,
+      assistant: { ask: vi.fn(), cancel: vi.fn() },
+      // 스냅샷을 내보내는 도중 회차가 끝났다고 표시한다
+      snapshot: async () => ({ callId: 'new', messages: [{ channel: IPC_CHANNELS.TRANSCRIPT_SEGMENT_RECEIVED, payload: { retire: 'old' } }] }),
+      dropMessage: (_channel, payload) => retired.has((payload as { call_id?: string }).call_id ?? ''),
+    })
+    ipc.on(IPC_CHANNELS.TRANSCRIPT_SEGMENT_RECEIVED, (p) => retired.add((p as { retire: string }).retire))
+    const diffs = vi.fn()
+    ipc.on(IPC_CHANNELS.TRANSCRIPT_DIFF_RECEIVED, diffs)
+    await ipc.invoke(IPC_CHANNELS.TRANSCRIPT_SUBSCRIBE, { ticker: 'WMT' })
+    await ipc.invoke(IPC_CHANNELS.TRANSCRIPT_DIFF_SUBSCRIBE, { ticker: 'WMT' })
+    stomp.status = 'CONNECTED'
+    setStatus('CONNECTED')
+    handlers.get('/topic/transcript-diff/WMT')!('{"call_id":"old"}')
+    handlers.get('/topic/transcript-diff/WMT')!('{"call_id":"new"}')
+    await vi.waitFor(() => expect(diffs).toHaveBeenCalledTimes(1))
+    expect(diffs).toHaveBeenCalledWith({ call_id: 'new' })
+  })
+
+  it('보류 중 구독을 풀면 스냅샷과 보류한 메시지를 내보내지 않는다', async () => {
+    const { ipc, connect, handlers, received } = withSnapshot()
+    await ipc.invoke(IPC_CHANNELS.TRANSCRIPT_SUBSCRIBE, { ticker: 'WMT' })
+    connect()
+    handlers.get('/topic/transcript/WMT')!('{"s":1}')
+    await ipc.invoke(IPC_CHANNELS.TRANSCRIPT_UNSUBSCRIBE, { ticker: 'WMT' })
+    await new Promise((r) => setTimeout(r, 0))
+    expect(received).toEqual([])
+  })
+
+  it('스냅샷을 주지 않으면(deps 없음) 보류하지 않는다', async () => {
+    const { ipc, handlers, setStatus } = setup()
+    const listener = vi.fn()
+    ipc.on(IPC_CHANNELS.TRANSCRIPT_SEGMENT_RECEIVED, listener)
+    await ipc.invoke(IPC_CHANNELS.TRANSCRIPT_SUBSCRIBE, { ticker: 'WMT' })
+    setStatus('CONNECTED')
+    handlers.get('/topic/transcript/WMT')!('{"s":1}')
+    expect(listener).toHaveBeenCalledWith({ s: 1 })
+  })
+})
