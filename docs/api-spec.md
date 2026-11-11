@@ -686,7 +686,7 @@ Redis `trading-signals` 수신을 계기로 발행하던 토픽입니다. #127 �
 | POST | `/api/v1/demo/earnings-call/start` | 필요 | 터미널 | 준비된 어닝콜 스크립트 재생 시작 |
 | POST | `/api/v1/demo/earnings-call/stop` | 필요 | 터미널 | 재생 중지 |
 | GET | `/api/v1/demo/earnings-call/status?ticker=` | 필요 | 없음 | 진행 상황 조회. `ticker` 필수 |
-| GET | `/api/v1/demo/earnings-call/speakers` | 필요 | 터미널 | 콜 참가자 명부 |
+| GET | `/api/v1/demo/earnings-call/speakers?ticker=` | 필요 | 터미널 · 전시 웹 | 콜 참가자 명부. `ticker` 선택 |
 | GET | `/api/v1/demo/earnings-call/snapshot?ticker=` | 필요 (게스트 허용) | 전시 웹 | 중간 입장 스냅샷 (아래) |
 
 - **설명:** 시연에서 data_pipeline 의 STT 를 준비된 스크립트가 대신합니다. 재생한 세그먼트는 실제 인입 경로
@@ -694,6 +694,12 @@ Redis `trading-signals` 수신을 계기로 발행하던 토픽입니다. #127 �
   요청합니다. 재생이 끝나면 종합 판단(4.7)을 만듭니다. 클라이언트가 가짜 데이터를 그리는 구조가 아닙니다.
 - **요청 본문:** `{"ticker": "WMT"}`. start 에서 생략하면 스크립트의 기본 종목을 씁니다. stop 은 `ticker` 가 있어야
   하며, 없으면 진행 중인 재생을 찾지 못해 404 입니다.
+- **종목별 대본.** 기본 스크립트(`demo.earnings-call.script-path`, WMT) 밖에 종목별 대본을
+  `demo.earnings-call.script-dir`(기본 `data/demo`)에 `<종목 소문자>.json` 으로 둘 수 있습니다. 지금은 `nvda.json` 이
+  있습니다. start 와 speakers 는 그 종목의 대본이 있으면 그것을, 없으면 기본 스크립트를 씁니다. 대본이 없는 종목으로
+  start 하면 기본 스크립트 문장이 그 종목 이름으로 재생되므로, 터미널은 대본이 있는 종목(`DEMO_TICKERS`)에서만 시작
+  버튼을 보입니다. 반복 방송은 종목을 비워 두면 기본 스크립트를 재생합니다. 형식과 규칙은 아래 "스크립트 교체 시
+  규칙" 과 같습니다.
 
 | 상태 | 엔드포인트 | 의미 |
 | :--- | :--- | :--- |
@@ -740,7 +746,8 @@ Redis `trading-signals` 수신을 계기로 발행하던 토픽입니다. #127 �
      나타나지 않습니다. `speakers[].match_key` 는 세그먼트의 `speaker` 문자열과 정확히 같아야 합니다. 세그먼트 라벨은
      "CEO · John Furner" 처럼 직책이 붙고 이름은 "John Furner" 라서, 키가 없으면 클라이언트가 부분 일치를 추측해야
      하기 때문입니다. 비워 두면 `name` 을 키로 씁니다. 세그먼트에 발언이 없는 참가자는 발언 0건으로 표시됩니다.
-- **speakers 응답.** 재생 중이 아니어도 조회됩니다. 명부가 없으면 `[]` 이고, 스크립트 파일을 읽지 못하면 500 입니다.
+- **speakers 응답.** 재생 중이 아니어도 조회됩니다. `ticker` 를 주면 그 종목이 재생할 대본의 명부이고, 생략하면 기본
+  스크립트의 명부입니다. 명부가 없으면 `[]` 이고, 스크립트 파일을 읽지 못하면 500 입니다.
   빈 값은 `""` 로 옵니다.
 
 ```json

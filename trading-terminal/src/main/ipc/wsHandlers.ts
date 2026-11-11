@@ -156,9 +156,12 @@ export function registerWsHandlers() {
     },
   )
 
-  registerHandler<void, SpeakerProfilePayload[]>(
+  registerHandler<{ ticker: string } | undefined, SpeakerProfilePayload[]>(
     IPC_CHANNELS.DEMO_EARNINGS_SPEAKERS,
-    async () => BackendClient.getEarningsSpeakers(),
+    async (_e, payload) =>
+      BackendClient.getEarningsSpeakers(
+        payload && typeof payload.ticker === 'string' && payload.ticker ? payload.ticker : undefined,
+      ),
   )
 
   registerHandler<{ ticker: string }, boolean>(

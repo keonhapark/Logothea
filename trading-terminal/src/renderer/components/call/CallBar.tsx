@@ -21,7 +21,7 @@ interface CallBarProps {
   /** 시연 재생 제어. 지정하지 않으면 그리지 않는다. */
   demo?: {
     busy: boolean
-    /** 시연 종목(WMT) 콜 화면인지. 시연 재생은 이 화면에서만 시작한다. */
+    /** 시연 대본이 있는 종목(`DEMO_TICKERS`)의 콜 화면인지. 시연 재생은 이 화면에서만 시작한다. */
     canStart: boolean
     onStart: () => void
     onStop: () => void
