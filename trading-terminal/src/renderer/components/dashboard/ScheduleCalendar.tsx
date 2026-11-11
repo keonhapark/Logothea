@@ -134,8 +134,8 @@ export default function ScheduleCalendar({ groups, tags, onPick }: ScheduleCalen
   const selectedEvents = eventsByDate.get(selectedDate) ?? []
 
   return (
-    <div className="flex flex-col px-5 pb-4 pt-1">
-      <div className="grid grid-cols-[248px_minmax(0,1fr)] gap-4 items-stretch">
+    <div className="flex flex-col flex-1 min-h-0 px-5 pb-4 pt-1">
+      <div className="grid grid-cols-[minmax(248px,38%)_minmax(0,1fr)] gap-4 items-stretch flex-1">
         {/* 좌측: 미니 캘린더 피커 */}
         <div className="flex flex-col p-3 rounded-[18px] bg-wash/[0.02] border border-edge/[0.08]">
           <div className="flex items-center justify-between gap-2 mb-1.5">
@@ -177,11 +177,11 @@ export default function ScheduleCalendar({ groups, tags, onPick }: ScheduleCalen
             ))}
           </div>
 
-          <div className="grid grid-cols-7 gap-0.5">
+          <div className="grid grid-cols-7 gap-0.5 flex-1 auto-rows-[minmax(28px,1fr)]">
             {prevTrailingDays.map((d) => (
               <div
                 key={`prev-${d}`}
-                className="h-7 flex items-center justify-center text-[12px] text-ink-4 opacity-40 select-none"
+                className="h-full min-h-7 flex items-center justify-center text-[12px] text-ink-4 opacity-40 select-none"
               >
                 {d}
               </div>
@@ -200,7 +200,7 @@ export default function ScheduleCalendar({ groups, tags, onPick }: ScheduleCalen
                   key={`cur-${d}`}
                   type="button"
                   onClick={() => setSelectedDate(dateKey)}
-                  className={`relative h-7 flex flex-col items-center justify-center rounded-[9px] text-[12.5px] font-medium transition-all duration-150 ${
+                  className={`relative w-full max-w-10 h-full min-h-7 max-h-9 place-self-center flex flex-col items-center justify-center rounded-[9px] text-[12.5px] font-medium transition-all duration-150 ${
                     isSelected
                       ? 'glass gbtn-lapis font-bold shadow-sm'
                       : isToday
