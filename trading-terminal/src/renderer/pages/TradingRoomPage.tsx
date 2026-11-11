@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams, Navigate } from "react-router-dom";
 import { useTradingStore } from "../store/useTradingStore";
 import { usePortfolioStore } from "../store/usePortfolioStore";
@@ -50,12 +50,12 @@ const LOOP_RUNNING_MESSAGE =
 /** 위쪽에 떠 있는 콜 바 아래로 내용이 지나가도록 각 면의 위쪽에 비워 두는 높이(px). */
 const TOP_INSET = 72;
 
-/** 콜 상태마다 주인공 열과 보조 열의 폭. */
-const COLUMNS = {
-  BEFORE: "minmax(0, 1.7fr) minmax(320px, 1fr)",
-  LIVE: "minmax(0, 1.8fr) minmax(320px, 1fr)",
-  ENDED: "minmax(300px, 0.9fr) minmax(0, 1.6fr)",
-} as const;
+/** 콜 상태마다 기본 분할 비율(좌측 열의 너비 %). */
+const DEFAULT_SPLIT: Record<"BEFORE" | "LIVE" | "ENDED", number> = {
+  BEFORE: 62,
+  LIVE: 64,
+  ENDED: 50,
+};
 
 const EMPTY_PRICES: readonly PricePoint[] = [];
 
@@ -279,6 +279,70 @@ export default function TradingRoomPage() {
     orderAccount === "KIS_REAL" ? hasCredentials.real : hasCredentials.paper;
   const [orderOpen, setOrderOpen] = useState(false);
 
+  // ── 화면 좌우 분할 너비 조절 (ui-shelf split-pane 패턴) ──────────────────────
+  const [userSplitPct, setUserSplitPct] = useState<number | null>(null);
+  const splitContainerRef = useRef<HTMLDivElement>(null);
+  const [isDraggingSplit, setIsDraggingSplit] = useState(false);
+
+  const defaultSplitPct = DEFAULT_SPLIT[phase];
+  const splitPct = userSplitPct ?? defaultSplitPct;
+
+  // 콜 단계가 바뀌면(BEFORE→LIVE→ENDED) 사용자의 분할 비율을 해당 단계 기본 비율로 되돌린다.
+  useEffect(() => {
+    setUserSplitPct(null);
+  }, [phase]);
+
+  const handleSplitPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setIsDraggingSplit(true);
+  };
+
+  const handleSplitPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDraggingSplit) return;
+    const container = splitContainerRef.current;
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+    const offset = e.clientX - rect.left;
+    const minLeftPx = 280;
+    const minRightPx = 280;
+    const w = rect.width;
+    if (w > minLeftPx + minRightPx) {
+      const minPct = Math.max(25, (minLeftPx / w) * 100);
+      const maxPct = Math.min(75, ((w - minRightPx) / w) * 100);
+      const rawPct = (offset / w) * 100;
+      setUserSplitPct(Math.max(minPct, Math.min(maxPct, rawPct)));
+    }
+  };
+
+  const handleSplitPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (isDraggingSplit) {
+      try {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      } catch {}
+      setIsDraggingSplit(false);
+    }
+  };
+
+  const handleResetSplit = () => {
+    setUserSplitPct(null);
+  };
+
+  const handleSplitKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (['ArrowLeft', 'ArrowRight', 'Home', 'End', 'Escape', 'Enter'].includes(e.key)) {
+      e.preventDefault();
+      if (e.key === 'Escape' || e.key === 'Enter') {
+        setUserSplitPct(null);
+      } else if (e.key === 'Home') {
+        setUserSplitPct(25);
+      } else if (e.key === 'End') {
+        setUserSplitPct(75);
+      } else {
+        const step = e.key === 'ArrowRight' ? 2 : -2;
+        setUserSplitPct((prev) => Math.max(25, Math.min(75, (prev ?? defaultSplitPct) + step)));
+      }
+    }
+  };
+
   // ── 어닝콜 시연 재생 제어 (Contract 7.8) ────────────────────────────────────
   const [demoBusy, setDemoBusy] = useState(false);
 
@@ -291,6 +355,7 @@ export default function TradingRoomPage() {
     setSessionOrders([]);
     setOrderOpen(false);
     setStoppedCallId(null);
+    setUserSplitPct(null);
   }, [ticker]);
 
   // 접수 주문의 체결 반영. 체결 재확인은 백엔드 기록만 고치므로, 그 기록을 다시 받아
@@ -533,29 +598,23 @@ export default function TradingRoomPage() {
       </div>
 
       <div
-        className="grid h-full gap-3 transition-[grid-template-columns] duration-500"
-        style={{ gridTemplateColumns: COLUMNS[phase] }}
+        ref={splitContainerRef}
+        className={`flex h-full min-h-0 ${isDraggingSplit ? "select-none cursor-col-resize" : ""}`}
       >
-        {phase === "BEFORE" && (
-          <>
+        <div
+          className="h-full min-h-0 min-w-0 flex-shrink-0"
+          style={{ width: `calc(${splitPct}% - 6px)` }}
+        >
+          {phase === "BEFORE" && (
             <CallBriefing
               detail={companyDetail}
               loading={companyLoading}
               error={companyError}
               topInset={TOP_INSET}
             />
-            <aside
-              className="cloud h-full rounded-[28px] overflow-y-auto px-6 pb-6"
-              style={{ paddingTop: TOP_INSET + 16 }}
-              aria-label="가격과 내 포지션"
-            >
-              {priceCard}
-            </aside>
-          </>
-        )}
+          )}
 
-        {phase === "LIVE" && (
-          <>
+          {phase === "LIVE" && (
             <TranscriptStream
               segments={segments}
               diffsBySequence={diffsBySequence}
@@ -567,6 +626,61 @@ export default function TradingRoomPage() {
               onAskAbout={askAbout}
               onSpeakerClick={speakerProfiles.length > 0 ? openSpeakerProfile : undefined}
             />
+          )}
+
+          {phase === "ENDED" && (
+            <TranscriptStream
+              segments={segments}
+              diffsBySequence={diffsBySequence}
+              isLive={false}
+              compact={splitPct < 40}
+              topInset={TOP_INSET}
+              focus={focus}
+              {...translationProps}
+              onAskAbout={askAbout}
+              onSpeakerClick={speakerProfiles.length > 0 ? openSpeakerProfile : undefined}
+            />
+          )}
+        </div>
+
+        <div
+          role="separator"
+          tabIndex={0}
+          aria-label="화면 좌우 분할 비율 조절"
+          aria-orientation="vertical"
+          aria-valuenow={Math.round(splitPct)}
+          aria-valuemin={25}
+          aria-valuemax={75}
+          onPointerDown={handleSplitPointerDown}
+          onPointerMove={handleSplitPointerMove}
+          onPointerUp={handleSplitPointerUp}
+          onPointerCancel={handleSplitPointerUp}
+          onDoubleClick={handleResetSplit}
+          onKeyDown={handleSplitKeyDown}
+          className="w-3 flex-shrink-0 flex items-center justify-center cursor-col-resize group touch-none relative z-10 select-none outline-none focus-visible:ring-1 focus-visible:ring-gold"
+          title="드래그하여 좌우 크기 조절 / 더블클릭 시 초기화"
+        >
+          <span
+            className={`w-[3px] rounded-full transition-all duration-200 ${
+              isDraggingSplit
+                ? "h-24 bg-lapis ring-2 ring-lapis/40"
+                : "h-12 bg-edge/20 group-hover:bg-lapis group-hover:h-20"
+            }`}
+          />
+        </div>
+
+        <div className="h-full min-h-0 min-w-0 flex-1">
+          {phase === "BEFORE" && (
+            <aside
+              className="cloud h-full rounded-[28px] overflow-y-auto px-6 pb-6"
+              style={{ paddingTop: TOP_INSET + 16 }}
+              aria-label="가격과 내 포지션"
+            >
+              {priceCard}
+            </aside>
+          )}
+
+          {phase === "LIVE" && (
             <CallSideTabs
               diffItems={transcriptDiffItems}
               onFocusSequence={focusSequence}
@@ -576,22 +690,9 @@ export default function TradingRoomPage() {
               onTabChange={setSideTab}
               topInset={TOP_INSET}
             />
-          </>
-        )}
+          )}
 
-        {phase === "ENDED" && (
-          <>
-            <TranscriptStream
-              segments={segments}
-              diffsBySequence={diffsBySequence}
-              isLive={false}
-              compact
-              topInset={TOP_INSET}
-              focus={focus}
-              {...translationProps}
-              onAskAbout={askAbout}
-              onSpeakerClick={speakerProfiles.length > 0 ? openSpeakerProfile : undefined}
-            />
+          {phase === "ENDED" && (
             <div className="relative h-full min-h-0">
               {/* 종료 후에는 판단이 주인공이고, 질문은 같은 자리에서 전환해 연다. 탭 순서상 내용보다 앞에 둔다 */}
               <div className="absolute left-6 z-10" style={{ top: TOP_INSET + 8 }}>
@@ -618,8 +719,8 @@ export default function TradingRoomPage() {
                 </section>
               )}
             </div>
-          </>
-        )}
+          )}
+        </div>
       </div>
 
       <OrderSheet

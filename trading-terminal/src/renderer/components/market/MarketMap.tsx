@@ -140,7 +140,7 @@ export default function MarketMap({ list, prices, onPick }: MarketMapProps) {
           </>
         ) : (
           <span className="text-ink-3">
-            시가총액 상위 <span className="tabular-nums">{top.length}</span>종목 · 면적은 시가총액, 색은 일일 등락률 · 섹터 이름을 누르면 그 섹터만 봅니다
+            시가총액 상위 <span className="tabular-nums">{top.length}</span>종목
           </span>
         )}
       </div>
