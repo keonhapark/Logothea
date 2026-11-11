@@ -3,6 +3,7 @@ import os
 import tempfile
 import unittest
 from argparse import Namespace
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
@@ -14,6 +15,7 @@ from data_pipeline.stt_worker.take import (
     config_from_args,
     ffmpeg_exit_is_expected,
     load_whisper_model,
+    run_transcription,
 )
 
 
@@ -40,6 +42,40 @@ class SttWorkerConfigTest(unittest.TestCase):
         }
         values.update(overrides)
         return Namespace(**values)
+
+    def test_worker_ends_session_when_all_text_was_already_sent(self):
+        config = config_from_args(self._args(
+            input_kind="file", input_source="call.mp4", reads_per_emit=1,
+        ))
+        with (
+            mock.patch("data_pipeline.stt_worker.take.subprocess.Popen") as popen,
+            mock.patch("data_pipeline.stt_worker.take.load_whisper_model") as load_model,
+            mock.patch("data_pipeline.stt_worker.take.TranscriptEmitter") as emitter,
+        ):
+            process = popen.return_value
+            process.stdout.read.side_effect = [b"\0\0", b"\0\0", b""]
+            process.returncode = 0
+            load_model.return_value.transcribe.side_effect = [
+                ([SimpleNamespace(text="last batch")], None), ([], None),
+            ]
+            self.assertEqual(run_transcription(config), 0)
+        self.assertEqual(emitter.return_value.emit_chunk.call_args_list, [
+            mock.call(mock.ANY, " last batch", is_final=False),
+            mock.call(mock.ANY, "", is_final=True),
+        ])
+
+    def test_empty_final_only_goes_to_backend(self):
+        config = config_from_args(self._args(no_ai_engine=False, no_backend=False))
+        config = replace(config, internal_secret="local-test", send_to_ai_engine=True, send_to_backend=True)
+        emitter = TranscriptEmitter(config)
+        with mock.patch.object(emitter, "_post_json") as post, mock.patch.object(emitter, "_archive_segment") as archive:
+            emitter.emit_chunk(mock.Mock(), "", is_final=True)
+        post.assert_called_once()
+        self.assertEqual(post.call_args.args[1], "Backend Transcript")
+        payload = post.call_args.args[3]
+        self.assertEqual(payload["text"], "")
+        self.assertTrue(payload["is_session_end"])
+        archive.assert_not_called()
 
     def test_device_input_builds_ffmpeg_device_command(self):
         config = config_from_args(self._args())
