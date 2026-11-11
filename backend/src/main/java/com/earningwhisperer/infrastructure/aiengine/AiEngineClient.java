@@ -10,6 +10,12 @@ import org.springframework.web.client.RestClient;
 
 import java.time.Duration;
 import java.util.Optional;
+import java.util.function.Supplier;
+import java.util.function.Predicate;
+import java.util.Map;
+import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Collections;
 
 /**
  * AI Engine 호출 클라이언트 (Contract 9).
@@ -114,6 +120,52 @@ public class AiEngineClient {
         this.translationEnabled = translationEnabled;
     }
 
+    /** 대조 응답의 일시적 실패 사유(ai-engine transcript_diff_service). 이 응답은 기억하지 않는다. */
+    static final java.util.Set<String> TRANSIENT_DIFF_WARNINGS =
+            java.util.Set.of("historical_transcript_diff_llm_failed", "key_statements_lookup_failed");
+
+    /** 기억해 둘 응답 수 상한. 시연 스크립트 한 편(수십 세그먼트)의 수십 배라 넉넉하다. */
+    static final int MEMO_MAX_ENTRIES = 2_000;
+
+    /**
+     * 같은 요청에 대한 AI 응답(대조 · 번역 · 종합 판단)을 기억해 다시 쓸지. 반복 방송(같은 스크립트를 하루 종일 재생)에서
+     * 호출을 첫 회차로 줄이려고 켠다. 요청이 같으면 결과도 같은 것으로 보며, 실패(empty)와 쓸 수 없는 응답은 기억하지
+     * 않는다. 팩트체크는 엔진이 상태를 가져 여기서 기억하지 않고 CallAnalysisService 가 회차 단위로 다룬다.
+     */
+    @Value("${ai-engine.response-memo-enabled:false}")
+    private volatile boolean memoEnabled;
+
+    private final Map<Object, Object> memo = Collections.synchronizedMap(
+            new LinkedHashMap<>(256, 0.75f, true) {
+                @Override
+                protected boolean removeEldestEntry(Map.Entry<Object, Object> eldest) {
+                    return size() > MEMO_MAX_ENTRIES;
+                }
+            });
+
+    /** 테스트용. */
+    void setMemoEnabled(boolean memoEnabled) {
+        this.memoEnabled = memoEnabled;
+    }
+
+    public boolean isResponseMemoEnabled() {
+        return memoEnabled;
+    }
+
+    @SuppressWarnings("unchecked")
+    private <T> Optional<T> memoized(Object key, Predicate<T> worthKeeping, Supplier<Optional<T>> call) {
+        if (!memoEnabled) {
+            return call.get();
+        }
+        Object hit = memo.get(key);
+        if (hit != null) {
+            return Optional.of((T) hit);
+        }
+        Optional<T> result = call.get();
+        result.filter(worthKeeping).ifPresent(value -> memo.put(key, value));
+        return result;
+    }
+
     public boolean isFactCheckEnabled() {
         return factCheckEnabled;
     }
@@ -140,6 +192,8 @@ public class AiEngineClient {
      * @return 응답. 비활성화되었거나 호출이 실패하면 empty.
      */
     public Optional<LiveFactCheckModels.BatchResponse> submitSentence(LiveFactCheckModels.SentenceRequest request) {
+        // 팩트체크는 여기서 기억하지 않는다. 엔진이 종목 버퍼(상태)를 가져서, 일부 문장만 기억에서 꺼내 쓰면 버퍼가
+        // 어긋난다. 회차 단위 녹화 · 재생은 CallAnalysisService 가 맡는다.
         if (!factCheckEnabled) {
             return Optional.empty();
         }
@@ -171,7 +225,11 @@ public class AiEngineClient {
      * @return 응답. 비활성화되었거나 호출이 실패하면 empty.
      */
     public Optional<EarningsSummaryModels.AnalyzeResponse> analyze(EarningsSummaryModels.AnalyzeRequest request) {
-        return post(ANALYZE_PATH, request, EarningsSummaryModels.AnalyzeResponse.class, request.ticker(), "종합 판단");
+        // 가격(market_data)은 회차마다 달라지므로 기억 키에서 뺀다. 같은 전문이면 첫 판단을 다시 쓴다.
+        Object key = List.of("analyze", new EarningsSummaryModels.AnalyzeRequest(
+                request.ticker(), request.prompt(), request.needsReview(), null));
+        return memoized(key, EarningsSummaryModels.AnalyzeResponse::hasAnalysis,
+                () -> post(ANALYZE_PATH, request, EarningsSummaryModels.AnalyzeResponse.class, request.ticker(), "종합 판단"));
     }
 
     /**
@@ -183,8 +241,13 @@ public class AiEngineClient {
      */
     public Optional<EarningsSummaryModels.IntelligenceResponse> earningsIntelligence(
             EarningsSummaryModels.IntelligenceRequest request) {
-        return post(INTELLIGENCE_PATH, request, EarningsSummaryModels.IntelligenceResponse.class,
-                request.ticker(), "종합 인텔리전스");
+        // 엔진이 근거 검색에 임베딩을 쓰므로 회차마다 부르면 하루 한도를 쓴다. 가격(market_data)은 키에서 빼므로,
+        // 기억한 손절 계획의 가격 수준은 첫 회차 시세 기준이다.
+        Object key = List.of("intelligence", new EarningsSummaryModels.IntelligenceRequest(request.ticker(),
+                request.eventText(), request.question(), request.answer(), request.relatedTickers(), null,
+                request.directionHint(), request.confidenceHint()));
+        return memoized(key, r -> true, () -> post(INTELLIGENCE_PATH, request,
+                EarningsSummaryModels.IntelligenceResponse.class, request.ticker(), "종합 인텔리전스"));
     }
 
     /**
@@ -228,6 +291,14 @@ public class AiEngineClient {
      *         실패가 아니라 {@code available=false} 응답으로 온다.
      */
     public Optional<TranscriptDiffModels.DiffResponse> transcriptDiff(TranscriptDiffModels.DiffRequest request) {
+        // 일시적 실패(LLM · 핵심 발언 조회 실패)만 빼고 기억한다. "근거 약함" · "주제 무관" · "직전 콜 없음" 은 같은
+        // 데이터면 회차마다 같은 결과라 다시 물어도 호출만 쓴다.
+        return memoized(List.of("transcript-diff", request),
+                r -> r.warnings() == null || r.warnings().stream().noneMatch(TRANSIENT_DIFF_WARNINGS::contains),
+                () -> callTranscriptDiff(request));
+    }
+
+    private Optional<TranscriptDiffModels.DiffResponse> callTranscriptDiff(TranscriptDiffModels.DiffRequest request) {
         if (!transcriptDiffEnabled) {
             return Optional.empty();
         }
@@ -258,6 +329,14 @@ public class AiEngineClient {
      *         응답으로 온다.
      */
     public Optional<TranscriptTranslationModels.TranslateResponse> translate(
+            TranscriptTranslationModels.TranslateRequest request) {
+        // call_id 는 회차마다 다르므로 기억 키에서 뺀다. 응답에는 call_id 가 없다.
+        Object key = List.of("translate", new TranscriptTranslationModels.TranslateRequest(
+                request.ticker(), "", request.sequence(), request.text(), request.terms()));
+        return memoized(key, TranscriptTranslationModels.TranslateResponse::hasText, () -> callTranslate(request));
+    }
+
+    private Optional<TranscriptTranslationModels.TranslateResponse> callTranslate(
             TranscriptTranslationModels.TranslateRequest request) {
         if (!translationEnabled) {
             return Optional.empty();

@@ -1,5 +1,10 @@
 package com.earningwhisperer.presentation.demo;
 
+import org.springframework.beans.factory.ObjectProvider;
+import com.earningwhisperer.infrastructure.demo.DemoLoopRunner;
+import java.util.regex.Pattern;
+import java.util.Optional;
+import com.earningwhisperer.infrastructure.broadcast.CallBroadcastStore;
 import com.earningwhisperer.infrastructure.demo.DemoEarningsCallScript;
 import com.earningwhisperer.infrastructure.demo.DemoEarningsCallService;
 import lombok.RequiredArgsConstructor;
@@ -29,7 +34,25 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class DemoEarningsCallController {
 
+    private static final Pattern TICKER_PATTERN = Pattern.compile("^[A-Z0-9.-]{1,10}$");
+
     private final DemoEarningsCallService service;
+    private final CallBroadcastStore broadcastStore;
+    /** 반복 방송. 꺼져 있으면 빈이 없다. */
+    private final ObjectProvider<DemoLoopRunner> loopRunner;
+
+    private boolean loopControls(String ticker) {
+        DemoLoopRunner runner = loopRunner.getIfAvailable();
+        return runner != null && runner.controls(ticker);
+    }
+
+    private static ResponseEntity<?> loopRunning(String ticker) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("error", "반복 방송 중인 종목이라 시작 · 중지할 수 없습니다.");
+        body.put("code", "loop_running");
+        body.put("ticker", ticker);
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
+    }
 
     /**
      * 재생 시작. body 의 {@code ticker} 는 선택이며, 없으면 스크립트 기본 종목을 쓴다.
@@ -43,6 +66,9 @@ public class DemoEarningsCallController {
     @PostMapping("/start")
     public ResponseEntity<?> start(@RequestBody(required = false) StartRequest request) {
         String ticker = request == null ? null : request.ticker();
+        if (loopControls(ticker)) {
+            return loopRunning(ticker);
+        }
         DemoEarningsCallService.StartResult result = service.start(ticker);
         return switch (result.outcome()) {
             case STARTED -> ResponseEntity.accepted().body(startedBody(result));
@@ -60,6 +86,9 @@ public class DemoEarningsCallController {
     @PostMapping("/stop")
     public ResponseEntity<?> stop(@RequestBody(required = false) StartRequest request) {
         String ticker = request == null ? null : request.ticker();
+        if (loopControls(ticker)) {
+            return loopRunning(ticker);
+        }
         if (service.stop(ticker)) {
             return ResponseEntity.ok(Map.of("ticker", ticker, "stopped", true));
         }
@@ -76,26 +105,31 @@ public class DemoEarningsCallController {
      */
     @GetMapping("/status")
     public ResponseEntity<?> status(@RequestParam String ticker) {
-        return service.status(ticker)
-                .<ResponseEntity<?>>map(s -> ResponseEntity.ok(Map.of(
-                        "running", true,
-                        "ticker", s.ticker(),
-                        "call_id", s.callId(),
-                        "published_count", s.publishedCount(),
-                        "total_segments", s.totalSegments()
-                )))
-                .orElseGet(() -> service.lastRun(ticker)
-                        .<ResponseEntity<?>>map(last -> ResponseEntity.ok(Map.of(
-                                "running", false,
-                                "ticker", last.ticker(),
-                                "last_run", Map.of(
-                                        "call_id", last.callId(),
-                                        "outcome", last.outcome(),
-                                        "published_count", last.publishedCount(),
-                                        "total_segments", last.totalSegments()
-                                )
-                        )))
-                        .orElseGet(() -> ResponseEntity.ok(Map.of("running", false, "ticker", ticker))));
+        boolean loop = loopControls(ticker);
+        Map<String, Object> body = new LinkedHashMap<>();
+        var running = service.status(ticker);
+        if (running.isPresent()) {
+            var s = running.get();
+            body.put("running", true);
+            body.put("ticker", s.ticker());
+            body.put("call_id", s.callId());
+            body.put("published_count", s.publishedCount());
+            body.put("total_segments", s.totalSegments());
+        } else {
+            body.put("running", false);
+            body.put("ticker", ticker);
+            service.lastRun(ticker).ifPresent(last -> {
+                body.put("ticker", last.ticker());
+                body.put("last_run", Map.of(
+                        "call_id", last.callId(),
+                        "outcome", last.outcome(),
+                        "published_count", last.publishedCount(),
+                        "total_segments", last.totalSegments()));
+            });
+        }
+        // 반복 방송이 맡은 종목이면 true. 터미널은 이때 시작 · 중지 대신 "반복 방송 중" 표시만 둔다.
+        body.put("loop", loop);
+        return ResponseEntity.ok(body);
     }
 
     /**
@@ -129,6 +163,32 @@ public class DemoEarningsCallController {
                         "analyst", s.analyst()
                 ))
                 .toList();
+        return ResponseEntity.ok(body);
+    }
+
+    /**
+     * 중간 입장 스냅샷 (api-spec 7.8). 그 종목의 가장 최근 회차에 발행한 자막 · 번역 · 팩트체크 · 대조 · 종합 판단을
+     * STOMP 메시지와 같은 모양으로 한 번에 준다. 클라이언트는 실시간 메시지와 같은 저장소에 흘려 넣고, 겹치는 것은
+     * {@code (call_id, sequence)} 로 버린다. 회차 사이에는 끝난 회차 전체와 종합 판단을 준다.
+     *
+     * <p>{@code running} 은 시연 재생 중인지다. 기록이 없으면 {@code call_id=null} 과 빈 목록이다.
+     */
+    @GetMapping("/snapshot")
+    public ResponseEntity<?> snapshot(@RequestParam String ticker) {
+        String normalized = ticker == null ? "" : ticker.trim().toUpperCase();
+        if (!TICKER_PATTERN.matcher(normalized).matches()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "invalid ticker"));
+        }
+        Optional<CallBroadcastStore.Snapshot> snapshot = broadcastStore.snapshot(normalized);
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("ticker", normalized);
+        body.put("call_id", snapshot.map(CallBroadcastStore.Snapshot::callId).orElse(null));
+        body.put("running", service.status(normalized).isPresent());
+        body.put("segments", snapshot.map(CallBroadcastStore.Snapshot::segments).orElse(List.of()));
+        body.put("translations", snapshot.map(CallBroadcastStore.Snapshot::translations).orElse(List.of()));
+        body.put("fact_checks", snapshot.map(CallBroadcastStore.Snapshot::factChecks).orElse(List.of()));
+        body.put("diffs", snapshot.map(CallBroadcastStore.Snapshot::diffs).orElse(List.of()));
+        body.put("evaluation", snapshot.map(CallBroadcastStore.Snapshot::evaluation).orElse(null));
         return ResponseEntity.ok(body);
     }
 

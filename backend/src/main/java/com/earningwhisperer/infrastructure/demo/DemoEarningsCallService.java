@@ -4,10 +4,7 @@ import com.earningwhisperer.domain.transcript.TranscriptSegment;
 import com.earningwhisperer.domain.transcript.TranscriptService;
 import com.earningwhisperer.domain.transcript.TranscriptSessionRegistry;
 import com.earningwhisperer.infrastructure.aiengine.AiEngineClient;
-import com.earningwhisperer.infrastructure.aiengine.LiveFactCheckModels;
-import com.earningwhisperer.infrastructure.aiengine.TranscriptDiffModels;
-import com.earningwhisperer.infrastructure.websocket.FactCheckPublisher;
-import com.earningwhisperer.infrastructure.websocket.TranscriptDiffPublisher;
+import com.earningwhisperer.infrastructure.analysis.CallAnalysisService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
@@ -27,7 +24,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -61,22 +57,13 @@ import java.util.concurrent.atomic.AtomicLong;
 @Service
 public class DemoEarningsCallService {
 
-    /** 이 이상 큐가 쌓이면 팩트체크가 스크립트를 따라가지 못하고 있다는 뜻이다. */
-    private static final int FACT_CHECK_QUEUE_WARN_THRESHOLD = 3;
-
-    /** 대조 큐 경고 기준. 팩트체크와 같은 기준을 쓴다. */
-    private static final int TRANSCRIPT_DIFF_QUEUE_WARN_THRESHOLD = 3;
-
     private final TranscriptService transcriptService;
     private final AiEngineClient aiEngineClient;
-    private final FactCheckPublisher factCheckPublisher;
-    private final TranscriptDiffPublisher transcriptDiffPublisher;
-    private final EarningsSummaryService summaryService;
+    /** 팩트체크 · 대조 · 종합 판단 요청. 실시간 인입과 같은 경로다. */
+    private final CallAnalysisService callAnalysis;
     private final ObjectMapper objectMapper;
     private final String scriptPath;
     private final long intervalMs;
-    /** 정상 종료 시 팩트체크 큐를 비우기 위해 기다려 줄 시간의 기준값. */
-    private final long aiEngineTimeoutMs;
 
     /** ticker → 진행 중인 세션. 같은 종목의 중복 재생을 막는다. */
     private final Map<String, Session> sessions = new ConcurrentHashMap<>();
@@ -89,21 +76,6 @@ public class DemoEarningsCallService {
     private final AtomicLong callIdSequence = new AtomicLong();
 
     /**
-     * 종합 판단 전용 스레드.
-     *
-     * <p>재생 스레드에서 부르지 않는 이유: 재생 종료 시 {@code session.shutdown} 이
-     * playback executor 에 shutdownNow 를 걸어 자기 자신을 인터럽트한다. 그 상태에서
-     * 수 초짜리 HTTP 호출을 이어 붙이면 인터럽트 플래그를 안고 도는 셈이 된다.
-     * 세션 수명과 무관한 단일 스레드에 넘겨 회차마다 순서대로 처리한다.
-     */
-    private final ExecutorService summaryExecutor = new ThreadPoolExecutor(
-            1, 1, 0L, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>(), r -> {
-        Thread thread = new Thread(r, "demo-call-summary");
-        thread.setDaemon(true);
-        return thread;
-    });
-
-    /**
      * ticker → 마지막으로 끝난 재생의 요약. 재생이 끝나면 세션은 map 에서 사라지므로,
      * 이것이 없으면 "정상 완료", "시작한 적 없음", "첫 세그먼트부터 전부 거부되어 즉시 끝남"
      * 이 status API 에서 전부 똑같이 보인다. 시연 중 "버튼을 눌렀는데 화면에 아무것도
@@ -111,31 +83,17 @@ public class DemoEarningsCallService {
      */
     private final Map<String, LastRun> lastRuns = new ConcurrentHashMap<>();
 
-    /**
-     * ticker → 가장 최근에 시작된 회차의 callId.
-     *
-     * <p>종합 판단은 재생이 끝난 뒤 수십 초까지 걸릴 수 있고, 그동안 시연자가 같은 종목을
-     * 다시 재생할 수 있다. 그러면 <b>이전 회차의 판단이 새 회차 재생 도중에 발행된다</b> —
-     * 어닝콜이 진행 중인데 결론 카드가 뜨는 셈이다. 발행 직전에 이 값과 대조해 막는다.
-     */
-    private final Map<String, String> latestCallIds = new ConcurrentHashMap<>();
-
     public DemoEarningsCallService(
             TranscriptService transcriptService,
             AiEngineClient aiEngineClient,
-            FactCheckPublisher factCheckPublisher,
-            TranscriptDiffPublisher transcriptDiffPublisher,
-            EarningsSummaryService summaryService,
+            CallAnalysisService callAnalysis,
             ObjectMapper objectMapper,
             @Value("${demo.earnings-call.script-path:data/demo-earnings-call.json}") String scriptPath,
-            @Value("${demo.earnings-call.interval-ms:6000}") long intervalMs,
-            @Value("${ai-engine.timeout-ms:8000}") long aiEngineTimeoutMs
+            @Value("${demo.earnings-call.interval-ms:6000}") long intervalMs
     ) {
         this.transcriptService = transcriptService;
         this.aiEngineClient = aiEngineClient;
-        this.factCheckPublisher = factCheckPublisher;
-        this.transcriptDiffPublisher = transcriptDiffPublisher;
-        this.summaryService = summaryService;
+        this.callAnalysis = callAnalysis;
         this.objectMapper = objectMapper;
         this.scriptPath = scriptPath;
         // 음수 간격은 Thread.sleep 에서 IllegalArgumentException 이 되고, 재생이 세그먼트
@@ -144,7 +102,6 @@ public class DemoEarningsCallService {
             throw new IllegalArgumentException("demo.earnings-call.interval-ms 는 음수일 수 없습니다: " + intervalMs);
         }
         this.intervalMs = intervalMs;
-        this.aiEngineTimeoutMs = Math.max(0, aiEngineTimeoutMs);
     }
 
     /**
@@ -181,13 +138,19 @@ public class DemoEarningsCallService {
         Session created = new Session(ticker, callId, script.segments().size());
         Session existing = sessions.putIfAbsent(ticker, created);
         if (existing != null) {
-            // putIfAbsent 실패 = 이 Session 은 쓰이지 않는다. 생성자가 만든 executor 2개를
-            // 반드시 회수한다. 버튼 연타 시 요청마다 누적되기 때문이다.
+            // putIfAbsent 실패 = 이 Session 은 쓰이지 않는다. 생성자가 만든 재생 executor 를
+            // 반드시 회수한다. 버튼 연타 시 요청마다 누적되기 때문이다. 분석 큐는 아직 열지 않았다.
             created.shutdown(0);
             return StartResult.alreadyRunning(existing.ticker, existing.callId);
         }
 
-        latestCallIds.put(ticker, callId);
+        // 분석 회차는 세션을 차지한 뒤에 연다. 같은 종목의 최신 회차로 기록되어, 지난 회차의 종합 판단이
+        // 이 회차 위에 뜨지 않는다.
+        DemoEarningsCallScript.AnalystQa qa = script.analystQa();
+        created.analysis = callAnalysis.open(ticker, callId, new CallAnalysisService.CallContext(
+                script.relatedTickers() == null ? List.of() : script.relatedTickers(),
+                qa == null ? null : qa.question(), qa == null ? null : qa.answer(),
+                replayKey(ticker, script), script.segments().size()), "demo-call");
         try {
             created.playbackFuture = created.playback.submit(() -> runPlayback(created, script));
         } catch (RuntimeException e) {
@@ -281,6 +244,16 @@ public class DemoEarningsCallService {
         }
     }
 
+    /**
+     * 같은 스크립트를 가리키는 키. 팩트체크 녹화를 다시 쓸지 판단하는 데 쓴다. 스크립트 내용이 바뀌면 달라진다.
+     */
+    static String replayKey(String ticker, DemoEarningsCallScript script) {
+        StringBuilder texts = new StringBuilder();
+        script.segments().forEach(segment -> texts.append(segment.sequence()).append('|').append(segment.text()).append('\n'));
+        return ticker + "|" + script.callStartedAt() + "|" + script.segments().size() + "|"
+                + Integer.toHexString(texts.toString().hashCode());
+    }
+
     private static String normalizeKey(String ticker) {
         return ticker == null || ticker.isBlank() ? null : ticker.trim().toUpperCase();
     }
@@ -321,8 +294,7 @@ public class DemoEarningsCallService {
                             session.ticker, raw.sequence(), result);
                 } else {
                     session.publishedCount = i + 1;
-                    submitForFactCheck(session, raw, segmentEpochSecond, isLast);
-                    submitForTranscriptDiff(session, raw, segmentEpochSecond);
+                    session.analysis.submit(segment);
                 }
 
                 if (!isLast) {
@@ -354,10 +326,10 @@ public class DemoEarningsCallService {
             //      인터럽트된 스레드에서 executor 에 제출하는 상태를 만들지 않는다.
             // 요약 태스크는 다른 스레드에서 돌고 script 는 불변이라 순서를 앞당겨도 안전하다.
             if (!stopped && session.publishedCount > 0) {
-                submitSummary(session, script);
+                session.analysis.submitSummary();
             }
 
-            long grace = stopped ? 0 : aiEngineTimeoutMs + 2_000;
+            long grace = stopped ? 0 : callAnalysis.drainGraceMillis();
             session.shutdown(grace);
             if (!stopped) {
                 recordLastRun(session, session.publishedCount == 0 ? "NO_SEGMENT_PUBLISHED" : "COMPLETED");
@@ -426,108 +398,6 @@ public class DemoEarningsCallService {
     }
 
     /**
-     * 종합 판단 생성을 전용 스레드에 넘긴다. 실패해도 재생 종료 자체는 이미 끝났다.
-     */
-    private void submitSummary(Session session, DemoEarningsCallScript script) {
-        try {
-            // submit 이 아니라 execute 다. submit 은 Throwable 을 아무도 보지 않는 Future 에
-            // 가둬 버려서 Error 계열이 로그 한 줄 없이 사라진다. 팩트체크 제출도 execute 를 쓴다.
-            summaryExecutor.execute(() -> {
-                // 이 태스크가 큐에서 기다리는 동안 같은 종목이 다시 재생을 시작했을 수 있다.
-                // 그대로 발행하면 진행 중인 어닝콜 위에 지난 회차의 결론이 덮인다.
-                String latest = latestCallIds.get(session.ticker);
-                if (latest != null && !latest.equals(session.callId)) {
-                    log.warn("[DemoCall] 지난 회차의 종합 판단을 버립니다 - ticker={} call_id={} 최신={}",
-                            session.ticker, session.callId, latest);
-                    return;
-                }
-                try {
-                    summaryService.summarizeAndPublish(session.ticker, session.callId, script);
-                } catch (Throwable e) {
-                    // Exception 만 잡으면 Error 계열이 스레드를 조용히 죽이고, 다음 회차부터
-                    // 종합 판단이 통째로 사라진다.
-                    log.error("[DemoCall] 종합 판단 실패 - ticker={} call_id={} error={}",
-                            session.ticker, session.callId, e.toString(), e);
-                }
-            });
-        } catch (RejectedExecutionException e) {
-            // 종료 중. 시연이 끝나는 상황이므로 경고로 충분하다.
-            log.warn("[DemoCall] 종합 판단을 제출하지 못했습니다(종료 중) - ticker={} call_id={} error={}",
-                    session.ticker, session.callId, e.toString());
-        }
-    }
-
-    /**
-     * 팩트체크 제출을 팩트체크 스레드에 넘긴다. 재생 스레드는 여기서 대기하지 않는다.
-     * 큐잉 순서가 곧 제출 순서이고, 단일 스레드가 그 순서를 유지한다.
-     */
-    private void submitForFactCheck(Session session, DemoEarningsCallScript.Segment raw,
-                                    long timestamp, boolean isLast) {
-        if (!aiEngineClient.isFactCheckEnabled()) {
-            return;
-        }
-        LiveFactCheckModels.SentenceRequest request = new LiveFactCheckModels.SentenceRequest(
-                session.ticker, raw.text(), raw.sequence(), timestamp, isLast);
-        int queued = session.factCheck.getQueue().size();
-        if (queued >= FACT_CHECK_QUEUE_WARN_THRESHOLD) {
-            log.warn("[DemoCall] 팩트체크 큐 적체 - ticker={} queued={} (AI Engine 응답이 재생 간격보다 느립니다. "
-                    + "카드가 스크립트보다 점점 뒤처집니다)", session.ticker, queued);
-        }
-        try {
-            session.factCheck.execute(() -> {
-                if (session.stopRequested.get()) {
-                    return;
-                }
-                aiEngineClient.submitSentence(request)
-                        .ifPresent(batch -> factCheckPublisher.publish(session.ticker, session.callId, batch));
-            });
-        } catch (RejectedExecutionException e) {
-            // 중지 직후의 정상 상황. 재생은 계속되어야 한다.
-            log.debug("[DemoCall] 팩트체크 제출 생략(종료 중) - ticker={} sequence={}",
-                    session.ticker, raw.sequence());
-        } catch (Exception e) {
-            log.warn("[DemoCall] 팩트체크 제출 실패 - ticker={} sequence={} error={}",
-                    session.ticker, raw.sequence(), e.toString());
-        }
-    }
-
-    /**
-     * 직전 콜 대조를 대조 스레드에 넘긴다. 재생 스레드는 여기서 대기하지 않는다.
-     *
-     * <p>모든 세그먼트를 넘긴다. 주제와 무관한 발언은 엔진이
-     * {@code current_chunk_not_material} 로 걸러 내고, 발행자가 빈 결과를 버린다.
-     * 백엔드에서 미리 주제를 판정하면 엔진의 판정 기준과 둘로 갈린다.
-     */
-    private void submitForTranscriptDiff(Session session, DemoEarningsCallScript.Segment raw, long timestamp) {
-        if (!aiEngineClient.isTranscriptDiffEnabled()) {
-            return;
-        }
-        TranscriptDiffModels.DiffRequest request =
-                TranscriptDiffModels.DiffRequest.forEarningsCall(session.ticker, raw.text(), timestamp);
-        int queued = session.transcriptDiff.getQueue().size();
-        if (queued >= TRANSCRIPT_DIFF_QUEUE_WARN_THRESHOLD) {
-            log.warn("[DemoCall] 과거 콜 대조 큐 적체 - ticker={} queued={} (AI Engine 응답이 재생 간격보다 느립니다. "
-                    + "ai-engine.transcript-diff-enabled=false 로 끄면 팩트체크만 남습니다)", session.ticker, queued);
-        }
-        try {
-            session.transcriptDiff.execute(() -> {
-                if (session.stopRequested.get()) {
-                    return;
-                }
-                aiEngineClient.transcriptDiff(request)
-                        .ifPresent(diff -> transcriptDiffPublisher.publish(
-                                session.ticker, session.callId, raw.sequence(), diff));
-            });
-        } catch (RejectedExecutionException e) {
-            log.debug("[DemoCall] 과거 콜 대조 제출 생략(종료 중) - ticker={} sequence={}",
-                    session.ticker, raw.sequence());
-        } catch (Exception e) {
-            log.warn("[DemoCall] 과거 콜 대조 제출 실패 - ticker={} sequence={} error={}",
-                    session.ticker, raw.sequence(), e.toString());
-        }
-    }
-
-    /**
      * 스크립트 세그먼트를 검증한다. 문제가 없으면 null, 있으면 사유 문자열.
      *
      * <p>여기서 잡지 않으면 시연 당일에야 드러나는 것들이다.
@@ -584,28 +454,6 @@ public class DemoEarningsCallService {
         });
         sessions.clear();
         lastRuns.clear();
-        latestCallIds.clear();
-        shutdownSummaryExecutor();
-    }
-
-    /**
-     * 종합 판단 스레드 회수.
-     *
-     * <p>그냥 shutdownNow 만 하면 "마지막 회차 종합 판단이 안 왔다" 의 원인이 로그에
-     * 아무것도 남지 않는다. 짧게 한 번 기다려 보고, 그래도 남은 것이 있으면 몇 건인지 남긴다.
-     */
-    private void shutdownSummaryExecutor() {
-        summaryExecutor.shutdown();
-        try {
-            if (!summaryExecutor.awaitTermination(1_500, TimeUnit.MILLISECONDS)) {
-                List<Runnable> dropped = summaryExecutor.shutdownNow();
-                log.warn("[DemoCall] 종료 중 종합 판단 {}건을 버렸습니다(진행 중 1건 포함 가능)",
-                        dropped.size());
-            }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            summaryExecutor.shutdownNow();
-        }
     }
 
     /** 재생 1회분의 상태와 전용 스레드. */
@@ -615,10 +463,8 @@ public class DemoEarningsCallService {
         final int totalSegments;
         final AtomicBoolean stopRequested = new AtomicBoolean(false);
         final ExecutorService playback;
-        /** 큐 깊이를 관찰해야 하므로 ThreadPoolExecutor 로 직접 만든다. */
-        final ThreadPoolExecutor factCheck;
-        /** 과거 콜 대조 전용. 팩트체크와 지연을 나눠 갖기 위해 따로 둔다. */
-        final ThreadPoolExecutor transcriptDiff;
+        /** 이 회차의 분석 큐. 세션이 map 을 차지한 뒤에 연다. */
+        volatile CallAnalysisService.CallHandle analysis;
         volatile Future<?> playbackFuture;
         volatile int publishedCount;
 
@@ -627,56 +473,32 @@ public class DemoEarningsCallService {
             this.callId = callId;
             this.totalSegments = totalSegments;
             this.playback = singleThread("demo-call-play-" + ticker);
-            this.factCheck = singleThread("demo-call-fc-" + ticker);
-            this.transcriptDiff = singleThread("demo-call-diff-" + ticker);
         }
 
         /**
-         * executor 3개를 종료한다.
+         * 재생 executor 와 분석 큐를 닫는다.
          *
-         * <p>{@code graceMillis} 는 <b>팩트체크 큐와 대조 큐</b>에만 적용된다. 0 이면 대기
-         * 없이 즉시 폐기한다(중지 경로 — HTTP 워커 스레드를 붙들지 않기 위해). 정상 종료
-         * 경로에서는 마지막 배치가 유실되지 않도록 AI Engine 타임아웃보다 넉넉한 값을 넘긴다.
-         *
-         * <p>대기는 두 큐가 나눠 쓴다. 각각에 전체 시간을 주면 최악의 경우 두 배를 기다리게
-         * 되고, 그만큼 중지 응답이 늦어진다.
+         * <p>{@code graceMillis} 는 <b>분석 큐</b>에만 적용된다. 0 이면 대기 없이 즉시 폐기한다(중지 경로 —
+         * HTTP 워커 스레드를 붙들지 않기 위해). 정상 종료 경로에서는 마지막 배치가 유실되지 않도록 AI Engine
+         * 타임아웃보다 넉넉한 값을 넘긴다.
          *
          * <p>주의: 이 메서드는 재생 스레드 자신이 호출하기도 한다. 따라서 여기에
          * {@code playback.awaitTermination} 을 추가하면 자기 자신을 기다리는 데드락이 된다.
          */
         void shutdown(long graceMillis) {
-            factCheck.shutdown();
-            transcriptDiff.shutdown();
             playback.shutdown();
-            if (graceMillis > 0) {
-                long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(graceMillis);
-                awaitQuietly(factCheck, "팩트체크", remainingMillis(deadline));
-                awaitQuietly(transcriptDiff, "과거 콜 대조", remainingMillis(deadline));
+            CallAnalysisService.CallHandle handle = analysis;
+            if (handle != null) {
+                if (graceMillis > 0) {
+                    handle.close(graceMillis);
+                } else {
+                    handle.cancel();
+                }
             }
-            factCheck.shutdownNow();
-            transcriptDiff.shutdownNow();
             playback.shutdownNow();
         }
 
-        private static long remainingMillis(long deadlineNanos) {
-            return Math.max(0, TimeUnit.NANOSECONDS.toMillis(deadlineNanos - System.nanoTime()));
-        }
-
-        private void awaitQuietly(ThreadPoolExecutor executor, String label, long millis) {
-            if (millis <= 0) {
-                return;
-            }
-            try {
-                if (!executor.awaitTermination(millis, TimeUnit.MILLISECONDS)) {
-                    log.warn("[DemoCall] {} 큐를 {}ms 내에 비우지 못했습니다 - ticker={} 남은 작업={}",
-                            label, millis, ticker, executor.getQueue().size());
-                }
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-        }
-
-        private static ThreadPoolExecutor singleThread(String name) {
+        private static ExecutorService singleThread(String name) {
             return new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS,
                     new LinkedBlockingQueue<>(), r -> {
                 Thread t = new Thread(r, name);

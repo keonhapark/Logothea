@@ -27,7 +27,9 @@ REST · STOMP · Redis 메시지의 형식을 정리한 문서입니다. 모듈�
 | 9 | Backend → Frontend Web | STOMP | 쇼케이스 데모룸. 현재 frontend 는 연결하지 않습니다 | 4.1 |
 
 시연에서는 data_pipeline 대신 backend 의 시연 재생(7.8)이 세그먼트를 넣습니다. 팩트체크 · 직전 콜 대조 · 종합
-판단은 지금 시연 재생 경로에서만 호출하며, data_pipeline 이 넣은 세그먼트에는 자막과 번역만 나갑니다.
+판단은 두 경로 모두 같은 분석 경로(`CallAnalysisService`)로 요청합니다. data_pipeline 인입의 분석은
+`app.live-analysis.enabled`(기본 `false`)로 켜며, 꺼져 있으면 자막과 번역만 나갑니다. 시연이 재생 중인 종목의
+data_pipeline 자막은 분석하지 않습니다(AI Engine 의 팩트체크 버퍼가 종목 단위라 두 흐름이 섞이면 거부됩니다).
 
 > 매매 신호로 주문을 내던 경로(AI Engine → Redis `trading-signals` → Backend 룰 엔진 → `/user/queue/signals` →
 > Terminal)는 #127 에서 제거했습니다([ADR 0005](adr/0005-support-only-user-placed-orders.md)). 주문은 사용자가
@@ -131,13 +133,17 @@ REST · STOMP · Redis 메시지의 형식을 정리한 문서입니다. 모듈�
 | 엔드포인트 | `/ws-native`(native WebSocket, 터미널), `/ws`(SockJS, 웹) |
 | broker prefix | `/topic`, `/queue`. 앱 prefix `/app` 과 사용자 prefix `/user` 는 설정만 있고 쓰지 않습니다 |
 | 인증 | CONNECT 프레임의 `Authorization: Bearer {accessToken}` 을 `StompJwtChannelInterceptor` 가 검증합니다 |
+| heart-beat | 서버는 `10000,10000`(밀리초)을 제안합니다. 실제 간격은 클라이언트가 CONNECT 에 보낸 값과 협상해 정해지고, 클라이언트가 `0,0` 을 보내면 꺼집니다. 터미널과 웹은 `10000,10000` 을 보냅니다 |
 
 - 인증에 실패하면 ERROR 프레임(`STOMP 인증 실패`)으로 끊습니다. 터미널은 이 문구를 보면 access token 을 한 번
   갱신해 다시 연결하므로, 문구도 계약에 포함됩니다.
 - CONNECT 없이 보낸 SUBSCRIBE 와, 인증된 세션의 클라이언트 SEND 는 모두 거부합니다. STOMP 는 서버에서
   클라이언트로만 흐릅니다.
-- 토픽별 권한 구분은 없습니다. 로그인한 사용자는 모든 토픽을 구독할 수 있고, 로그인하지 않으면 어떤 토픽도
-  구독할 수 없습니다.
+- 로그인한 사용자는 토픽별 권한 구분 없이 모든 토픽을 구독할 수 있고, 토큰이 없으면 어떤 토픽도 구독할 수 없습니다.
+- 게스트 토큰(7.1.1)으로 연결한 세션은 `/topic/transcript/{ticker}`, `/topic/factcheck/{ticker}`,
+  `/topic/transcript-diff/{ticker}`, `/topic/transcript-translation/{ticker}`, `/topic/evaluation/{ticker}`,
+  `/topic/market/indices`, `/topic/prices` 만 구독할 수 있습니다. `{ticker}` 는 `^[A-Z0-9.-]{1,10}$` 이고 와일드카드는
+  받지 않습니다. 그 밖의 목적지(`/user/**`, `/queue/**` 포함)는 ERROR 프레임(`허용되지 않는 STOMP 프레임`)으로 끊습니다.
 
 | 목적지 | 발행 클래스 | 절 | 구독 |
 |---|---|---|---|
@@ -226,8 +232,9 @@ Redis `trading-signals` 수신을 계기로 발행하던 토픽입니다. #127 �
 - **설명:** 어닝콜 발언의 검증 가능한 주장을 AI Engine 이 뉴스 근거와 대조한 결과입니다(9.1).
 - **발행 시점:** AI Engine 이 `status=COMPLETED` 이고 `claims[]` 가 비어 있지 않은 결과를 돌려줄 때만 보냅니다.
   `BUFFERING` · `REJECTED` · `DISCARDED` 와 주장이 0건인 결과는 보내지 않습니다.
-- **호출 경로:** 지금은 시연 재생(7.8)에서만 AI Engine 에 제출합니다. data_pipeline 인입(6.4)으로 들어온
-  세그먼트에는 팩트체크가 돌지 않습니다. `ai-engine.fact-check-enabled` 로 끕니다.
+- **호출 경로:** 시연 재생(7.8)과 data_pipeline 인입(6.4)이 새로 받아들인 세그먼트마다 AI Engine 에 제출합니다.
+  재전송(같은 세그먼트 202)과 본문 없는 종료 제어는 제출하지 않습니다. `ai-engine.fact-check-enabled` 로 끕니다.
+  data_pipeline 인입은 `app.live-analysis.enabled=true` 일 때만 제출합니다(기본 꺼짐).
 - **지연:** 검증에 LLM 호출이 최대 2번 들어가 해당 발언보다 늦게 도착합니다. 클라이언트는
   `batch_start_sequence` ~ `batch_end_sequence` 범위로 어느 발언의 판정인지 짝짓습니다.
 
@@ -244,10 +251,13 @@ Redis `trading-signals` 수신을 계기로 발행하던 토픽입니다. #127 �
 ### 4.7. Earnings Call Summary Broadcast (콜 종료 후 종합 판단)
 
 - **Topic:** `/topic/evaluation/{ticker}`
-- **설명:** 시연 재생이 끝난 뒤 회차당 한 번 보내는 종합 판단입니다. 콜 전체를 놓고 낸 방향 · 강도 · 신뢰도와
+- **설명:** 콜이 끝난 뒤 회차당 한 번 보내는 종합 판단입니다. 콜 전체를 놓고 낸 방향 · 강도 · 신뢰도와
   회피 지표 · 파급 영향 · 손절 계획이 들어 있습니다.
-- **발행 시점:** 재생이 정상 완료되고(중지된 회차 제외) 세그먼트가 1건 이상 발행되었으며, AI Engine 이 판단
-  본문(`judgment`)을 돌려준 경우에만 보냅니다. 지금은 시연 재생 경로에만 있습니다.
+- **발행 시점:** 시연 재생은 재생이 정상 완료된 회차(중지 제외), data_pipeline 인입은 `is_session_end: true` 를
+  받은 회차에서, 본문 있는 세그먼트가 1건 이상 있고 AI Engine 이 판단 본문(`judgment`)을 돌려준 경우에만 보냅니다.
+  같은 종목의 새 회차가 그 사이 시작됐으면 지난 회차의 판단은 보내지 않습니다. data_pipeline 회차에는 스크립트의
+  애널리스트 Q&A 와 관련 종목이 없어 `evasion` 은 `null`, 파급 영향은 관련 종목 없이 계산합니다. 종료 신호 없이
+  `app.live-analysis.idle-timeout-minutes`(기본 30분) 동안 자막이 없으면 판단 없이 회차를 정리합니다.
 - **소요 시간:** 마지막 세그먼트 직후 제출되지만 `analyze`(9.6)와 `earnings/intelligence`(9.7)를 차례로 부르므로
   수 초에서 십수 초가 걸립니다. `analyze` 가 읽기 타임아웃(`ai-engine.timeout-ms`, 기본 50초) 안에 응답하지 않으면
   보내지 않고 끝나며, `earnings/intelligence` 만 실패하면 `intelligence_available=false` 로 판단만 보냅니다.
@@ -314,8 +324,8 @@ Redis `trading-signals` 수신을 계기로 발행하던 토픽입니다. #127 �
 
 - **Topic:** `/topic/transcript-diff/{ticker}`
 - **설명:** 이번 발언을 직전 콜 경영진 발언과 비교한 결과입니다(9.11).
-- **발행 시점:** 시연 재생이 세그먼트마다 AI Engine 에 대조를 요청하고, 응답이 `available=true` 이며 `items` 가
-  1건 이상일 때만 보냅니다. 지금은 시연 재생 경로에만 있습니다. `ai-engine.transcript-diff-enabled` 로 끕니다.
+- **발행 시점:** 시연 재생과 data_pipeline 인입이 새로 받아들인 세그먼트마다 AI Engine 에 대조를 요청하고, 응답이
+  `available=true` 이며 `items` 가 1건 이상일 때만 보냅니다. `ai-engine.transcript-diff-enabled` 로 끕니다.
 
 | 필드명              | 타입    | 설명                                                    |
 | :------------------ | :------ | :------------------------------------------------------ |
@@ -446,8 +456,10 @@ Redis `trading-signals` 수신을 계기로 발행하던 토픽입니다. #127 �
 - **통신 방식:** HTTP POST, 세그먼트 단위
 - **인증:** `X-Internal-Secret` (8.3)
 - **호출하는 곳:** data_pipeline STT 워커(`stt_worker/take.py`), 질의응답 평가 하네스(`logothea-assistant/eval/seed.py`)
-- **설명:** 받은 세그먼트를 검증해 바로 4.5 로 보내고, 질의응답용 기록(10.1)과 번역 묶음(4.8)을 시작합니다. 응답은
-  자막 발행까지 마친 뒤 돌려주며, 질의응답 기록은 그 뒤에 비동기로 저장합니다.
+- **설명:** 받은 세그먼트를 검증해 바로 4.5 로 보내고, 질의응답용 기록(10.1)과 번역 묶음(4.8)을 시작합니다. 새로
+  받아들인 세그먼트는 `app.live-analysis.enabled=true` 일 때 팩트체크(4.6)와 직전 콜 대조(4.9)에 넘기고, 종료 신호를
+  받으면 종합 판단(4.7)을 냅니다.
+  응답은 자막 발행까지 마친 뒤 돌려주며, 질의응답 기록과 AI 분석은 그 뒤에 비동기로 진행합니다.
 
 | 필드명           | 타입    | 필수 | 설명                                              |
 | :--------------- | :------ | :--: | :------------------------------------------------ |
@@ -499,6 +511,7 @@ Redis `trading-signals` 수신을 계기로 발행하던 토픽입니다. #127 �
 | POST | `/api/v1/auth/refresh` | 쿠키 | 터미널, 웹 | access token 재발급과 refresh token 회전 |
 | POST | `/api/v1/auth/logout` | 쿠키 | 터미널, 웹 | refresh token 폐기 |
 | POST | `/api/v1/auth/oauth/callback` | 불필요 | 터미널, 웹 | Google · Kakao 로그인 |
+| POST | `/api/v1/guest/token` | 불필요 | 전시 웹 | 게스트 토큰 발급 (7.1.1) |
 
 - **signup:** 요청 `{email, password, nickname}`. `email` 은 이메일 형식이고 `.local` · `.invalid` · `.test` · `.example`
   도메인은 받지 않습니다. `password` 는 8자 이상, `nickname` 은 50자 이하입니다. 성공은 201 `{"userId": N}`, 이메일
@@ -514,6 +527,39 @@ Redis `trading-signals` 수신을 계기로 발행하던 토픽입니다. #127 �
 - **oauth/callback:** 요청 `{code, redirect_uri, provider, code_verifier}`. `provider` 는 `GOOGLE` · `KAKAO`(대소문자
   무관), `code_verifier` 는 PKCE 를 쓸 때만 보냅니다. 성공은 login 과 같습니다. provider 가 틀리면 400, 코드 교환에
   실패하면 401, 그 밖의 오류는 500 이며 모두 본문이 없습니다.
+
+#### 7.1.1. 게스트 토큰 (`POST /api/v1/guest/token`)
+
+전시용 모바일 웹(`demo.logothea.com`) 관람객이 로그인 없이 쓰는 토큰입니다. 본문 없이 부릅니다.
+
+```json
+{ "access_token": "eyJ...", "expires_in": 3600 }
+```
+
+- 쿠키와 refresh token 은 없습니다. 만료되면 이 API 를 다시 부릅니다. 토큰마다 새 게스트 식별자를 만들고 users 행은
+  만들지 않습니다.
+- REST 는 `Authorization: Bearer`, STOMP 는 CONNECT 의 `Authorization` 헤더로 사용자 토큰과 같이 보냅니다.
+- 게스트가 부를 수 있는 REST 는 `GET /api/v1/glossary`, `GET /api/v1/demo/earnings-call/status` · `speakers` · `snapshot`,
+  `GET /api/v1/earnings-calendar/terminal-timeline`, `GET /api/v1/stocks/{ticker}/detail`(저장된 S&P 500 종목만),
+  `POST /api/v1/assistant/ask`(게스트 한도, 7.10)와 인증 없이 열린 경로(8.1)뿐입니다. 그 밖은 403 입니다.
+  구독 범위는 4장 머리말에 있습니다.
+
+| 상태 | 의미 |
+|---|---|
+| 200 | 발급 |
+| 404 | 서버에서 게스트 발급이 꺼져 있음(`app.guest.enabled=false`, 기본값). 본문 없음 |
+| 429 | 클라이언트 IP 하나당 1분 발급 수 초과. `{"error": "...", "code": "guest_rate_limited"}` |
+| 503 | 한도 저장소(Redis) 장애. `{"error": "...", "code": "guest_unavailable"}` |
+
+- 클라이언트 IP 는 `CF-Connecting-IP` 헤더(Cloudflare 가 채움)로 셉니다. 전시장처럼 관람객이 같은 IP 를 쓰면 한도를
+  함께 씁니다.
+- 게스트 발급을 끄면 이미 나간 게스트 토큰도 거부합니다(REST 401, STOMP CONNECT 는 `STOMP 인증 실패`, 연결된 게스트
+  세션의 새 SUBSCRIBE 는 `허용되지 않는 STOMP 프레임`).
+- 게스트를 쓰는 출처는 `app.cors.guest-origins` 로 허용하며, 쿠키 없는 CORS(`Access-Control-Allow-Credentials` 없음)를
+  받습니다. 요청에 쿠키를 싣지 않습니다(`credentials: 'omit'`).
+- 게스트의 종목 상세는 외부 API 를 부르지 않고 저장된 데이터만 읽습니다. 빠진 항목은 비어 있고 `partial` 로 표시됩니다.
+- **관련 설정:** `app.guest.enabled`, `app.guest.token-ttl-seconds`(기본 3600), `app.guest.issue-per-minute`(기본 20),
+  `app.cors.guest-origins`.
 
 ### 7.2. 사용자 (Users)
 
@@ -641,6 +687,7 @@ Redis `trading-signals` 수신을 계기로 발행하던 토픽입니다. #127 �
 | POST | `/api/v1/demo/earnings-call/stop` | 필요 | 터미널 | 재생 중지 |
 | GET | `/api/v1/demo/earnings-call/status?ticker=` | 필요 | 없음 | 진행 상황 조회. `ticker` 필수 |
 | GET | `/api/v1/demo/earnings-call/speakers` | 필요 | 터미널 | 콜 참가자 명부 |
+| GET | `/api/v1/demo/earnings-call/snapshot?ticker=` | 필요 (게스트 허용) | 전시 웹 | 중간 입장 스냅샷 (아래) |
 
 - **설명:** 시연에서 data_pipeline 의 STT 를 준비된 스크립트가 대신합니다. 재생한 세그먼트는 실제 인입 경로
   (`TranscriptService` 검증 → 4.5)를 그대로 지나고, 같은 세그먼트로 팩트체크(9.1 → 4.6)와 직전 콜 대조(9.11 → 4.9)를
@@ -673,7 +720,7 @@ Redis `trading-signals` 수신을 계기로 발행하던 토픽입니다. #127 �
   보고 세그먼트를 모두 거부합니다.
 - **status 는 끝난 재생의 결과도 알려 줍니다.** 재생 중이면 `{running: true, ticker, call_id, published_count,
   total_segments}`, 끝났으면 `{running: false, ticker, last_run: {call_id, outcome, published_count, total_segments}}`,
-  기록이 없으면 `{running: false, ticker}` 입니다. `outcome` 은 `COMPLETED` · `STOPPED` · `NO_SEGMENT_PUBLISHED` 이며,
+  기록이 없으면 `{running: false, ticker}` 입니다. 모든 응답에 반복 방송이 그 종목을 맡고 있는지(`loop`)가 실립니다. `outcome` 은 `COMPLETED` · `STOPPED` · `NO_SEGMENT_PUBLISHED` 이며,
   마지막은 세그먼트를 하나도 내보내지 못하고 끝난 경우입니다.
 - **스크립트 교체 시 규칙.** 시작 시점에 검증하며, 어기면 500 `{"error": "<사유>"}` 로 거부합니다.
   1. `sequence` 는 0부터 1씩 늘어야 합니다. AI Engine 은 `call_id` 가 아니라 `ticker` 로 팩트체크 버퍼를 잡고
@@ -701,9 +748,36 @@ Redis `trading-signals` 수신을 계기로 발행하던 토픽입니다. #127 �
   { "name": "Kate McShane", "match_key": "Kate McShane", "title": "Analyst", "affiliation": "Goldman Sachs", "analyst": true } ]
 ```
 
-- **관련 설정:** `demo.earnings-call.script-path`, `demo.earnings-call.interval-ms`, `ai-engine.base-url`,
-  `ai-engine.fact-check-enabled`, `ai-engine.timeout-ms`. `fact-check-enabled=false` 로 두면 AI Engine 없이 자막 재생만
-  합니다.
+- **snapshot 응답.** 그 종목의 가장 최근 회차에 발행한 메시지를 한 번에 줍니다. 각 원소는 STOMP 메시지와 같은
+  모양이라(`segments` 는 4.5, `translations` 는 4.8, `fact_checks` 는 4.6, `diffs` 는 4.9, `evaluation` 은 4.7) 실시간으로
+  받은 것처럼 같은 저장소에 넣고, 겹치는 것은 `(call_id, sequence)` 로 버리면 됩니다. `segments` 는 번호 순입니다.
+  회차가 끝난 뒤 다음 회차가 시작되기 전에는 끝난 회차 전체와 `evaluation` 을 줍니다. 새 회차의 첫 자막이 나오면 그
+  회차로 바뀝니다. `running` 은 시연 재생 중인지이며, 기록이 없으면 `call_id: null` 과 빈 목록입니다. 시연과
+  data_pipeline 회차 모두 남지만 backend 메모리에만 있어 재시작하면 비어 있습니다. `ticker` 형식이 틀리면 400 입니다.
+
+```json
+{ "ticker": "WMT", "call_id": "demo-wmt-q2fy27-1787227200000-3", "running": true,
+  "segments": [ { "ticker": "WMT", "call_id": "...", "sequence": 0, "start_ms": 0, "end_ms": 6000, "text": "...",
+                  "speaker": "CEO · John Furner", "timestamp": 1787227200, "is_session_end": false } ],
+  "translations": [ ... ], "fact_checks": [ ... ], "diffs": [ ... ], "evaluation": null }
+```
+
+- **반복 방송.** `demo.earnings-call.loop.enabled=true` 면 기동 직후부터 스크립트를 재생하고, 끝난 뒤
+  `loop.pause-ms`(기본 3분, 종합 판단 시간 포함) 쉬었다가 새 `call_id` 로 다시 재생하기를 계속합니다. 반복 중인
+  종목은 start · stop 을 모두 409 `{"error", "code": "loop_running", "ticker"}` 로 거절합니다. 부스에서 한 번 누르는
+  것으로 관람객 전체의 방송이 끊기거나 처음으로 돌아가지 않게 하려는 것입니다. 터미널은 status 의 `loop: true` 를 보고
+  시연 제어 대신 반복 방송 중 표시를 둡니다. 다른 종목은 지금처럼 시작 · 중지할 수 있습니다. `ai-engine.response-memo-enabled=true`
+  를 함께 켜면 두 번째 회차부터 AI Engine 을 거의 부르지 않고 첫 회차 결과를 같은 세그먼트 시점에 새 `call_id` 로 다시
+  발행합니다.
+  - 팩트체크는 회차 단위로 녹화합니다. 엔진이 종목 버퍼(상태)를 가지므로, 한 회차의 모든 문장이 쓸 만한 응답(대기,
+    LLM 으로 확인한 판정, 주장 없는 완료)으로 채워졌을 때만 다음 회차를 통째로 재생하고, 하나라도 실패하거나 LLM
+    폴백이면 다음 회차를 다시 엔진으로 보내 새로 녹화합니다.
+  - 대조 · 번역 · 종합 판단 · 부가 정보는 같은 요청이면 다시 씁니다. 대조는 일시적 실패(LLM · 핵심 발언 조회 실패)가 아닐 때만, 번역은
+    번역문이 있을 때만, 종합 판단은 판단 본문이 있을 때만 기억합니다. 종합 판단과 부가 정보는 가격을 키에서 빼므로
+    손절 계획의 가격 수준은 첫 회차 시세 기준입니다.
+- **관련 설정:** `demo.earnings-call.script-path`, `demo.earnings-call.interval-ms`, `demo.earnings-call.loop.*`,
+  `ai-engine.base-url`, `ai-engine.fact-check-enabled`, `ai-engine.timeout-ms`, `ai-engine.response-memo-enabled`.
+  `fact-check-enabled=false` 로 두면 AI Engine 없이 자막 재생만 합니다.
 
 ### 7.9. 어닝콜 용어 사전 (Glossary)
 
@@ -748,7 +822,7 @@ Redis `trading-signals` 수신을 계기로 발행하던 토픽입니다. #127 �
 
 | Method | Endpoint | 인증 | 호출 | 설명 |
 | :----- | :------- | :--: | :--- | :--- |
-| POST | `/api/v1/assistant/ask` | 필요 | 터미널 | 어닝콜 질문을 보내고 답을 SSE 로 받습니다 |
+| POST | `/api/v1/assistant/ask` | 필요 (게스트 허용) | 터미널, 전시 웹 | 어닝콜 질문을 보내고 답을 SSE 로 받습니다 |
 
 ```json
 { "ticker": "WMT", "call_id": "demo-wmt-q2fy27-1787227200000-1", "as_of_sequence": 17,
@@ -775,7 +849,7 @@ Redis `trading-signals` 수신을 계기로 발행하던 토픽입니다. #127 �
 | 401 | | JWT 없음 · 만료 |
 | 404 | `segments_not_found` | 이 콜의 저장된 자막이 없음 |
 | 409 | `assistant_busy` | 같은 사용자의 이전 질문 답변이 진행 중 |
-| 429 | `daily_limit_exceeded` | 하루 질문 수(기본 50, 한국 시간 자정 초기화) 초과. `reset_at` 에 다음 초기화 시각(UTC ISO-8601) |
+| 429 | `daily_limit_exceeded` | 하루 질문 수(기본 50, 한국 시간 자정 초기화) 초과. 게스트는 아래 두 한도 중 하나라도 넘으면 같은 응답입니다. `reset_at` 에 다음 초기화 시각(UTC ISO-8601) |
 | 503 | `assistant_overloaded` / `assistant_unavailable` | 중계가 가득 참 / 자막 · 한도 저장소(Redis) 장애 |
 
 - 처리 순서는 요청 검증 → 질문 시점 확정(404 · 400) → 동시 질문 잠금(409) → 하루 횟수 차감(429) → 중계 시작입니다.
@@ -784,7 +858,11 @@ Redis `trading-signals` 수신을 계기로 발행하던 토픽입니다. #127 �
 - 사용자가 연결을 끊으면 backend 는 다음 전송 시점이나 2초마다 보내는 keep-alive 주석으로 몇 초 안에 알아채고
   질의응답 서비스 연결을 닫습니다. 질의응답 서비스는 진행 중인 생성을 멈춥니다.
 - 스트림에는 2초마다 SSE 주석 줄(`:`)이 섞여 나오며 클라이언트는 무시합니다.
-- **관련 설정:** `app.assistant.base-url`, `app.assistant.daily-limit`, `app.assistant.stream-timeout-seconds`.
+- **게스트 한도.** 게스트는 토큰 하나당 질문 수(기본 5)와 모든 게스트를 합친 하루 질문 수(기본 500)를 둘 다 통과해야
+  합니다. 토큰을 다시 받으면 토큰당 횟수는 새로 시작하므로, 비용 상한은 합산 한도입니다. 동시 질문 잠금(409)은 토큰
+  단위입니다.
+- **관련 설정:** `app.assistant.base-url`, `app.assistant.daily-limit`, `app.assistant.stream-timeout-seconds`,
+  `app.guest.assistant-per-guest`, `app.guest.assistant-daily-total`.
 
 ### 7.11. 종목 (Stocks)
 
@@ -792,7 +870,7 @@ Redis `trading-signals` 수신을 계기로 발행하던 토픽입니다. #127 �
 | :----- | :------- | :--: | :--- | :--- |
 | GET | `/api/v1/stocks/sp500` | 불필요 | 터미널 | S&P 500 종목 목록 `[{ticker, companyName, sector, marketCapUsd, marketCapRank, currentPrice, previousClose, changePercent}]`. 시가총액 내림차순입니다. `marketCapRank` 는 시가총액이 있는 종목 가운데 1부터 매긴 순위입니다. `marketCapUsd` · `marketCapRank` · `currentPrice` · `previousClose` · `changePercent` 는 데이터가 없으면 `null` 입니다(0 이 아닙니다). 시가총액 상위 100개는 Finnhub 시세로 현재가와 전일종가를 채웁니다 |
 | GET | `/api/v1/stocks/prices` | 불필요 | 터미널 | backend 캐시의 종목 시세. 형식은 4.10 과 같습니다 |
-| GET | `/api/v1/stocks/{ticker}/detail` | 필요 | 터미널 | 종목 상세 (아래) |
+| GET | `/api/v1/stocks/{ticker}/detail` | 필요 (게스트 허용) | 터미널, 전시 웹 | 종목 상세 (아래) |
 
 **`GET /api/v1/stocks/{ticker}/detail`** 은 `ticker` 가 `^[A-Z0-9.-]{1,10}$` 이어야 합니다. 키는 camelCase 입니다.
 
@@ -811,6 +889,7 @@ Redis `trading-signals` 수신을 계기로 발행하던 토픽입니다. #127 �
 |---|---|
 | 200 | 성공 |
 | 400 | `{"error": "invalid ticker"}` |
+| 404 | 게스트가 저장된 활성 종목(S&P 500)이 아닌 종목을 조회함. `{"error": "stock not available"}`. 처음 보는 종목은 외부 API 를 부르므로 게스트에게 열지 않습니다 |
 | 503 | `{"error": "stock detail unavailable — external sync failed"}` |
 | 500 | `{"error": "internal error"}` |
 
@@ -831,13 +910,16 @@ Redis `trading-signals` 수신을 계기로 발행하던 토픽입니다. #127 �
   클라이언트 코드가 직접 다루지 않습니다. 터미널은 응답의 `Set-Cookie` 에서 값을 꺼내 main 프로세스 메모리에 두고
   갱신할 때 `Cookie` 헤더로 보냅니다.
 - STOMP 는 CONNECT 프레임의 `Authorization` 헤더로 보냅니다(4장 머리말).
-- 인증 없이 열린 경로는 `/api/v1/auth/**`, `/api/v1/market/indices`, `/api/v1/stocks/sp500`, `/api/v1/stocks/prices`,
-  `/ws/**`, `/ws-native/**`, `/actuator/health`, `/api/v1/dev/**` 입니다. `/api/v1/internal/**` 은 JWT 대신 8.3 의
+- 인증 없이 열린 경로는 `/api/v1/auth/**`, `POST /api/v1/guest/token`, `/api/v1/market/indices`, `/api/v1/stocks/sp500`,
+  `/api/v1/stocks/prices`, `/ws/**`, `/ws-native/**`, `/actuator/health`, `/api/v1/dev/**` 입니다. `/api/v1/internal/**` 은 JWT 대신 8.3 의
   시크릿으로 검사합니다.
 
-### 8.2. 요금제별 접근 제어
+### 8.2. 역할별 접근 제어
 
-없습니다. 사용자에게 `role`(`FREE` · `PRO`) 필드는 있지만 모든 로그인 사용자가 같은 권한(`ROLE_USER`)을 받고, 역할을
+로그인 사용자는 모두 `ROLE_USER`, 게스트 토큰(7.1.1)은 `ROLE_GUEST` 를 받습니다. 게스트는 허용 목록(7.1.1, 4장
+머리말)에 있는 경로만 쓰고 그 밖은 403 입니다. 새 엔드포인트는 기본으로 `ROLE_USER` 전용입니다.
+
+요금제별 구분은 없습니다. 사용자에게 `role`(`FREE` · `PRO`) 필드는 있지만 모든 로그인 사용자가 같은 권한을 받고, 역할을
 바꾸는 경로도 없습니다. 예전 계약의 "`action` 신호와 Trading Terminal 은 PRO 전용" 규칙은 매매 신호 경로와 함께
 없어졌습니다. 접근 제어를 넣게 되면 이 절에 규칙을 적습니다.
 

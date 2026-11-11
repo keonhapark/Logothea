@@ -1,5 +1,7 @@
 package com.earningwhisperer.infrastructure.websocket;
 
+import com.earningwhisperer.infrastructure.broadcast.CallBroadcastStore;
+import org.springframework.beans.factory.annotation.Autowired;
 import com.earningwhisperer.infrastructure.aiengine.LiveFactCheckModels;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Builder;
@@ -31,6 +33,20 @@ public class FactCheckPublisher {
 
     private final SimpMessagingTemplate messagingTemplate;
 
+    /** 중간 입장 스냅샷용 기록. 없으면(슬라이스 테스트 등) 남기지 않는다. */
+    private CallBroadcastStore broadcastStore;
+
+    @Autowired(required = false)
+    void setBroadcastStore(CallBroadcastStore broadcastStore) {
+        this.broadcastStore = broadcastStore;
+    }
+
+    private void record(int sequence, String ticker, String callId, Object payload) {
+        if (broadcastStore != null) {
+            broadcastStore.record(CallBroadcastStore.Kind.FACT_CHECK, ticker, callId, sequence, payload);
+        }
+    }
+
     /**
      * 검증 완료된 배치를 발행한다. claims 가 비어 있으면 아무것도 하지 않는다.
      * (BUFFERING/REJECTED/DISCARDED 는 화면에 보여줄 것이 없다.)
@@ -47,6 +63,7 @@ public class FactCheckPublisher {
                 .batchEndSequence(batch.batchEndSequence())
                 .claims(batch.claims())
                 .build();
+        record(0, ticker, callId, payload);
         try {
             messagingTemplate.convertAndSend(topic, payload);
             log.debug("[WebSocket] 팩트체크 fan-out - ticker={} call_id={} claims={}",

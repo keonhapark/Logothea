@@ -28,11 +28,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @WebMvcTest(controllers = DemoEarningsCallController.class,
         excludeAutoConfiguration = org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration.class)
 @AutoConfigureMockMvc(addFilters = false)
+@org.springframework.context.annotation.Import(com.earningwhisperer.infrastructure.broadcast.CallBroadcastStore.class)
 @DisplayName("DemoEarningsCallController 슬라이스 테스트")
 class DemoEarningsCallControllerTest {
 
     @Autowired MockMvc mockMvc;
     @MockBean DemoEarningsCallService service;
+    @Autowired com.earningwhisperer.infrastructure.broadcast.CallBroadcastStore broadcastStore;
 
     @Test
     @DisplayName("시작 성공 시 202 와 call_id 를 반환한다")
@@ -155,5 +157,102 @@ class DemoEarningsCallControllerTest {
                 .andExpect(jsonPath("$.running").value(true))
                 .andExpect(jsonPath("$.published_count").value(3))
                 .andExpect(jsonPath("$.total_segments").value(6));
+    }
+
+    @Test
+    @DisplayName("스냅샷은 지금 회차의 메시지를 STOMP 와 같은 모양으로 돌려준다")
+    void snapshot_returnsRoundInStompShape() throws Exception {
+        var segment = new com.earningwhisperer.domain.transcript.TranscriptSegment(
+                "WMT", "demo-wmt-1", 0, 0, 6000, "Revenue grew.", "CEO", 1_787_227_200L, false);
+        // 실제 발행기를 거쳐 기록되게 해, 스냅샷 원소가 STOMP 로 나간 payload 와 같은 객체임을 본다.
+        var publisher = new com.earningwhisperer.infrastructure.websocket.TranscriptPublisher(
+                org.mockito.Mockito.mock(org.springframework.messaging.simp.SimpMessagingTemplate.class));
+        org.springframework.test.util.ReflectionTestUtils.invokeMethod(publisher, "setBroadcastStore", broadcastStore);
+        publisher.publish(segment);
+        broadcastStore.record(com.earningwhisperer.infrastructure.broadcast.CallBroadcastStore.Kind.TRANSLATION,
+                "WMT", "demo-wmt-1", 0,
+                com.earningwhisperer.infrastructure.websocket.TranscriptTranslationPublisher.Payload.builder()
+                        .ticker("WMT").callId("demo-wmt-1").sequences(java.util.List.of(0))
+                        .textKo("매출이 늘었습니다.").termsUsed(java.util.List.of()).build());
+        when(service.status("WMT")).thenReturn(java.util.Optional.of(
+                new DemoEarningsCallService.Status("WMT", "demo-wmt-1", 1, 24)));
+
+        mockMvc.perform(get("/api/v1/demo/earnings-call/snapshot").param("ticker", "wmt"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ticker").value("WMT"))
+                .andExpect(jsonPath("$.call_id").value("demo-wmt-1"))
+                .andExpect(jsonPath("$.running").value(true))
+                .andExpect(jsonPath("$.segments[0].call_id").value("demo-wmt-1"))
+                .andExpect(jsonPath("$.segments[0].sequence").value(0))
+                .andExpect(jsonPath("$.segments[0].text").value("Revenue grew."))
+                .andExpect(jsonPath("$.translations[0].text_ko").value("매출이 늘었습니다."))
+                .andExpect(jsonPath("$.fact_checks").isEmpty())
+                .andExpect(jsonPath("$.diffs").isEmpty())
+                .andExpect(jsonPath("$.evaluation").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("기록이 없으면 call_id 없이 빈 목록을 준다")
+    void snapshot_empty() throws Exception {
+        when(service.status("NVDA")).thenReturn(java.util.Optional.empty());
+
+        mockMvc.perform(get("/api/v1/demo/earnings-call/snapshot").param("ticker", "NVDA"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.call_id").doesNotExist())
+                .andExpect(jsonPath("$.running").value(false))
+                .andExpect(jsonPath("$.segments").isEmpty());
+    }
+
+    @Test
+    @DisplayName("종목 형식이 틀리면 400")
+    void snapshot_invalidTicker() throws Exception {
+        mockMvc.perform(get("/api/v1/demo/earnings-call/snapshot").param("ticker", "../etc"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @org.springframework.boot.test.mock.mockito.MockBean
+    com.earningwhisperer.infrastructure.demo.DemoLoopRunner loopRunner;
+
+    @Test
+    @DisplayName("반복 방송 중인 종목은 시작 · 중지를 409 loop_running 으로 거절하고 서비스를 부르지 않는다")
+    void loopRejectsStartAndStop() throws Exception {
+        when(loopRunner.controls("WMT")).thenReturn(true);
+
+        mockMvc.perform(post("/api/v1/demo/earnings-call/start")
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"ticker\":\"WMT\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("loop_running"));
+        mockMvc.perform(post("/api/v1/demo/earnings-call/stop")
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"ticker\":\"WMT\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("loop_running"));
+        org.mockito.Mockito.verify(service, org.mockito.Mockito.never()).start(any());
+        org.mockito.Mockito.verify(service, org.mockito.Mockito.never()).stop(any());
+    }
+
+    @Test
+    @DisplayName("반복 방송이 맡지 않은 종목은 지금처럼 시작할 수 있다")
+    void loopAllowsOtherTickers() throws Exception {
+        when(loopRunner.controls("ORCL")).thenReturn(false);
+        when(service.start("ORCL")).thenReturn(new DemoEarningsCallService.StartResult(
+                DemoEarningsCallService.StartResult.Outcome.STARTED, "ORCL", "demo-orcl-9", 24, 6000, null, null));
+
+        mockMvc.perform(post("/api/v1/demo/earnings-call/start")
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"ticker\":\"ORCL\"}"))
+                .andExpect(status().isAccepted());
+    }
+
+    @Test
+    @DisplayName("status 는 반복 방송 여부를 loop 로 싣는다")
+    void statusCarriesLoopFlag() throws Exception {
+        when(loopRunner.controls("WMT")).thenReturn(true);
+        when(service.status("WMT")).thenReturn(java.util.Optional.of(
+                new DemoEarningsCallService.Status("WMT", "demo-wmt-3", 5, 24)));
+
+        mockMvc.perform(get("/api/v1/demo/earnings-call/status").param("ticker", "WMT"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.running").value(true))
+                .andExpect(jsonPath("$.loop").value(true))
+                .andExpect(jsonPath("$.call_id").value("demo-wmt-3"));
     }
 }

@@ -1,5 +1,7 @@
 package com.earningwhisperer.infrastructure.websocket;
 
+import com.earningwhisperer.infrastructure.broadcast.CallBroadcastStore;
+import org.springframework.beans.factory.annotation.Autowired;
 import com.earningwhisperer.infrastructure.aiengine.TranscriptDiffModels;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Builder;
@@ -34,6 +36,20 @@ public class TranscriptDiffPublisher {
 
     private final SimpMessagingTemplate messagingTemplate;
 
+    /** 중간 입장 스냅샷용 기록. 없으면(슬라이스 테스트 등) 남기지 않는다. */
+    private CallBroadcastStore broadcastStore;
+
+    @Autowired(required = false)
+    void setBroadcastStore(CallBroadcastStore broadcastStore) {
+        this.broadcastStore = broadcastStore;
+    }
+
+    private void record(int sequence, String ticker, String callId, Object payload) {
+        if (broadcastStore != null) {
+            broadcastStore.record(CallBroadcastStore.Kind.DIFF, ticker, callId, sequence, payload);
+        }
+    }
+
     /**
      * 대조 결과를 발행한다. 보여줄 항목이 없으면 아무것도 하지 않는다.
      *
@@ -64,6 +80,7 @@ public class TranscriptDiffPublisher {
                 .previousDocument(diff.previousDocument())
                 .items(diff.items())
                 .build();
+        record(sequence, ticker, callId, payload);
         try {
             messagingTemplate.convertAndSend(topic, payload);
             log.debug("[WebSocket] 과거 콜 대조 fan-out - ticker={} call_id={} sequence={} items={}",

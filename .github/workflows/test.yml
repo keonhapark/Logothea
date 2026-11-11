@@ -1,10 +1,10 @@
-# 네 모듈의 테스트를 PR 과 main 푸시에서 자동으로 돌립니다.
+# 다섯 모듈의 테스트를 PR 과 main 푸시에서 자동으로 돌립니다.
 #
 # 로컬 실행만으로는 놓치는 지점이 있어서 둡니다. Gradle 이 `UP-TO-DATE` 로 판단해
 # 테스트를 건너뛰고 종료 코드 0 을 돌려준 적이 있었고, 출력이 없어 통과한 것처럼
 # 보였습니다. CI 는 매번 깨끗한 환경에서 돌기 때문에 이런 착각이 생기지 않습니다.
 #
-# 네 잡은 서로 독립이라 병렬로 돕니다. 한 모듈이 실패해도 나머지 결과를 보고
+# 다섯 잡은 서로 독립이라 병렬로 돕니다. 한 모듈이 실패해도 나머지 결과를 보고
 # 싶어서 fail-fast 를 쓰지 않습니다.
 name: test
 
@@ -83,6 +83,37 @@ jobs:
       - name: Run tests
         working-directory: trading-terminal
         run: npm test
+
+  # 전시용 모바일 웹. trading-terminal 의 store · 훅을 그대로 import 하므로 경로 필터를 걸지 않습니다.
+  # 터미널 쪽 변경이 웹을 깨면 그 PR 에서 바로 드러나게 하려는 것입니다. 터미널 node_modules 는 필요 없습니다.
+  web:
+    name: logothea-web (Node 20)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: logothea-web/package-lock.json
+
+      - name: Install dependencies
+        working-directory: logothea-web
+        run: npm ci
+
+      - name: Typecheck
+        working-directory: logothea-web
+        run: npm run typecheck
+
+      - name: Run tests
+        working-directory: logothea-web
+        run: npm test
+
+      # 허용 목록 밖의 터미널 파일을 끌어오면 빌드가 실패합니다. 그 검사를 위해 빌드까지 돌립니다.
+      - name: Build
+        working-directory: logothea-web
+        run: npm run build
 
   ai-engine:
     name: ai-engine (Python 3.12)

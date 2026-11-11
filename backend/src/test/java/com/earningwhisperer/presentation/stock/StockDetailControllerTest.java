@@ -189,4 +189,35 @@ class StockDetailControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.ticker").value("BRK.B"));
     }
+
+    private static org.springframework.test.web.servlet.request.RequestPostProcessor guest() {
+        return org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication(
+                new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
+                        new com.earningwhisperer.infrastructure.security.GuestPrincipal("g1"), null,
+                        List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_GUEST"))));
+    }
+
+    @Test
+    @DisplayName("게스트는 저장된 활성 종목이 아니면 404 이고 외부 조회를 하지 않는다")
+    void 게스트_미등록_종목_404() throws Exception {
+        when(stockDetailService.isListedActive("ZZZZ")).thenReturn(false);
+
+        mockMvc.perform(get("/api/v1/stocks/ZZZZ/detail").with(guest()))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").value("stock not available"));
+        org.mockito.Mockito.verify(stockDetailService, org.mockito.Mockito.never()).getDetail(org.mockito.ArgumentMatchers.anyString());
+    }
+
+    @Test
+    @DisplayName("게스트도 저장된 활성 종목은 조회하되, 외부 API 없이 저장된 데이터만 읽는다")
+    void 게스트_등록_종목_200() throws Exception {
+        when(stockDetailService.isListedActive("AAPL")).thenReturn(true);
+        when(stockDetailService.getStoredDetail("AAPL")).thenReturn(Optional.empty());
+
+        mockMvc.perform(get("/api/v1/stocks/AAPL/detail").with(guest()))
+                .andExpect(status().isServiceUnavailable());
+        // 게스트는 외부 API 를 부르는 경로(getDetail)를 쓰지 않는다.
+        org.mockito.Mockito.verify(stockDetailService).getStoredDetail("AAPL");
+        org.mockito.Mockito.verify(stockDetailService, org.mockito.Mockito.never()).getDetail(org.mockito.ArgumentMatchers.anyString());
+    }
 }

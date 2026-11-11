@@ -458,6 +458,37 @@ HTTPS 를 도입하며 값을 바꾸거나 새로 넣은 것이 둘 있습니다
 로컬 개발에서는 둘 다 필요하지 않습니다. 로컬은 평문이어도 `BackendClient.ts` 가 `localhost` 를
 보안 채널로 취급하고, 바인딩을 좁힐 이유도 없습니다.
 
+전시용 모바일 웹(`https://demo.logothea.com`)을 열 때 넣는 키입니다. 웹은 로그인 없이 게스트 토큰을 받아 씁니다
+(api-spec 7.1.1).
+
+| 키 | 서버 값 | 비우면 |
+|---|---|---|
+| `CORS_GUEST_ORIGINS` | `'https://demo.logothea.com'` | 브라우저의 REST 와 `/ws-native` 핸드셰이크가 모두 403 입니다. Spring Security 의 CORS 필터가 WebSocket 업그레이드의 Origin 도 검사합니다 |
+| `GUEST_ENABLED` | `'true'` | 게스트 토큰 발급이 404 라 웹이 아무것도 받지 못합니다 |
+| `GUEST_ASSISTANT_DAILY_TOTAL` | 기본 500 | 모든 게스트를 합친 하루 질의응답 수입니다. LLM 비용 상한이라 전시 규모에 맞춰 정합니다 |
+
+전시 웹 출처는 `CORS_ALLOWED_ORIGINS` 가 아니라 `CORS_GUEST_ORIGINS` 에 넣습니다. 앞쪽은 refresh 쿠키를 함께 허용하는
+설정이라, 같은 사이트(`*.logothea.com`)인 전시 웹 스크립트가 로그인 사용자의 쿠키로 토큰을 받아 갈 수 있게 됩니다.
+뒤쪽은 쿠키 없이 Bearer 토큰만 허용합니다.
+
+전시 중 남용이 보이면 `GUEST_ENABLED='false'` 로 바꾸고 재시작합니다. 이미 나간 게스트 토큰도 바로 거부되고, 연결된
+게스트 STOMP 세션은 새 구독을 할 수 없습니다(맺어 둔 구독은 연결이 끊길 때까지 남습니다).
+
+전시 동안 시연 콜을 계속 돌리려면 `DEMO_LOOP_ENABLED='true'` 와 `AI_ENGINE_RESPONSE_MEMO_ENABLED='true'` 를 함께 넣습니다.
+앞의 것은 재생 → 종합 판단 → 3분 쉬기 → 새 회차 재생을 반복하고(`DEMO_LOOP_PAUSE_MS`), 뒤의 것은 두 번째 회차부터
+AI Engine 을 부르지 않고 첫 회차 결과를 다시 씁니다. 뒤의 것을 빼면 회차마다 Gemini 를 불러 하루 종일 돌릴 때 무료
+한도에 걸립니다. 반복 중에는 터미널에서 같은 종목 시연을 시작 · 중지할 수 없습니다(409 `loop_running`). 반복을 멈추려면
+`DEMO_LOOP_ENABLED` 를 끄고 재시작합니다. 기억한 결과는 backend 메모리에만
+있어서, 시연 중에 근거 뉴스나 직전 콜 녹취록을 새로 넣었다면 backend 를 재시작해야 새 근거로 다시 분석합니다.
+
+`GUEST_TOKEN_TTL_SECONDS`(기본 3600), `GUEST_ISSUE_PER_MINUTE`(IP 당 1분 발급 수, 기본 20),
+`GUEST_ASSISTANT_PER_GUEST`(토큰당 질문 수, 기본 5)는 기본값으로 둬도 됩니다. 게스트는 주문 · 계좌 · 관심종목 ·
+시연 재생 제어를 쓸 수 없고, 구독도 방송 토픽만 할 수 있습니다.
+
+data_pipeline 이 실제 콜 자막을 보낼 때 팩트체크 · 직전 콜 대조 · 종합 판단까지 붙이려면 `LIVE_ANALYSIS_ENABLED='true'` 를
+넣습니다. 기본은 꺼져 있어 자막과 번역만 나갑니다. 1시간 콜이면 AI Engine 호출이 수백 건 생겨 Gemini 무료 등급 한도를
+쓰므로, 시연 당일에는 꺼 두는 편이 안전합니다. 시연이 재생 중인 종목의 실시간 자막은 켜 두어도 분석하지 않습니다.
+
 ### 5-4. 매매 신호 경로 제거에 따른 스키마 정리 (#127, 1회)
 
 백엔드는 `ddl-auto: update` 라 엔티티에서 뺀 컬럼과 테이블을 스스로 지우지 않습니다. #127 에서

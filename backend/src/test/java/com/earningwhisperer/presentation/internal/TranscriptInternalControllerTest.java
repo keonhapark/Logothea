@@ -46,6 +46,7 @@ class TranscriptInternalControllerTest {
     @Autowired ObjectMapper objectMapper;
 
     @MockBean TranscriptService transcriptService;
+    @MockBean com.earningwhisperer.infrastructure.analysis.CallAnalysisService callAnalysis;
     @MockBean com.earningwhisperer.infrastructure.security.JwtProvider jwtProvider;
     @MockBean com.earningwhisperer.infrastructure.security.UserDetailsServiceImpl userDetailsService;
 

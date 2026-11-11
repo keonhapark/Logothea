@@ -310,4 +310,119 @@ class StompJwtChannelInterceptorTest {
                     .hasMessageContaining("STOMP 인증 실패");
         }
     }
+
+    @Nested
+    @DisplayName("게스트 세션")
+    class GuestSessions {
+
+        private static final Principal GUEST = new StompJwtChannelInterceptor.StompPrincipal("guest:g1", true);
+
+        private StompJwtChannelInterceptor guestInterceptor(boolean enabled) {
+            org.springframework.beans.factory.support.StaticListableBeanFactory factory =
+                    new org.springframework.beans.factory.support.StaticListableBeanFactory();
+            factory.addBean("guestProperties",
+                    new com.earningwhisperer.global.config.GuestProperties(enabled, 3600, 20, 5, 500));
+            return new StompJwtChannelInterceptor(jwtProvider,
+                    factory.getBeanProvider(com.earningwhisperer.global.config.GuestProperties.class));
+        }
+
+        // 바깥 클래스의 @Mock 이 주입된 뒤에 만든다.
+        private StompJwtChannelInterceptor enabled;
+
+        @org.junit.jupiter.api.BeforeEach
+        void setUpGuestInterceptor() {
+            enabled = guestInterceptor(true);
+        }
+
+        private Message<byte[]> subscribe(Principal user, String destination) {
+            StompHeaderAccessor accessor = StompHeaderAccessor.create(StompCommand.SUBSCRIBE);
+            accessor.setUser(user);
+            if (destination != null) {
+                accessor.setDestination(destination);
+            }
+            accessor.setLeaveMutable(true);
+            return MessageBuilder.createMessage(new byte[0], accessor.getMessageHeaders());
+        }
+
+        @Test
+        @DisplayName("게스트 토큰의 CONNECT 는 게스트 Principal 을 단다")
+        void connectMarksGuest() {
+            when(jwtProvider.validateToken(VALID_TOKEN)).thenReturn(true);
+            when(jwtProvider.getGuestIdFromToken(VALID_TOKEN)).thenReturn(java.util.Optional.of("g1"));
+
+            Message<byte[]> connect = frame(StompCommand.CONNECT, "Bearer " + VALID_TOKEN);
+            enabled.preSend(connect, null);
+
+            Principal user = MessageHeaderAccessor.getAccessor(connect, StompHeaderAccessor.class).getUser();
+            assertThat(user).isEqualTo(new StompJwtChannelInterceptor.StompPrincipal("guest:g1", true));
+        }
+
+        @ParameterizedTest(name = "{0} 구독 허용")
+        @org.junit.jupiter.params.provider.ValueSource(strings = {
+                "/topic/transcript/WMT", "/topic/factcheck/WMT", "/topic/transcript-diff/WMT",
+                "/topic/transcript-translation/WMT", "/topic/evaluation/WMT", "/topic/evaluation/BRK.B",
+                "/topic/market/indices", "/topic/prices",
+        })
+        void allowsBroadcastTopics(String destination) {
+            assertThatCode(() -> enabled.preSend(subscribe(GUEST, destination), null))
+                    .doesNotThrowAnyException();
+        }
+
+        @ParameterizedTest(name = "{0} 구독 거부")
+        @org.junit.jupiter.params.provider.ValueSource(strings = {
+                "/topic/**", "/topic/transcript/*", "/topic/transcript/**", "/topic/transcript/wmt",
+                "/topic/transcript/WMT/extra", "/topic/live/demo", "/topic/live/demo/price",
+                "/user/queue/orders", "/user/7/queue/orders", "/queue/orders-user1", "/topic/prices/",
+                "/topic/transcript/", "",
+        })
+        void deniesOtherDestinations(String destination) {
+            assertThatThrownBy(() -> enabled.preSend(subscribe(GUEST, destination), null))
+                    .isInstanceOf(MessageDeliveryException.class)
+                    .hasMessageContaining(StompJwtChannelInterceptor.NOT_ALLOWED);
+        }
+
+        @Test
+        @DisplayName("목적지가 없는 게스트 SUBSCRIBE 는 거부한다")
+        void deniesMissingDestination() {
+            assertThatThrownBy(() -> enabled.preSend(subscribe(GUEST, null), null))
+                    .isInstanceOf(MessageDeliveryException.class);
+        }
+
+        @Test
+        @DisplayName("게스트가 꺼져 있으면 게스트 토큰의 CONNECT 를 인증 실패로 거부한다")
+        void disabledRejectsGuestConnect() {
+            when(jwtProvider.validateToken(VALID_TOKEN)).thenReturn(true);
+            when(jwtProvider.getGuestIdFromToken(VALID_TOKEN)).thenReturn(java.util.Optional.of("g1"));
+
+            assertThatThrownBy(() -> guestInterceptor(false)
+                    .preSend(frame(StompCommand.CONNECT, "Bearer " + VALID_TOKEN), null))
+                    .isInstanceOf(MessageDeliveryException.class)
+                    .hasMessageContaining(StompJwtChannelInterceptor.AUTH_FAILED);
+        }
+
+        @Test
+        @DisplayName("게스트가 꺼진 뒤에는 이미 연결된 게스트 세션의 새 구독도 거부한다")
+        void disabledRejectsGuestSubscribe() {
+            assertThatThrownBy(() -> guestInterceptor(false).preSend(subscribe(GUEST, "/topic/transcript/WMT"), null))
+                    .isInstanceOf(MessageDeliveryException.class)
+                    .hasMessageContaining(StompJwtChannelInterceptor.NOT_ALLOWED);
+        }
+
+        @Test
+        @DisplayName("게스트 설정이 없는 기본 인터셉터는 게스트 CONNECT 를 거부한다")
+        void defaultInterceptorRejectsGuest() {
+            when(jwtProvider.validateToken(VALID_TOKEN)).thenReturn(true);
+            when(jwtProvider.getGuestIdFromToken(VALID_TOKEN)).thenReturn(java.util.Optional.of("g1"));
+
+            assertThatThrownBy(() -> interceptor.preSend(frame(StompCommand.CONNECT, "Bearer " + VALID_TOKEN), null))
+                    .isInstanceOf(MessageDeliveryException.class);
+        }
+
+        @Test
+        @DisplayName("사용자 세션은 게스트 제한을 받지 않는다")
+        void userSessionUnrestricted() {
+            assertThatCode(() -> enabled.preSend(subscribe(AUTHENTICATED, "/user/queue/orders"), null))
+                    .doesNotThrowAnyException();
+        }
+    }
 }

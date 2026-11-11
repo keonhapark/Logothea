@@ -30,3 +30,14 @@ export interface EarningsTimelineData {
   live: EarningsLiveEvent | null
   groups: EarningsGroup[]
 }
+
+/** 백엔드 GET /api/v1/earnings-calendar/terminal-timeline 응답 항목. */
+export interface EarningsTimelineItem {
+  ticker: string
+  companyName: string
+  /** epoch seconds UTC */
+  scheduledAt: number
+  confirmed: boolean
+  /** Finnhub hour 필드: "bmo"(장전) | "amc"(장후) | "dmh"(장중) | null */
+  marketSession: string | null
+}

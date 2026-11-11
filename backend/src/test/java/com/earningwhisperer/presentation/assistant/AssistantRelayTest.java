@@ -45,7 +45,7 @@ class AssistantRelayTest {
 
     private AssistantRelay relay;
 
-    private static final PreparedAsk ASK = new PreparedAsk(7L, "WMT", "call-1", 17, 1_787_227_218L, null, false,
+    private static final PreparedAsk ASK = new PreparedAsk("7", "WMT", "call-1", 17, 1_787_227_218L, null, false,
             "요약해 줘", null, List.of());
 
     /** 닫혔는지 기록하는 본문 스트림. */
@@ -88,7 +88,7 @@ class AssistantRelayTest {
         when(client.open(ASK)).thenReturn(body);
         RecordingSink sink = new RecordingSink();
 
-        relay.relay(ASK, sink, relay.newSession(7L));
+        relay.relay(ASK, sink, relay.newSession("7"));
 
         assertThat(sink.events).containsExactly(
                 "meta {\"scope\": \"call\"}",
@@ -96,7 +96,7 @@ class AssistantRelayTest {
                 "done {\"status\": \"answered\", \"usage\": {\"input_tokens\": 1030, \"output_tokens\": 60, \"cached_tokens\": 800}, \"latency_ms\": 1250}");
         assertThat(sink.completed).isEqualTo(1);
         assertThat(body.closed).isTrue();
-        verify(quota).unlock(7L);
+        verify(quota).unlock("7");
     }
 
     @Test
@@ -105,7 +105,7 @@ class AssistantRelayTest {
         when(client.open(ASK)).thenReturn(new TrackingStream("event: delta\ndata: {\"text\": \"앞\"}\n\n"));
         RecordingSink sink = new RecordingSink();
 
-        relay.relay(ASK, sink, relay.newSession(7L));
+        relay.relay(ASK, sink, relay.newSession("7"));
 
         assertThat(sink.events).hasSize(2);
         assertThat(sink.events.get(1)).startsWith("error ").contains("\"code\":\"assistant_stream_interrupted\"");
@@ -118,7 +118,7 @@ class AssistantRelayTest {
         when(client.open(ASK)).thenReturn(new TrackingStream("event: error\ndata: {\"code\": \"llm_timeout\", \"message\": \"m\"}\n\n"));
         RecordingSink sink = new RecordingSink();
 
-        relay.relay(ASK, sink, relay.newSession(7L));
+        relay.relay(ASK, sink, relay.newSession("7"));
 
         assertThat(sink.events).containsExactly("error {\"code\": \"llm_timeout\", \"message\": \"m\"}");
     }
@@ -129,12 +129,12 @@ class AssistantRelayTest {
         when(client.open(ASK)).thenThrow(new AssistantUnavailableException("connect_failed"));
         RecordingSink sink = new RecordingSink();
 
-        relay.relay(ASK, sink, relay.newSession(7L));
+        relay.relay(ASK, sink, relay.newSession("7"));
 
         assertThat(sink.events).hasSize(1);
         assertThat(sink.events.get(0)).startsWith("error ").contains("\"code\":\"assistant_unavailable\"");
         assertThat(sink.completed).isEqualTo(1);
-        verify(quota).unlock(7L);
+        verify(quota).unlock("7");
     }
 
     @Test
@@ -145,23 +145,23 @@ class AssistantRelayTest {
         RecordingSink sink = new RecordingSink();
         sink.failOn = 1;
 
-        relay.relay(ASK, sink, relay.newSession(7L));
+        relay.relay(ASK, sink, relay.newSession("7"));
 
         assertThat(sink.events).containsExactly("meta {}");
         assertThat(body.closed).isTrue();
-        verify(quota).unlock(7L);
+        verify(quota).unlock("7");
     }
 
     @Test
     @DisplayName("세션은 여러 번 닫혀도 잠금을 한 번만 풀고, 닫힌 뒤 붙은 본문은 바로 닫는다")
     void sessionCloseIsIdempotent() {
-        AssistantRelay.Session session = relay.newSession(7L);
+        AssistantRelay.Session session = relay.newSession("7");
         session.close();
         session.close();
         TrackingStream late = new TrackingStream("");
         session.attach(late);
 
-        verify(quota, times(1)).unlock(7L);
+        verify(quota, times(1)).unlock("7");
         assertThat(late.closed).isTrue();
     }
 
@@ -173,7 +173,7 @@ class AssistantRelayTest {
                 new AssistantProperties(null, 50, 60));
 
         assertThatThrownBy(() -> full.start(ASK)).isInstanceOf(RejectedExecutionException.class);
-        verify(quota).unlock(7L);
+        verify(quota).unlock("7");
     }
 
     @Test
@@ -182,7 +182,7 @@ class AssistantRelayTest {
         when(client.open(any())).thenReturn(new TrackingStream("event: done\ndata: not-json\n\n"));
         RecordingSink sink = new RecordingSink();
 
-        relay.relay(ASK, sink, relay.newSession(7L));
+        relay.relay(ASK, sink, relay.newSession("7"));
 
         assertThat(sink.events).containsExactly("done not-json");
         assertThat(sink.completed).isEqualTo(1);
@@ -192,7 +192,7 @@ class AssistantRelayTest {
     @DisplayName("제한 시간이 지나면 timeout 오류를 한 번만 보내고 닫고 잠금을 푼다")
     void streamTimeoutSendsOneError() {
         TrackingStream body = new TrackingStream("");
-        AssistantRelay.Session session = relay.newSession(7L);
+        AssistantRelay.Session session = relay.newSession("7");
         session.attach(body);
         RecordingSink sink = new RecordingSink();
 
@@ -203,7 +203,7 @@ class AssistantRelayTest {
         assertThat(sink.events.get(0)).startsWith("error ").contains("\"code\":\"timeout\"");
         assertThat(sink.completed).isEqualTo(1);
         assertThat(body.closed).isTrue();
-        verify(quota, times(1)).unlock(7L);
+        verify(quota, times(1)).unlock("7");
     }
 
     @Test
@@ -211,7 +211,7 @@ class AssistantRelayTest {
     void doneAfterTimeoutIsDropped() throws Exception {
         when(client.open(ASK)).thenReturn(new TrackingStream("event: delta\ndata: {}\n\nevent: done\ndata: {}\n\n"));
         RecordingSink sink = new RecordingSink();
-        AssistantRelay.Session session = relay.newSession(7L);
+        AssistantRelay.Session session = relay.newSession("7");
 
         relay.onStreamTimeout(sink, session, "call-1");
         relay.relay(ASK, sink, session);
@@ -235,19 +235,19 @@ class AssistantRelayTest {
         when(client.open(ASK)).thenThrow(new NullPointerException());
         RecordingSink sink = new RecordingSink();
 
-        relay.relay(ASK, sink, relay.newSession(7L));
+        relay.relay(ASK, sink, relay.newSession("7"));
 
         assertThat(sink.events).hasSize(1);
         assertThat(sink.events.get(0)).contains("\"code\":\"assistant_stream_interrupted\"");
         assertThat(sink.completed).isEqualTo(1);
-        verify(quota).unlock(7L);
+        verify(quota).unlock("7");
     }
 
     @Test
     @DisplayName("heartbeat 전송이 실패하면 세션을 닫아 assistant 본문을 닫고 잠금을 한 번 푼다")
     void heartbeatFailureClosesSession() {
         TrackingStream body = new TrackingStream("");
-        AssistantRelay.Session session = relay.newSession(7L);
+        AssistantRelay.Session session = relay.newSession("7");
         session.attach(body);
         RecordingSink sink = new RecordingSink();
         sink.heartbeatFails = true;
@@ -257,13 +257,13 @@ class AssistantRelayTest {
 
         assertThat(sink.heartbeats).isEqualTo(1);
         assertThat(body.closed).isTrue();
-        verify(quota, times(1)).unlock(7L);
+        verify(quota, times(1)).unlock("7");
     }
 
     @Test
     @DisplayName("닫힌 세션에는 heartbeat 를 보내지 않는다")
     void heartbeatOnClosedSessionDoesNothing() {
-        AssistantRelay.Session session = relay.newSession(7L);
+        AssistantRelay.Session session = relay.newSession("7");
         session.close();
         RecordingSink sink = new RecordingSink();
 
@@ -286,7 +286,7 @@ class AssistantRelayTest {
         when(client.open(ASK)).thenReturn(new TrackingStream("event: done\ndata: {}\n\nevent: delta\ndata: {}\n\n"));
         RecordingSink sink = new RecordingSink();
 
-        relay.relay(ASK, sink, relay.newSession(7L));
+        relay.relay(ASK, sink, relay.newSession("7"));
 
         assertThat(sink.events).containsExactly("done {}");
         assertThat(sink.completed).isEqualTo(1);
@@ -295,10 +295,10 @@ class AssistantRelayTest {
     @Test
     @DisplayName("잠금 해제가 실패해도 세션을 닫을 때 예외를 던지지 않는다")
     void unlockFailureDoesNotEscape() {
-        doThrow(new RedisConnectionFailureException("down")).when(quota).unlock(7L);
+        doThrow(new RedisConnectionFailureException("down")).when(quota).unlock("7");
 
-        relay.newSession(7L).close();
+        relay.newSession("7").close();
 
-        verify(quota).unlock(7L);
+        verify(quota).unlock("7");
     }
 }

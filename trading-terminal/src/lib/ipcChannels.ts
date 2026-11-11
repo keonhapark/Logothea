@@ -293,10 +293,17 @@ export const IPC_CHANNELS = {
    * 어닝콜 시연 재생 제어 (Renderer → Main, invoke).
    * Backend Contract 7.8. payload: { ticker }
    * DEMO_START 응답: { ok: true, callId, segmentCount, intervalMs }
-   *                | { ok: false, reason: 'ALREADY_RUNNING' | 'FAILED', message }
+   *                | { ok: false, reason: 'ALREADY_RUNNING' | 'LOOP_RUNNING' | 'FAILED', message }
    */
   DEMO_EARNINGS_START: 'terminal:demo:earnings-start',
   DEMO_EARNINGS_STOP: 'terminal:demo:earnings-stop',
+
+  /**
+   * 어닝콜 시연 재생 상태 조회 (Renderer → Main, invoke). Backend Contract 7.8 GET status. payload: { ticker }
+   * 응답: DemoStatus { running, ticker, callId, loop } | null(조회 실패)
+   * loop 는 서버가 전시용으로 시연 콜을 반복 방송하는지다. 반복 중인 종목은 서버가 시작 · 중지를 409 로 거절한다.
+   */
+  DEMO_EARNINGS_STATUS: 'terminal:demo:earnings-status',
 
   /**
    * 콜 참가자 명부 조회 (Renderer → Main, invoke).

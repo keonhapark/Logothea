@@ -1,7 +1,9 @@
 package com.earningwhisperer.presentation.internal;
 
 import com.earningwhisperer.domain.transcript.TranscriptSessionRegistry;
+import com.earningwhisperer.domain.transcript.TranscriptSegment;
 import com.earningwhisperer.domain.transcript.TranscriptService;
+import com.earningwhisperer.infrastructure.analysis.CallAnalysisService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -25,6 +27,9 @@ import java.util.Map;
  *   <li>빈 text + is_session_end=true: 자막 내용 없는 종료 제어. 기존 비공백 최종 자막도 허용한다.</li>
  * </ul>
  *
+ * <p>새로 받아들인 세그먼트는 시연 재생과 같은 분석 경로({@link CallAnalysisService})로 넘겨 팩트체크 · 직전 콜
+ * 대조를 요청하고, 종료 신호에서 종합 판단을 낸다. {@code app.live-analysis.enabled=false} 면 자막과 번역만 나간다.
+ *
  * <p>에러 응답은 {@code GlobalExceptionHandler} 의 {@code {"error": "..."}} 형식과 동일하게 맞춘다.
  */
 @RestController
@@ -33,10 +38,16 @@ import java.util.Map;
 public class TranscriptInternalController {
 
     private final TranscriptService transcriptService;
+    private final CallAnalysisService callAnalysis;
 
     @PostMapping("/transcript-segment")
     public ResponseEntity<?> ingest(@Valid @RequestBody TranscriptSegmentRequest request) {
-        TranscriptSessionRegistry.Result result = transcriptService.accept(request.toDomain());
+        TranscriptSegment segment = request.toDomain();
+        TranscriptSessionRegistry.Result result = transcriptService.accept(segment);
+        if (result == TranscriptSessionRegistry.Result.OK) {
+            // 새로 받아들인 세그먼트만 분석에 넘긴다. 재전송(DUPLICATE)은 다시 분석하지 않는다.
+            callAnalysis.onIngested(segment);
+        }
         return switch (result) {
             case OK, DUPLICATE -> ResponseEntity.status(HttpStatus.ACCEPTED).build();
             case SEQUENCE_CONFLICT -> ResponseEntity.status(HttpStatus.CONFLICT)
