@@ -22,8 +22,8 @@ const STEPS: TourStep[] = [
   },
   {
     selector: '[data-tour="side-tabs"]',
-    title: '질문',
-    body: '질문 탭에서 지금까지 나온 콜 내용에 대해 묻습니다. 자막의 "이 대목 질문"으로 범위를 좁힐 수도 있습니다.',
+    title: 'AI 어시스턴트',
+    body: 'AI 어시스턴트 탭에서 지금까지 나온 콜 내용에 대해 묻습니다. 자막의 "이 대목 질문"으로 범위를 좁힐 수도 있습니다.',
   },
   {
     selector: '[data-order-toggle]',

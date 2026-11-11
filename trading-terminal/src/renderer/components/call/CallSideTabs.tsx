@@ -10,7 +10,7 @@ export type SideTab = 'diff' | 'ask' | 'price'
 
 const TABS: { id: SideTab; label: string }[] = [
   { id: 'diff', label: '대조' },
-  { id: 'ask', label: '질문' },
+  { id: 'ask', label: 'AI 어시스턴트' },
   { id: 'price', label: '가격' },
 ]
 

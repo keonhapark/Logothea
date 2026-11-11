@@ -15,7 +15,6 @@ import SegmentedControl from '../components/common/SegmentedControl'
 import Switch from '../components/common/Switch'
 import Dropdown from '../components/common/Dropdown'
 import Modal from '../components/common/Modal'
-import { ComingSoon } from '../components/common/StateView'
 import { showIpcErrorToast } from '../components/common/Toast'
 import { notifyComingSoon } from '../components/auth/notifyComingSoon'
 import { getThemeChoice, setThemeChoice } from '../lib/theme'
@@ -532,13 +531,8 @@ function ConfirmModal({
 }
 
 /* -------------------------------------------------------------------------- */
-/* AppSettingsPanel — 앱 설정. 테마 · 알림이 동작하고 나머지는 준비 중이다.      */
+/* AppSettingsPanel — 앱 설정. 테마 · 알림 · 콜 안내 다시 보기.                  */
 /* -------------------------------------------------------------------------- */
-const APP_SETTINGS: { title: string; note: string }[] = [
-  { title: '언어', note: '지금은 한국어만 있습니다' },
-  { title: '자동 로그인', note: '로그인 정보를 보관하는 방식을 정한 뒤 추가합니다' },
-]
-
 const THEME_ITEMS: { id: ThemeChoice; label: string }[] = [
   { id: 'system', label: '시스템' },
   { id: 'light', label: '라이트' },
@@ -568,11 +562,6 @@ function AppSettingsPanel() {
       </div>
       <NotificationSettings />
       <CallTourReset />
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {APP_SETTINGS.map((it) => (
-          <ComingSoon key={it.title} title={it.title} note={it.note} className="py-6 px-4" />
-        ))}
-      </div>
     </section>
   )
 }
@@ -650,7 +639,7 @@ function CallTourReset() {
       <div className="flex flex-col gap-0.5 min-w-0">
         <span className="text-ink-1 text-[14px] font-semibold">콜 화면 안내</span>
         <span className="text-ink-3 text-[12.5px]" aria-live="polite">
-          {done ? '다음에 콜이 시작되면 안내를 다시 보여 줍니다' : '자막 · 대조 · 질문 · 주문의 자리를 차례로 알려 줍니다'}
+          {done ? '다음에 콜이 시작되면 안내를 다시 보여 줍니다' : '자막 · 대조 · AI 어시스턴트 · 주문의 자리를 차례로 알려 줍니다'}
         </span>
       </div>
       <button

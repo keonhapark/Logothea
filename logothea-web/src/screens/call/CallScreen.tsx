@@ -16,7 +16,7 @@ const TIMELINE_SPACE = 36
 const TABS: { id: CallTab; label: string }[] = [
   { id: 'transcript', label: '자막' },
   { id: 'diff', label: '대조' },
-  { id: 'ask', label: '질문' },
+  { id: 'ask', label: 'AI 어시스턴트' },
   { id: 'verdict', label: '판단' },
 ]
 
