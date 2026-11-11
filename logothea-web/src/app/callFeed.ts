@@ -43,6 +43,11 @@ export function retireCall(callId: string): void {
   retiredCallIds.add(callId)
 }
 
+/** 테스트용 — 끝난 회차 기록을 비운다. */
+export function clearRetiredCalls(): void {
+  retiredCallIds.clear()
+}
+
 /** 끝난 회차의 늦은 대조 · 팩트체크면 true. */
 export function isRetiredPayload(payload: unknown): boolean {
   const callId = (payload as { call_id?: unknown } | null)?.call_id

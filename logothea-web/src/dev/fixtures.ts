@@ -9,6 +9,10 @@ import type { StompBridge, WsStatus } from '../data/stomp'
 
 const now = () => Math.floor(Date.now() / 1000)
 const CALL_ID = 'demo-wmt-fixture-1'
+/** `?fixture=next-round` 에서 지난 회차(CALL_ID) 뒤에 시작하는 새 회차. */
+const NEXT_CALL_ID = 'demo-wmt-fixture-2'
+/** 진행 중인 콜에 들어왔을 때 스냅샷으로 받는 앞부분 발언 수. 나머지는 STOMP 로 이어 온다. */
+const SNAPSHOT_LIVE_COUNT = 4
 
 const STOCKS: [string, string, string, number, number, number][] = [
   // ticker, name, sector, 시가총액(B), 가격, 등락률
@@ -118,12 +122,16 @@ function detail(ticker: string) {
 }
 
 /**
- * 화면 확인용 상태. 개발 서버 주소에 `?fixture=ended-wait`(콜 종료 · 판단 대기) · `?fixture=ended`(판단 도착)를 붙이거나
- * 붙이지 않으면 진행 중인 콜이다.
+ * 화면 확인용 상태. 개발 서버 주소에 붙인다. 붙이지 않으면 진행 중인 콜에 중간 입장한다(앞부분은 스냅샷, 나머지는 STOMP).
+ * - `?fixture=ended-wait` 콜 종료 · 판단 대기, `?fixture=ended` 판단 도착
+ * - `?fixture=between` 반복 방송의 회차 사이(스냅샷으로 끝난 회차와 판단을 받음)
+ * - `?fixture=next-round` 회차 사이에 들어와 있다가 잠시 뒤 새 회차가 시작됨(판단 탭의 지난 회차)
  */
-function fixtureMode(): 'live' | 'ended-wait' | 'ended' {
+type FixtureMode = 'live' | 'ended-wait' | 'ended' | 'between' | 'next-round'
+const FIXTURE_MODES: readonly FixtureMode[] = ['live', 'ended-wait', 'ended', 'between', 'next-round']
+function fixtureMode(): FixtureMode {
   const m = new URLSearchParams(window.location.search).get('fixture')
-  return m === 'ended' || m === 'ended-wait' ? m : 'live'
+  return FIXTURE_MODES.find((mode) => mode === m) ?? 'live'
 }
 
 const SCRIPT: [string, string, string, string[]][] = [
@@ -141,11 +149,11 @@ const DIFFS: Record<number, { topic: string; change_type: string; summary_ko: st
   5: { topic: 'supply', change_type: 'new_claim', summary_ko: '관세 대응으로 일부 조달처를 옮기고 있다고 처음 언급했습니다.', current_claim: 'we are moving some sourcing', prior_claim: '', confidence: 0.7, risk_score: 0.35 },
 }
 
-function segment(i: number, startedAt: number, end = false) {
+function segment(i: number, startedAt: number, end = false, callId = CALL_ID) {
   const [speaker, text] = SCRIPT[i % SCRIPT.length]
   return {
     ticker: 'WMT',
-    call_id: CALL_ID,
+    call_id: callId,
     sequence: i,
     start_ms: i * 70_000,
     end_ms: i * 70_000 + 65_000,
@@ -168,6 +176,46 @@ const EVALUATION = {
   warnings: [],
   intelligence_available: true,
 }
+
+/** 발언 하나에 딸린 STOMP 메시지(자막 · 번역 · 대조). */
+function utterance(i: number, startedAt: number, end: boolean, callId: string): [string, unknown][] {
+  const out: [string, unknown][] = [['/topic/transcript/WMT', segment(i, startedAt, end, callId)]]
+  const [, , ko, terms] = SCRIPT[i]
+  out.push(['/topic/transcript-translation/WMT', { ticker: 'WMT', call_id: callId, sequences: [i], text_ko: ko, terms_used: terms }])
+  const diff = DIFFS[i]
+  if (diff) {
+    out.push([
+      '/topic/transcript-diff/WMT',
+      {
+        ticker: 'WMT',
+        call_id: callId,
+        sequence: i,
+        previous_document: { document_id: 'prev', title: 'Q1', published_at: '2026-05-15', fiscal_quarter: '2026년 1분기', source_url: '' },
+        items: [{ ...diff, evidence: [] }],
+      },
+    ])
+  }
+  return out
+}
+
+/** Contract 7.8 snapshot 응답. 앞 `count` 발언과(끝났으면) 판단. */
+function snapshotOf(count: number, ended: boolean, startedAt: number) {
+  const messages = Array.from({ length: count }, (_, i) => utterance(i, startedAt, ended && i === count - 1, CALL_ID)).flat()
+  const pick = (topic: string) => messages.filter(([t]) => t === topic).map(([, payload]) => payload)
+  return {
+    ticker: 'WMT',
+    call_id: CALL_ID,
+    running: !ended,
+    segments: pick('/topic/transcript/WMT'),
+    translations: pick('/topic/transcript-translation/WMT'),
+    fact_checks: [],
+    diffs: pick('/topic/transcript-diff/WMT'),
+    evaluation: ended ? EVALUATION : null,
+  }
+}
+
+/** 지금 회차 자막이 시작된 시각(초). 스냅샷과 STOMP 가 같은 값을 써야 한 회차로 이어진다. */
+const fixtureStartedAt = now() - 1200
 
 const encoder = new TextEncoder()
 function sseAnswer(): Response {
@@ -200,10 +248,20 @@ export function createFixtureHttp(): Pick<HttpClient, 'getJson'> & Pick<HttpClie
       { symbol: 'VIX', price: 15.2, change_percent: -3.1, trend: 'down', format: 'index', timestamp: now() },
     ]],
     [/^\/api\/v1\/earnings-calendar\/terminal-timeline/, () => timeline()],
-    [/^\/api\/v1\/demo\/earnings-call\/status/, () =>
-      fixtureMode() === 'live'
-        ? { running: true, ticker: 'WMT', call_id: CALL_ID, published_count: 4, total_segments: 24 }
-        : { running: false, ticker: 'WMT', last_run: { call_id: CALL_ID, outcome: 'COMPLETED', published_count: 6, total_segments: 6 } }],
+    [/^\/api\/v1\/demo\/earnings-call\/status/, () => {
+      const mode = fixtureMode()
+      const loop = mode === 'between' || mode === 'next-round' || mode === 'live'
+      if (mode === 'live') return { running: true, ticker: 'WMT', call_id: CALL_ID, published_count: 4, total_segments: 24, loop }
+      // next-round 는 새 회차가 시작되기 전까지 회차 사이다. 시작된 뒤에는 자막이 방송 중으로 바꾼다(STALE_SEGMENT_MS)
+      return { running: false, ticker: 'WMT', last_run: { call_id: CALL_ID, outcome: 'COMPLETED', published_count: 6, total_segments: 6 }, loop }
+    }],
+    [/^\/api\/v1\/demo\/earnings-call\/snapshot/, () => {
+      const mode = fixtureMode()
+      if (mode === 'live') return snapshotOf(SNAPSHOT_LIVE_COUNT, false, fixtureStartedAt)
+      if (mode === 'between' || mode === 'next-round') return snapshotOf(SCRIPT.length, true, fixtureStartedAt)
+      // ended · ended-wait 는 STOMP 로 한꺼번에 흘린다
+      return { ticker: 'WMT', call_id: null, running: false, segments: [], translations: [], fact_checks: [], diffs: [], evaluation: null }
+    }],
     [/^\/api\/v1\/demo\/earnings-call\/speakers/, () => [
       { name: 'Doug McMillon', match_key: 'CEO · Doug McMillon', title: 'CEO', affiliation: 'Walmart Inc.', analyst: false },
       { name: 'John David Rainey', match_key: 'CFO · John David Rainey', title: 'CFO', affiliation: 'Walmart Inc.', analyst: false },
@@ -238,40 +296,40 @@ export function createFixtureStomp(): StompBridge {
   const statusListeners = new Set<(s: WsStatus) => void>()
   let status: WsStatus = 'DISCONNECTED'
   let started = false
-  const startedAt = now() - 1200
 
   const push = (topic: string, payload: unknown) => handlers.get(topic)?.(JSON.stringify(payload))
   const start = () => {
     if (started) return
     started = true
     const mode = fixtureMode()
-    let i = 0
+    if (mode === 'between') return
+    // live 는 앞부분을 스냅샷으로 받았으니 그 뒤부터 흘린다. 스냅샷보다 먼저 와도 보류됐다가 뒤에 풀린다
+    let i = mode === 'live' ? SNAPSHOT_LIVE_COUNT - 1 : 0
+    const callId = mode === 'next-round' ? NEXT_CALL_ID : CALL_ID
+    const startedAt = mode === 'next-round' ? now() : fixtureStartedAt
     const next = (end = false) => {
       if (i >= SCRIPT.length) return
-      push('/topic/transcript/WMT', segment(i, startedAt, end))
-      const [, , ko, terms] = SCRIPT[i]
-      push('/topic/transcript-translation/WMT', { ticker: 'WMT', call_id: CALL_ID, sequences: [i], text_ko: ko, terms_used: terms })
-      const diff = DIFFS[i]
-      if (diff) {
-        push('/topic/transcript-diff/WMT', {
-          ticker: 'WMT',
-          call_id: CALL_ID,
-          sequence: i,
-          previous_document: { document_id: 'prev', title: 'Q1', published_at: '2026-05-15', fiscal_quarter: '2026년 1분기', source_url: '' },
-          items: [{ ...diff, evidence: [] }],
-        })
-      }
+      for (const [topic, payload] of utterance(i, startedAt, end, callId)) push(topic, payload)
       i++
     }
-    setTimeout(() => {
-      if (mode === 'live') {
-        for (let k = 0; k < 4; k++) next()
-        setInterval(() => next(), 8000)
-        return
-      }
-      while (i < SCRIPT.length) next(i === SCRIPT.length - 1)
-      if (mode === 'ended') setTimeout(() => push('/topic/evaluation/WMT', EVALUATION), 300)
-    }, 600)
+    setTimeout(
+      () => {
+        if (mode === 'live') {
+          // 스냅샷과 겹치는 마지막 발언 하나를 다시 보낸다(store 가 중복으로 버린다)
+          next()
+          setInterval(() => next(), 8000)
+          return
+        }
+        if (mode === 'next-round') {
+          for (let k = 0; k < 2; k++) next()
+          setInterval(() => next(), 8000)
+          return
+        }
+        while (i < SCRIPT.length) next(i === SCRIPT.length - 1)
+        if (mode === 'ended') setTimeout(() => push('/topic/evaluation/WMT', EVALUATION), 300)
+      },
+      mode === 'next-round' ? 4000 : 600,
+    )
   }
 
   const setStatus = (next: WsStatus) => {

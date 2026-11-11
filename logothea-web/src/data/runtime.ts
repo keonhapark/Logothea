@@ -5,6 +5,7 @@ import { createHttpClient } from './http'
 import { installPageLifecycle } from './pageLifecycle'
 import { createStompBridge } from './stomp'
 import { createWebIpc } from './webIpc'
+import { fetchSnapshot } from './snapshot'
 import { createFixtureHttp, createFixtureStomp } from '../dev/fixtures'
 import { IPC_CHANNELS } from '@terminal/lib/ipcChannels'
 import { isRetiredPayload } from '../app/callFeed'
@@ -41,6 +42,8 @@ export const webIpc = createWebIpc({
   http,
   stomp,
   assistant,
+  // 중간 입장 · 재연결 때 지금 회차의 앞부분을 채운다(Contract 7.8 snapshot)
+  snapshot: (ticker) => fetchSnapshot(http, ticker),
   dropMessage: (channel, payload) => LATE_ROUND_CHANNELS.has(channel) && isRetiredPayload(payload),
 })
 

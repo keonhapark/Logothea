@@ -2,6 +2,7 @@ import { useLayoutEffect, useMemo, useRef, type KeyboardEvent } from 'react'
 import { formatCallClock, timelineMarks, isProminentDiff } from '@terminal/renderer/lib/callScreen'
 import { CHANGE_META, topicLabel } from '@terminal/renderer/components/call/diffMeta'
 import { useCallUi, type CallTab } from '../../app/callUi'
+import { useBroadcastView } from '../../app/broadcast'
 import { useCallData, type CallData } from './useCallData'
 import { openSpeakerSheet } from './sheets'
 import TranscriptTab from './TranscriptTab'
@@ -48,6 +49,7 @@ export default function CallScreen() {
       <CallCapsule data={data} />
       <CallTabs data={data} />
       {showTimeline && <Timeline marks={marks} totalMs={totalMs} />}
+      <RoundNotice hasSummary={data.summary !== null} />
       <div id={`call-panel-${tab}`} role="tabpanel" aria-labelledby={`call-tab-${tab}`} className="call-body">
         {tab === 'transcript' && <TranscriptTab data={data} />}
         {tab === 'diff' && <DiffTab data={data} />}
@@ -55,6 +57,47 @@ export default function CallScreen() {
         {tab === 'verdict' && <VerdictTab data={data} />}
       </div>
     </main>
+  )
+}
+
+/**
+ * 반복 방송의 회차 사이(상태 API running false · loop true). 화면에는 방금 끝난 회차가 그대로 남아 있다.
+ * 다음 회차 시작 시각은 API 에 없어 남은 시간은 두지 않는다. 판단 탭이 아니면 지난 회차 판단으로 가는 버튼을 둔다.
+ */
+function RoundNotice({ hasSummary }: { hasSummary: boolean }) {
+  const view = useBroadcastView()
+  const tab = useCallUi((s) => s.tab)
+  const setTab = useCallUi((s) => s.setTab)
+  const between = view.kind === 'between' && view.loop
+  return (
+    <>
+      {/* 낭독용 알림은 늘 붙어 있는 빈 영역에 문장만 바꿔 넣는다. 내용과 함께 새로 생긴 영역은 화면 낭독기가 읽지 않는다 */}
+      <p className="sr-only" role="status">
+        {between ? '회차가 끝났습니다. 다음 회차를 준비하고 있습니다.' : ''}
+      </p>
+      {between && (
+        <section className="notice cloud-s" aria-label="회차 사이">
+          <b>다음 회차를 준비하고 있습니다</b>
+          <span>방금 끝난 회차의 자막과 판단을 그대로 볼 수 있습니다. 새 회차가 시작되면 처음부터 다시 쌓입니다.</span>
+          {hasSummary && tab !== 'verdict' && (
+            <div className="actrow">
+              <button
+                type="button"
+                className="gb pill-sm"
+                onClick={() => {
+                  setTab('verdict')
+                  window.scrollTo({ top: 0 })
+                  // 누른 버튼이 사라지므로 판단 탭으로 포커스를 옮긴다
+                  requestAnimationFrame(() => document.getElementById('call-tab-verdict')?.focus())
+                }}
+              >
+                지난 회차 판단 보기
+              </button>
+            </div>
+          )}
+        </section>
+      )}
+    </>
   )
 }
 
@@ -67,6 +110,9 @@ function CallCapsule({ data }: { data: CallData }) {
   const last = data.segments[data.segments.length - 1]
   // 지금 말하는 사람: 마지막 발언의 화자
   const speaker = [...data.segments].reverse().find((s) => s.speaker)?.speaker ?? null
+  // 반복 방송의 회차 사이면 홈 카드와 같이 '회차 사이'. 반복 방송이 아니면 '종료'
+  const view = useBroadcastView()
+  const betweenRounds = view.kind === 'between' && view.loop
   return (
     <div className="call-capsule glass">
       <span className="call-tk">{data.ticker}</span>
@@ -77,7 +123,7 @@ function CallCapsule({ data }: { data: CallData }) {
         </span>
       ) : data.phase === 'ENDED' ? (
         <span className="live" style={{ color: 'var(--ink-3)' }}>
-          종료
+          {betweenRounds ? '회차 사이' : '종료'}
         </span>
       ) : (
         <span className="live" style={{ color: 'var(--ink-3)' }}>

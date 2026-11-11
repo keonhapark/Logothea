@@ -33,6 +33,7 @@ src/data/        브라우저 데이터 연결
   pageLifecycle.ts 화면 잠금 · 탭 전환 · 망 전환 뒤 STOMP 를 새로 붙입니다(모바일에서 소켓이 열린 채 죽는 경우 대비)
   assistant.ts     질의응답 SSE (터미널 AssistantStreamService 규칙)
   webIpc.ts        채널 → REST/STOMP 라우팅 표 (어닝콜 채널)
+  snapshot.ts      중간 입장 스냅샷. (재)연결 때마다 실시간 메시지를 잠시 보류하고, 지금 회차의 앞부분을 받아 먼저 넣은 뒤 보류를 풉니다
   marketChannels.ts 홈 · 시장 · 종목 브리핑 채널 (어닝콜 일정, 지수, 종목 목록 · 시세, 종목 상세)
   runtime.ts       위를 묶은 앱 전체 공용 인스턴스
 tooling/         Vite 플러그인(터미널 파일 바꿔 끼우기 · 허용 목록)과 빌드 가드
@@ -84,7 +85,9 @@ VITE_DEV_ACCESS_TOKEN=<로컬 백엔드 로그인 응답의 access_token>
 
 백엔드 없이 화면만 보려면 `.env.development.local` 에 `VITE_FIXTURES=1` 을 둡니다. 개발용 가짜 서버
 (`src/dev/fixtures.ts`)가 예시 자막 · 시세 · 일정을 흘려 줍니다. 주소에 `?fixture=ended-wait`(콜 종료 · 판단 대기),
-`?fixture=ended`(판단 도착)를 붙이면 콜이 끝난 뒤의 화면을 볼 수 있습니다. 숫자와 발언은 모두 예시이고, 배포용 빌드에는 들어가지 않습니다.
+`?fixture=ended`(판단 도착)를 붙이면 콜이 끝난 뒤의 화면을 볼 수 있습니다. `?fixture=between` 은 반복 방송의 회차 사이,
+`?fixture=next-round` 는 회차 사이에 있다가 몇 초 뒤 새 회차가 시작되는 경우입니다. 붙이지 않으면 진행 중인 콜에 중간 입장한
+것처럼 앞부분을 스냅샷으로 받습니다. 숫자와 발언은 모두 예시이고, 배포용 빌드에는 들어가지 않습니다.
 
 액세스 토큰 수명이 15분이라, 로컬 백엔드를 `--jwt.expiration-ms=86400000` 인자로 띄우면 토큰을 자주 바꾸지
 않아도 됩니다(코드 변경 없음). 개발 토큰은 개발 서버에서만 읽습니다. 배포용 빌드에서 `VITE_DEV_ACCESS_TOKEN`

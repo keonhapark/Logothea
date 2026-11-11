@@ -6,6 +6,7 @@ import type { AssistantStream } from './assistant'
 import type { HttpClient } from './http'
 import type { StompBridge } from './stomp'
 import { registerMarketChannels, type MarketChannelDeps } from './marketChannels'
+import { createSnapshotSync, type CallSnapshot, type SnapshotSyncDeps } from './snapshot'
 
 /**
  * 터미널 `ipc.invoke` / `ipc.on` 의 브라우저 구현.
@@ -26,6 +27,13 @@ export interface WebIpcDeps {
   assistant: AssistantStream
   /** STOMP 메시지를 store 로 내보내기 전에 버릴지(끝난 회차의 늦은 대조 등). 기본은 모두 통과. */
   dropMessage?: (receivedChannel: string, payload: unknown) => boolean
+  /**
+   * 중간 입장 스냅샷(snapshot.ts). 있으면 자막을 구독한 종목마다 (재)연결할 때 받아, 그동안 실시간 메시지를 보류했다가
+   * 스냅샷 뒤에 푼다. 없으면 실시간 메시지만 흘린다.
+   */
+  snapshot?: (ticker: string) => Promise<CallSnapshot | null>
+  /** 스냅샷 보류 시간 · 타이머. 테스트에서 바꿔 끼운다. */
+  snapshotTimers?: Pick<SnapshotSyncDeps, 'holdMaxMs' | 'setTimer' | 'clearTimer'>
   /** 폴링 · 캐시 시간. 테스트에서 바꿔 끼운다. */
   timers?: Pick<MarketChannelDeps, 'setInterval' | 'clearInterval' | 'now'>
 }
@@ -84,7 +92,22 @@ export function createWebIpc(deps: WebIpcDeps): WebIpc {
     }
   }
 
-  deps.stomp.onStatus((status) => emit(IPC_CHANNELS.WS_STATUS_CHANGED, { status }))
+  /** STOMP 로 받았거나 스냅샷에서 꺼낸 메시지를 store 쪽으로 낸다. 보류했다 푸는 동안 끝난 회차가 생길 수 있어 여기서 거른다. */
+  function deliver(channel: string, payload: unknown) {
+    if (deps.dropMessage?.(channel, payload)) return
+    emit(channel, payload)
+  }
+
+  const fetchSnapshot = deps.snapshot
+  const snapshotSync = fetchSnapshot ? createSnapshotSync({ fetch: fetchSnapshot, deliver, ...deps.snapshotTimers }) : null
+  /** 자막을 구독한 종목. 스냅샷은 이 종목들만 받는다. */
+  const transcriptTickers = new Set<string>()
+
+  deps.stomp.onStatus((status) => {
+    // onConnect 가 토픽을 다시 구독하기 직전에 불린다. 보류를 먼저 걸어 두면 구독 직후 오는 메시지가 스냅샷 앞에 끼지 않는다.
+    if (status === 'CONNECTED') for (const ticker of transcriptTickers) snapshotSync?.start(ticker)
+    emit(IPC_CHANNELS.WS_STATUS_CHANGED, { status })
+  })
 
   const handlers = new Map<string, (payload: unknown) => Promise<unknown>>()
   /** push 채널 → 리스너가 생길 때 켜는 함수(끄는 함수를 돌려준다). */
@@ -99,6 +122,11 @@ export function createWebIpc(deps: WebIpcDeps): WebIpc {
         console.warn(`[webIpc] 종목 기호 형식이 아니라 구독하지 않습니다: ${route.subscribe}`, payload)
         return
       }
+      if (route.subscribe === IPC_CHANNELS.TRANSCRIPT_SUBSCRIBE && !transcriptTickers.has(ticker)) {
+        transcriptTickers.add(ticker)
+        // 이미 연결돼 있으면 CONNECTED 가 다시 오지 않는다. 연결 전이면 CONNECTED 때 받는다
+        if (deps.stomp.status === 'CONNECTED') snapshotSync?.start(ticker)
+      }
       deps.stomp.subscribe(route.prefix + ticker, (body) => {
         let parsed: unknown
         try {
@@ -107,14 +135,19 @@ export function createWebIpc(deps: WebIpcDeps): WebIpc {
           console.error(`[webIpc] ${route.prefix} 메시지 파싱 실패:`, e)
           return
         }
-        if (deps.dropMessage?.(route.received, parsed)) return
-        emit(route.received, parsed)
+        if (snapshotSync?.hold(ticker, route.received, parsed)) return
+        deliver(route.received, parsed)
       })
       void deps.stomp.connect()
     })
     handlers.set(route.unsubscribe, async (payload) => {
       const ticker = tickerOf(payload)
-      if (ticker) deps.stomp.unsubscribe(route.prefix + ticker)
+      if (!ticker) return
+      if (route.unsubscribe === IPC_CHANNELS.TRANSCRIPT_UNSUBSCRIBE) {
+        transcriptTickers.delete(ticker)
+        snapshotSync?.cancel(ticker)
+      }
+      deps.stomp.unsubscribe(route.prefix + ticker)
     })
   }
 
@@ -129,6 +162,9 @@ export function createWebIpc(deps: WebIpcDeps): WebIpc {
   })
   handlers.set(IPC_CHANNELS.WS_DISCONNECT, async () => {
     disconnectedByIpc = true
+    // STOMP 구독 목록이 비워지므로 스냅샷을 받을 종목도 비운다
+    for (const ticker of transcriptTickers) snapshotSync?.cancel(ticker)
+    transcriptTickers.clear()
     deps.stomp.disconnect()
   })
 

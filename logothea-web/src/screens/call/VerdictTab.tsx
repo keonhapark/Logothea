@@ -15,7 +15,7 @@ import type { CallData } from './useCallData'
  * 실행 판단 → 방향 · 촉매 → 강도 · 신뢰도 막대 → 펼쳐 보기들 → 누락 · 경고 → 대조 집계.
  * - 콜 진행 중: "콜이 끝나면 종합 판단이 나옵니다" + 지금까지 대조 집계. 지난 회차 판단이 있으면 접어서 둔다.
  * - 종료 후 판단 대기: 데스크톱의 흐르는 막대 · 단계 안내 그대로(3분이 지나면 받지 못했다는 안내).
- * - 다음 회차 남은 시간 줄은 백엔드 반복 방송이 생기면 붙인다.
+ * - 다음 회차 남은 시간 줄은 두지 않는다. 반복 방송 상태 API 에 다음 회차 시작 시각이 없다. 회차 사이 안내는 CallScreen 의 RoundNotice.
  */
 export default function VerdictTab({ data }: { data: CallData }) {
   const counts = useMemo(() => countDiffsByType(data.diffItems), [data.diffItems])

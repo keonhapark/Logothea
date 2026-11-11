@@ -35,12 +35,26 @@ describe('parsePrefs', () => {
 
 describe('parseBroadcastStatus', () => {
   it('재생 중 · 회차 사이 · 기록 없음을 가른다', () => {
-    expect(parseBroadcastStatus({ running: true, ticker: 'WMT', call_id: 'c1' })).toEqual({ kind: 'live', callId: 'c1' })
+    expect(parseBroadcastStatus({ running: true, ticker: 'WMT', call_id: 'c1' })).toEqual({ kind: 'live', callId: 'c1', loop: false })
     expect(parseBroadcastStatus({ running: false, ticker: 'WMT', last_run: { call_id: 'c0', outcome: 'COMPLETED' } })).toEqual({
       kind: 'between',
       callId: 'c0',
+      loop: false,
     })
-    expect(parseBroadcastStatus({ running: false, ticker: 'WMT' })).toEqual({ kind: 'idle' })
+    expect(parseBroadcastStatus({ running: false, ticker: 'WMT' })).toEqual({ kind: 'idle', loop: false })
+  })
+
+  it('반복 방송 여부(loop)를 싣는다. true 일 때만 반복 방송으로 본다', () => {
+    // 운영 서버 실측(11/12) 응답 그대로
+    const between = {
+      running: false,
+      ticker: 'WMT',
+      last_run: { call_id: 'demo-wmt-1', total_segments: 24, outcome: 'COMPLETED', published_count: 24 },
+      loop: true,
+    }
+    expect(parseBroadcastStatus(between)).toEqual({ kind: 'between', callId: 'demo-wmt-1', loop: true })
+    expect(parseBroadcastStatus({ running: true, call_id: 'c1', loop: true })).toEqual({ kind: 'live', callId: 'c1', loop: true })
+    expect(parseBroadcastStatus({ running: false, loop: 'true' })).toEqual({ kind: 'idle', loop: false })
   })
 
   it('모양이 틀리면 null(방송을 모름)', () => {
@@ -59,7 +73,7 @@ describe('deriveBroadcastView', () => {
 
   it('상태 API 가 재생 중이면 그 회차 자막만 담아 방송 중', () => {
     const segments = [seg('old', 0, 10), seg('c1', 0, now / 1000 - 5), seg('c1', 1, now / 1000)]
-    const view = deriveBroadcastView({ kind: 'live', callId: 'c1' }, segments, new Set(), now)
+    const view = deriveBroadcastView({ kind: 'live', callId: 'c1', loop: true }, segments, new Set(), now)
     expect(view).toMatchObject({ kind: 'live', callId: 'c1' })
     expect(view.kind === 'live' && view.segments.map((s) => s.sequence)).toEqual([0, 1])
   })
@@ -73,8 +87,13 @@ describe('deriveBroadcastView', () => {
     const stale = [seg('c1', 0, now / 1000 - 600)]
     expect(deriveBroadcastView(null, stale, new Set(), now)).toEqual({ kind: 'unknown' })
     const ended = [seg('c1', 0, now / 1000 - 5)]
-    expect(deriveBroadcastView({ kind: 'between', callId: 'c1' }, ended, new Set(['c1']), now)).toEqual({ kind: 'between', lastCallId: 'c1' })
-    expect(deriveBroadcastView({ kind: 'idle' }, [], new Set(), now)).toEqual({ kind: 'idle' })
+    expect(deriveBroadcastView({ kind: 'between', callId: 'c1', loop: true }, ended, new Set(['c1']), now)).toEqual({
+      kind: 'between',
+      lastCallId: 'c1',
+      loop: true,
+    })
+    expect(deriveBroadcastView({ kind: 'between', callId: 'c1', loop: false }, ended, new Set(['c1']), now)).toMatchObject({ loop: false })
+    expect(deriveBroadcastView({ kind: 'idle', loop: false }, [], new Set(), now)).toEqual({ kind: 'idle' })
   })
 })
 
@@ -83,13 +102,13 @@ describe('deriveBroadcastView — 회차 전환', () => {
 
   it('새 회차가 막 시작돼 아직 자막이 없으면 지난 회차 자막을 붙이지 않는다', () => {
     const segments = [seg('c1', 0, now / 1000 - 5)]
-    const view = deriveBroadcastView({ kind: 'live', callId: 'c2' }, segments, new Set(), now)
+    const view = deriveBroadcastView({ kind: 'live', callId: 'c2', loop: true }, segments, new Set(), now)
     expect(view).toMatchObject({ kind: 'live', callId: 'c2' })
     expect(view.kind === 'live' && view.segments).toEqual([])
   })
 
   it('상태가 회차 사이여도 끝나지 않은 회차의 자막이 막 왔으면 방송 중(상태 폴링 지연 20초 동안)', () => {
-    const view = deriveBroadcastView({ kind: 'between', callId: 'c1' }, [seg('c2', 0, now / 1000 - 2)], new Set(), now)
+    const view = deriveBroadcastView({ kind: 'between', callId: 'c1', loop: true }, [seg('c2', 0, now / 1000 - 2)], new Set(), now)
     expect(view).toMatchObject({ kind: 'live', callId: 'c2' })
   })
 })
@@ -97,7 +116,7 @@ describe('deriveBroadcastView — 회차 전환', () => {
 describe('fetchBroadcastStatus', () => {
   it('종목을 인코딩해 상태 경로로 묻는다', async () => {
     const getJson = vi.fn(async () => ({ running: true, call_id: 'c1' }))
-    await expect(fetchBroadcastStatus({ getJson } as never, 'BRK.B')).resolves.toEqual({ kind: 'live', callId: 'c1' })
+    await expect(fetchBroadcastStatus({ getJson } as never, 'BRK.B')).resolves.toEqual({ kind: 'live', callId: 'c1', loop: false })
     expect(getJson).toHaveBeenCalledWith('/api/v1/demo/earnings-call/status?ticker=BRK.B')
   })
 
