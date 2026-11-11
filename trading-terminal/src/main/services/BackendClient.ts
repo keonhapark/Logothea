@@ -262,6 +262,15 @@ export interface SpeakerProfilePayload {
   kind: 'MANAGEMENT' | 'ANALYST'
 }
 
+/** 시연 재생 상태 (Contract 7.8 GET /api/v1/demo/earnings-call/status). */
+export interface DemoStatus {
+  running: boolean
+  ticker: string | null
+  callId: string | null
+  /** 서버가 전시용으로 시연 콜을 반복 방송하는지. 반복 중인 종목은 시작 · 중지가 409 로 거절된다. */
+  loop: boolean
+}
+
 export type DemoStartResult =
   | {
       ok: true
@@ -275,7 +284,8 @@ export type DemoStartResult =
        */
       evidenceWarning?: string
     }
-  | { ok: false; reason: 'ALREADY_RUNNING' | 'FAILED'; message: string }
+  /** LOOP_RUNNING: 서버가 이 종목을 전시용으로 반복 방송하는 중이라 시작할 수 없다(409 code loop_running). */
+  | { ok: false; reason: 'ALREADY_RUNNING' | 'LOOP_RUNNING' | 'FAILED'; message: string }
 
 export const BackendClient = {
   /**
@@ -376,10 +386,12 @@ export const BackendClient = {
           typeof data?.evidence_warning === 'string' ? data.evidence_warning : undefined,
       }
     } catch (e) {
-      const status = (e as { response?: { status?: number } })?.response?.status
-      const message =
-        (e as { response?: { data?: { error?: string } } })?.response?.data?.error ??
-        '시연을 시작하지 못했습니다.'
+      const response = (e as { response?: { status?: number; data?: { error?: string; code?: string } } })?.response
+      const status = response?.status
+      const message = response?.data?.error ?? '시연을 시작하지 못했습니다.'
+      if (status === 409 && response?.data?.code === 'loop_running') {
+        return { ok: false, reason: 'LOOP_RUNNING', message }
+      }
       return { ok: false, reason: status === 409 ? 'ALREADY_RUNNING' : 'FAILED', message }
     }
   },
@@ -415,6 +427,23 @@ export const BackendClient = {
       })
     } catch {
       return []
+    }
+  },
+
+  /** 어닝콜 시연 재생 상태(ticker 필수). 조회에 실패하면 null — 화면은 반복 여부를 모르는 것으로 다룬다. */
+  async getEarningsDemoStatus(ticker: string): Promise<DemoStatus | null> {
+    try {
+      const { data } = await http.get('/api/v1/demo/earnings-call/status', { params: { ticker } })
+      return {
+        running: data?.running === true,
+        ticker: typeof data?.ticker === 'string' && data.ticker ? data.ticker : null,
+        callId: typeof data?.call_id === 'string' && data.call_id ? data.call_id : null,
+        loop: data?.loop === true,
+      }
+    } catch (e) {
+      // 조회가 늘 실패하면 반복 방송 표시가 끝내 켜지지 않는다. 원인을 찾을 수 있게 남긴다.
+      console.warn('[BackendClient] demo status 조회 실패', (e as Error)?.message ?? e)
+      return null
     }
   },
 

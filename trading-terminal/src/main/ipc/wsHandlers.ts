@@ -5,6 +5,7 @@ import { StompService } from '../services/StompService'
 import {
   BackendClient,
   type DemoStartResult,
+  type DemoStatus,
   type SpeakerProfilePayload,
 } from '../services/BackendClient'
 import { SubscriptionManager } from '../services/SubscriptionManager'
@@ -144,6 +145,14 @@ export function registerWsHandlers() {
         return { ok: false, reason: 'FAILED', message: 'ticker 가 필요합니다.' }
       }
       return BackendClient.startEarningsDemo(payload.ticker)
+    },
+  )
+
+  registerHandler<{ ticker: string }, DemoStatus | null>(
+    IPC_CHANNELS.DEMO_EARNINGS_STATUS,
+    async (_e, payload) => {
+      if (!payload || typeof payload.ticker !== 'string' || !payload.ticker) return null
+      return BackendClient.getEarningsDemoStatus(payload.ticker)
     },
   )
 
