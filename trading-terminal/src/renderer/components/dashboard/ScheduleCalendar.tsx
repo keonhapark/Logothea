@@ -135,7 +135,7 @@ export default function ScheduleCalendar({ groups, tags, onPick }: ScheduleCalen
 
   return (
     <div className="flex flex-col gap-4 p-5">
-      <div className="grid grid-cols-[300px_minmax(0,1fr)] gap-5 items-start">
+      <div className="grid grid-cols-1 xl:grid-cols-[300px_minmax(0,1fr)] gap-5 items-start">
         {/* 좌측: 미니 캘린더 피커 */}
         <div className="flex flex-col p-4 rounded-[20px] bg-wash/[0.02] border border-edge/[0.08]">
           <div className="flex items-center justify-between gap-2 mb-3">
@@ -234,18 +234,18 @@ export default function ScheduleCalendar({ groups, tags, onPick }: ScheduleCalen
 
         {/* 우측: 선택 일자 어닝콜 카드 목록 */}
         <div className="flex flex-col min-h-[280px]">
-          <div className="flex items-baseline justify-between pb-3 mb-2 border-b border-edge/[0.06]">
-            <div className="flex items-baseline gap-2">
-              <h3 className="text-[14px] font-bold text-ink-1">
+          <div className="flex items-baseline justify-between gap-2 pb-3 mb-2 border-b border-edge/[0.06]">
+            <div className="flex items-baseline gap-2 whitespace-nowrap">
+              <h3 className="text-[14px] font-bold text-ink-1 whitespace-nowrap">
                 {formatKstDateHeader(selectedDate)}
               </h3>
               {selectedDate === todayKey && (
-                <span className="px-1.5 py-0.5 rounded text-[10.5px] font-bold bg-lapis/15 text-lapis">
+                <span className="px-1.5 py-0.5 rounded text-[10.5px] font-bold bg-lapis/15 text-lapis whitespace-nowrap">
                   오늘
                 </span>
               )}
             </div>
-            <span className="text-[12px] text-ink-3 tabular-nums">
+            <span className="text-[12px] text-ink-3 tabular-nums whitespace-nowrap">
               {selectedEvents.length > 0 ? `${selectedEvents.length}건 예정` : '예정 없음'}
             </span>
           </div>
