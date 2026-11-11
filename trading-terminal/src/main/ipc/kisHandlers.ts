@@ -1,5 +1,6 @@
 import { BrowserWindow } from 'electron'
 import { KisService } from '../services/KisService'
+import { isFillComplete } from '../services/kisFill'
 import type { FillNotice } from '../services/KisWebSocketService'
 import { BackendClient, type AssetHistoryPoint } from '../services/BackendClient'
 import { mainState } from '../store/mainState'
@@ -149,6 +150,25 @@ interface PendingTradeRow {
   ticker: string
   status: string
   brokerOrderId: string | null
+  orderQty?: number | null
+  /** 백엔드 LocalDateTime(UTC, 시간대 표기 없음). */
+  createdAt?: string | null
+}
+
+/**
+ * 부분 체결된 채 이 시간이 지나면 체결된 수량으로 확정한다. 미국 정규장(6시간 반)이 끝난 뒤에도
+ * 미체결이 남았다는 뜻이고, 그대로 두면 TTL 만료(EXPIRED)로 이미 체결된 수량까지 기록에서 사라진다.
+ */
+const PARTIAL_FILL_FINALIZE_MS = 8 * 60 * 60 * 1000
+
+/** 체결통보 직후 조회가 KIS 반영보다 앞서지 않도록 두는 간격. */
+const NOTICE_RERUN_DELAY_MS = 1500
+
+function createdAtMs(value: string | null | undefined): number | null {
+  if (!value) return null
+  const zoneless = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(value)
+  const ms = Date.parse(zoneless ? `${value}Z` : value)
+  return Number.isFinite(ms) ? ms : null
 }
 
 type ReconcileResult = { checked: number; reconciled: number; failed: number }
@@ -160,10 +180,30 @@ type ReconcileResult = { checked: number; reconciled: number; failed: number }
  * 함께 기다린다.
  */
 let reconcileInFlight: Promise<ReconcileResult> | null = null
+/**
+ * 진행 중인 동기화가 끝난 뒤 한 번 더 돌릴지. 체결통보가 동기화 도중에 오면 그 동기화는 이미 KIS 를
+ * 조회했을 수 있어, 이 통보의 체결(예: 부분 체결의 나머지)을 놓친다. 통보는 다시 오지 않으므로 표시해 두고
+ * 끝난 뒤 한 번 더 돈다. 화면 진입 · 새로고침의 겹친 호출은 합치기만 한다(예산 보호).
+ */
+let rerunRequested = false
 
-export function reconcilePendingTrades(): Promise<ReconcileResult> {
-  if (reconcileInFlight) return reconcileInFlight
-  reconcileInFlight = runReconcile().finally(() => {
+export function reconcilePendingTrades(options: { rerunIfBusy?: boolean } = {}): Promise<ReconcileResult> {
+  if (reconcileInFlight) {
+    if (options.rerunIfBusy) rerunRequested = true
+    return reconcileInFlight
+  }
+  reconcileInFlight = (async () => {
+    const total = await runReconcile()
+    while (rerunRequested) {
+      rerunRequested = false
+      await new Promise((r) => setTimeout(r, NOTICE_RERUN_DELAY_MS))
+      const again = await runReconcile()
+      total.checked += again.checked
+      total.reconciled += again.reconciled
+      total.failed += again.failed
+    }
+    return total
+  })().finally(() => {
     reconcileInFlight = null
   })
   return reconcileInFlight
@@ -188,6 +228,11 @@ async function runReconcile(): Promise<ReconcileResult> {
     try {
       const fill = await KisService.inquireFill(trade.ticker, trade.brokerOrderId as string)
       if (!fill || fill.executedQty <= 0) continue
+      // 부분 체결이면 확정하지 않고 다음 통보·재확인을 기다린다. 확정하면 남은 체결이 반영되지 않는다.
+      // 단, 장이 끝날 만큼 오래 남아 있으면 체결된 수량으로 확정한다 (PARTIAL_FILL_FINALIZE_MS 주석).
+      const created = createdAtMs(trade.createdAt)
+      const stale = created !== null && Date.now() - created > PARTIAL_FILL_FINALIZE_MS
+      if (!isFillComplete(fill, trade.orderQty) && !stale) continue
       await BackendClient.sendCallback(String(trade.id), {
         status: 'EXECUTED',
         broker_order_id: trade.brokerOrderId,
@@ -251,7 +296,7 @@ export async function onFillNotice(fill: FillNotice): Promise<void> {
   console.info(`[kisHandlers] 체결통보 수신 — ODNO=${fill.orderId}`)
   rememberNotice(fill.orderId)
   try {
-    const { reconciled } = await reconcilePendingTrades()
+    const { reconciled } = await reconcilePendingTrades({ rerunIfBusy: true })
     pushToRenderer(IPC_CHANNELS.TRADES_RECONCILED, { reconciled })
   } catch (e) {
     console.warn(`[kisHandlers] 체결통보 반영 실패 — ODNO=${fill.orderId}:`, e)
@@ -333,6 +378,10 @@ export function registerKisHandlers() {
         orderPrice as number,
       )
 
+      const filled = isFillComplete(
+        { executedQty: orderResult.executedQty, avgPrice: orderResult.executedPrice, remainingQty: orderResult.remainingQty },
+        req.qty,
+      )
       const payload = {
         ticker: req.ticker,
         side: req.side,
@@ -343,7 +392,8 @@ export function registerKisHandlers() {
         executed_qty: orderResult.executedQty,
         executed_price: orderResult.executedPrice,
         broker_order_id: orderResult.orderId || null,
-        status: orderResult.executedQty > 0 ? ('EXECUTED' as const) : ('PENDING' as const),
+        // 부분 체결은 PENDING 으로 남겨 체결통보 재확인이 나머지까지 반영하게 한다.
+        status: filled ? ('EXECUTED' as const) : ('PENDING' as const),
         error_message: null,
       }
       const recorded = BackendClient.recordManualTrade(payload).catch((e) =>
@@ -382,7 +432,8 @@ export function registerKisHandlers() {
         )
 
       const result = {
-        status: orderResult.executedQty > 0 ? ('EXECUTED' as const) : ('PENDING' as const),
+        // 부분 체결은 PENDING 으로 남겨 체결통보 재확인이 나머지까지 반영하게 한다.
+        status: filled ? ('EXECUTED' as const) : ('PENDING' as const),
         orderId: orderResult.orderId,
         executedPrice: orderResult.executedPrice,
         executedQty: orderResult.executedQty,

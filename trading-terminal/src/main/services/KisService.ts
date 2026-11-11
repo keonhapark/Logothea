@@ -4,7 +4,8 @@ import { BrowserWindow } from 'electron'
 import { mainState } from '../store/mainState'
 import { IPC_CHANNELS } from '../../lib/ipcChannels'
 import { kisLimiter } from './KisRateLimiter'
-import { resolveExchange, type KisExchange } from './KisWebSocketService'
+import { resolveExchange, isDefaultExchangeGuess, KisWebSocketService, type KisExchange } from './KisWebSocketService'
+import type { KisFill } from './kisFill'
 
 // REST 파라미터용 거래소 코드 쌍. resolveExchange() 결과(NAS/NYS/AMS)를 KIS REST 코드로 변환.
 const REST_EXCHANGE_CODES: Record<KisExchange, { ovrsExcgCd: string; excd: string }> = {
@@ -231,6 +232,8 @@ export interface KisOrderResult {
   orderId: string
   executedPrice: number | null
   executedQty: number
+  /** KIS 미체결 수량(nccs_qty). 응답에 없으면 null — 그때는 주문 수량과 비교해 완료를 판단한다. */
+  remainingQty: number | null
 }
 
 export const KisService = {
@@ -574,43 +577,36 @@ export const KisService = {
     const appSecret = await keytar.getPassword(KEYTAR_SERVICE, appSecretSlot(paper))
     if (!appKey || !appSecret) throw new Error('KIS API 자격 증명이 등록되지 않았습니다.')
 
-    try {
-      await kisLimiter.acquire('LOW')
-      const { data } = await kisHttp.get('/uapi/overseas-price/v1/quotations/price', {
-        headers: buildKisHeaders(appKey, appSecret, 'HHDFS00000300'),
-        signal: activeAbortController.signal,
-        params: {
-          AUTH: '',
-          EXCD: REST_EXCHANGE_CODES[resolveExchange(ticker)].excd,
-          SYMB: ticker,
-        },
-      })
-      // rt_cd 실패 시 0 반환 (호출자의 0 가드와 일관)
-      if (data.rt_cd !== '0') {
-        console.error('[KisService] HHDFS00000300 rt_cd 실패:', data.msg1 || data.msg_cd)
-        return { currentPrice: 0, previousClose: 0 }
+    // 거래소는 정적 목록으로 추정한다(목록 밖은 나스닥). 추정이 틀리면 KIS 는 rt_cd 성공에 빈 시세를
+    // 돌려주므로, 근거 없이 나스닥으로 추정한 종목만 빈 시세일 때 다른 거래소에 한 번씩 더 묻고 맞는 곳을
+    // 기억한다. 예: LLY(NYSE) 가 목록에 없어 나스닥으로 조회되면 즉시 체결 주문이 "현재가를 조회할 수 없음" 으로 막혔다.
+    // 모든 거래소가 빈 값이었던 종목은 한동안 다시 돌지 않는다(장 외 · 모의 제약으로 원래 비는 경우).
+    const signal = activeAbortController.signal
+    const guessed = resolveExchange(ticker)
+    const first = await queryPrice(appKey, appSecret, ticker, guessed, signal)
+    if (first === null || first.currentPrice > 0) return first ?? { currentPrice: 0, previousClose: 0 }
+
+    const lastMiss = emptyEverywhereAt.get(ticker)
+    const canFallback = isDefaultExchangeGuess(ticker)
+      && (lastMiss === undefined || Date.now() - lastMiss > EXCHANGE_FALLBACK_COOLDOWN_MS)
+    if (canFallback) {
+      for (const exchange of (['NYS', 'AMS'] as KisExchange[]).filter((e) => e !== guessed)) {
+        if (signal.aborted) return { currentPrice: 0, previousClose: 0 }
+        const quote = await queryPrice(appKey, appSecret, ticker, exchange, signal)
+        if (quote === null) return { currentPrice: 0, previousClose: 0 }
+        if (quote.currentPrice > 0) {
+          emptyEverywhereAt.delete(ticker)
+          KisWebSocketService.learnExchange(ticker, exchange)
+          return quote
+        }
       }
-      const last = Number(data.output?.last ?? 0)
-      const base = Number(data.output?.base ?? 0)
-      const currentPrice = Number.isFinite(last) && last > 0 ? last : 0
-      const previousClose = Number.isFinite(base) && base > 0 ? base : 0
-      // rt_cd 는 성공인데 시세가 비어 오는 경우가 있다 (모의투자 계좌의 해외 시세 제약,
-      // 장 시간 외 등). 조용히 0 을 반환하면 호출자가 원인을 알 수 없으므로 남긴다.
-      if (currentPrice === 0) {
-        console.warn(
-          `[KisService] HHDFS00000300 시세 없음 — ticker=${ticker} last=${data.output?.last ?? 'undefined'} base=${data.output?.base ?? 'undefined'}`,
-        )
-      }
-      return { currentPrice, previousClose }
-    } catch (e: any) {
-      // 모드 전환 abort는 0 반환 (PricePoller 0 가드와 일관)
-      if (isAbortError(e)) {
-        console.info('[KisService] HHDFS00000300 abort (모드 전환)')
-        return { currentPrice: 0, previousClose: 0 }
-      }
-      console.error('[KisService] HHDFS00000300 현재가 조회 실패:', e?.response?.data?.message ?? e?.message)
-      return { currentPrice: 0, previousClose: 0 }
+      emptyEverywhereAt.set(ticker, Date.now())
     }
+    console.warn(
+      `[KisService] HHDFS00000300 시세 없음 — ticker=${ticker} EXCD=${REST_EXCHANGE_CODES[guessed].excd}` +
+        (canFallback ? ' (다른 거래소도 빈 값)' : ''),
+    )
+    return { currentPrice: 0, previousClose: 0 }
   },
 
   // ── 주문 실행 ────────────────────────────────────────────────
@@ -668,19 +664,20 @@ export const KisService = {
     if (!orderId) {
       // ODNO 가 없으면 재확인으로도 찾을 수 없어 PENDING 으로 남는다.
       console.warn('[KisService] ODNO 미반환 — 체결조회 skip, 미확인(PENDING) 처리')
-      return { orderId: '', executedPrice: null, executedQty: 0 }
+      return { orderId: '', executedPrice: null, executedQty: 0, remainingQty: null }
     }
 
     await sleep(ORDER_FILL_INQUIRE_WAIT_MS)
     const fill = await inquireOrderFill(appKey, appSecret, accountNo, ticker, orderId)
     if (fill === null) {
       console.warn(`[KisService] 체결조회 실패 — 미확인(PENDING) 처리 orderId=${orderId}`)
-      return { orderId, executedPrice: null, executedQty: 0 }
+      return { orderId, executedPrice: null, executedQty: 0, remainingQty: null }
     }
     return {
       orderId,
       executedPrice: fill.executedQty > 0 ? fill.avgPrice : null,
       executedQty: fill.executedQty,
+      remainingQty: fill.remainingQty,
     }
   },
 
@@ -721,7 +718,7 @@ export const KisService = {
   async inquireFill(
     ticker: string,
     orderId: string,
-  ): Promise<{ executedQty: number; avgPrice: number | null } | null> {
+  ): Promise<KisFill | null> {
     if (!ticker || !orderId) return null
     await KisService.ensureToken()
 
@@ -915,7 +912,7 @@ async function inquireOrderFill(
   accountNo: string,
   ticker: string,
   orderId: string,
-): Promise<{ executedQty: number; avgPrice: number | null } | null> {
+): Promise<KisFill | null> {
   try {
     // 어제~오늘(KST) 을 조회한다. 미국 정규장은 KST 22:30~05:00 이라 한 세션이 항상
     // 한국 날짜 두 개에 걸친다 — 하루만 조회하면 세션의 절반을 놓친다. 실제로 KST
@@ -975,16 +972,21 @@ async function inquireOrderFill(
           (rows.length > 0 ? ` (응답 ODNO: ${seen})` : ` (조회일자 ${startDate}~${endDate}, EXCD ${REST_EXCHANGE_CODES[resolveExchange(ticker)].ovrsExcgCd})`) +
           ' — 미체결(0) 반환',
       )
-      return { executedQty: 0, avgPrice: null }
+      return { executedQty: 0, avgPrice: null, remainingQty: null }
     }
 
     const executedQty = Number(row.tot_ccld_qty ?? row.ft_ccld_qty ?? 0)
     const avgPriceRaw = Number(row.avg_prvs ?? row.ft_ccld_unpr3 ?? 0)
     if (!Number.isFinite(executedQty) || executedQty < 0) return null
 
+    // 미체결 수량. 필드가 없거나 숫자가 아니면 모른다(null)로 둔다 — 0 으로 두면 부분 체결을 완료로 오인한다.
+    const remainingRaw = row.nccs_qty ?? row.NCCS_QTY
+    const remaining = remainingRaw === undefined || remainingRaw === '' ? NaN : Number(remainingRaw)
+
     return {
       executedQty,
       avgPrice: avgPriceRaw > 0 ? avgPriceRaw : null,
+      remainingQty: Number.isFinite(remaining) && remaining >= 0 ? remaining : null,
     }
   } catch (e: unknown) {
     if (isAbortError(e)) {
@@ -993,6 +995,59 @@ async function inquireOrderFill(
     }
     const msg = e instanceof Error ? e.message : 'unknown'
     console.warn('[KisService] inquireCcnl 호출 실패:', msg)
+    return null
+  }
+}
+
+/** 다른 거래소로 다시 묻는 것을 쉬는 시간. 장 외 · 모의 제약으로 원래 비는 종목이 매 사이클 세 번 호출하지 않게 한다. */
+const EXCHANGE_FALLBACK_COOLDOWN_MS = 30 * 60 * 1000
+/** 모든 거래소가 빈 값이었던 종목과 그 시각. */
+const emptyEverywhereAt = new Map<string, number>()
+
+/** 테스트 전용 — 거래소 재시도 기록을 비운다. */
+export function __resetExchangeFallbackForTest(): void {
+  emptyEverywhereAt.clear()
+}
+
+/**
+ * 한 거래소로 현재가(HHDFS00000300)를 조회한다. 빈 시세는 currentPrice 0, 호출 자체가 실패하면 null.
+ * null 이면 다른 거래소로 넘어가지 않는다 — 실패를 빈 시세로 오인해 초당 호출 예산을 더 쓰지 않기 위해서다.
+ */
+async function queryPrice(
+  appKey: string,
+  appSecret: string,
+  ticker: string,
+  exchange: KisExchange,
+  signal: AbortSignal,
+): Promise<{ currentPrice: number; previousClose: number } | null> {
+  try {
+    await kisLimiter.acquire('LOW')
+    const { data } = await kisHttp.get('/uapi/overseas-price/v1/quotations/price', {
+      headers: buildKisHeaders(appKey, appSecret, 'HHDFS00000300'),
+      signal,
+      params: {
+        AUTH: '',
+        EXCD: REST_EXCHANGE_CODES[exchange].excd,
+        SYMB: ticker,
+      },
+    })
+    if (data.rt_cd !== '0') {
+      console.error('[KisService] HHDFS00000300 rt_cd 실패:', data.msg1 || data.msg_cd)
+      return null
+    }
+    const last = Number(data.output?.last ?? 0)
+    const base = Number(data.output?.base ?? 0)
+    return {
+      currentPrice: Number.isFinite(last) && last > 0 ? last : 0,
+      previousClose: Number.isFinite(base) && base > 0 ? base : 0,
+    }
+  } catch (e: any) {
+    // 모드 전환 abort 는 null — 호출자가 0 으로 바꿔 돌려준다 (PricePoller 0 가드와 일관)
+    if (isAbortError(e)) {
+      console.info('[KisService] HHDFS00000300 abort (모드 전환)')
+      return null
+    }
+    console.error('[KisService] HHDFS00000300 현재가 조회 실패:', e?.response?.data?.message ?? e?.message)
     return null
   }
 }
