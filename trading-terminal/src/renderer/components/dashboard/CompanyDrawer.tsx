@@ -27,7 +27,7 @@ import {
   pickChartDirection,
   trimDateLabel,
 } from '../../lib/companyDetailFormatters'
-import { ComingSoon, EmptyState, LoadingBlock } from '../common/StateView'
+import { EmptyState, LoadingBlock } from '../common/StateView'
 import { countdownParts } from '../../lib/callScreen'
 import { flyToNav } from '../../lib/flyToNav'
 
@@ -188,7 +188,6 @@ function BriefContent({ data, livePrice, isWatched, onOpenCall, onClose }: Brief
           )}
         </Section>
 
-        <ComingSoon title="AI 요약" note="지난 콜을 요약하는 기능은 준비 중입니다" className="py-6" />
       </div>
 
       <ActionBar ticker={data.ticker} isWatched={isWatched} onOpenCall={onOpenCall} />
