@@ -38,7 +38,7 @@ export default function CallTimeline({
 
   return (
     <aside
-      className={`relative flex flex-col items-center select-none ${className}`}
+      className={`flex flex-col items-center select-none ${className || 'relative'}`}
       style={style}
       role="group"
       aria-label="콜 시간축 · 직전 콜과 달라진 대목"
