@@ -247,4 +247,16 @@ class StockPriceCacheQuoteTest {
         // 묵은 105.0 으로 넘기지 않고 그대로 둔 채 09:31 시세를 기다린다
         assertThat(snapshotOf("NVDA").previousClose()).isEqualTo(104.5);
     }
+
+    @Test
+    @DisplayName("실시간 체결을 받은 종목만 '최근 체결' 로 본다 — REST 시세는 체결로 치지 않는다")
+    void 최근_체결_종목() {
+        initializeWithoutBars("MSFT", "AAPL", "NVDA");
+        cache.update("MSFT", 520.0);
+        cache.applyQuote("AAPL", 355.0, 350.0, false);
+
+        assertThat(cache.recentlyTicked(List.of("MSFT", "AAPL", "NVDA"), java.time.Duration.ofMinutes(10)))
+                .containsExactly("MSFT");
+        assertThat(cache.recentlyTicked(List.of("MSFT"), java.time.Duration.ZERO.minusMillis(1))).isEmpty();
+    }
 }

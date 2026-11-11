@@ -15,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -36,10 +37,16 @@ import java.util.Optional;
 public class EarningsResultSyncService {
 
     /**
-     * Finnhub `/stock/earnings` 응답에 명시적 발표 시각이 없을 때의 디폴트.
-     * 장중(13:00 UTC ≈ NYSE 09:00 ET) 으로 가정 — 가격반응 계산기가 ±1 영업일 봉 윈도로 보정한다.
+     * 발표일에 붙이는 시각. 발표 시각(장 전 · 장 후)은 모르므로 날짜만 의미가 있다 — 가격반응 계산기는
+     * 발표일 직전 · 직후 거래일 종가를 쓴다.
+     *
+     * <p>12:00 으로 둔다. 예전 동기화는 분기 말일을 13:00 으로 저장했고({@link #isLegacy}), 시각을 다르게 해야
+     * 실제 발표일이 분기 말일인 회사의 행을 예전 행으로 오인하지 않는다.
      */
-    private static final LocalTime DEFAULT_ANNOUNCEMENT_TIME = LocalTime.of(13, 0);
+    static final LocalTime DEFAULT_ANNOUNCEMENT_TIME = LocalTime.of(12, 0);
+    private static final LocalTime LEGACY_TIME = LocalTime.of(13, 0);
+    private static final java.util.Set<java.time.Month> QUARTER_END_MONTHS = java.util.EnumSet.of(
+            java.time.Month.MARCH, java.time.Month.JUNE, java.time.Month.SEPTEMBER, java.time.Month.DECEMBER);
 
     /**
      * surprisePercent 계산 시 BigDecimal divide 에 적용할 scale.
@@ -50,6 +57,7 @@ public class EarningsResultSyncService {
     private final FinnhubClient finnhubClient;
     private final StockRepository stockRepository;
     private final EarningsResultRepository earningsResultRepository;
+    private final EarningsReportDateResolver reportDateResolver;
 
     /**
      * 한 ticker 의 fetchEarningsHistory + (stock_id, announced_at) upsert.
@@ -85,34 +93,81 @@ public class EarningsResultSyncService {
             return 0;
         }
 
+        // 이미 실제 발표일로 저장한 분기는 라벨로 찾아 EPS 만 갱신한다 — 발표일 조회(FMP)는 새 분기가 있을 때만 한다.
+        List<EarningsResult> existing = earningsResultRepository.findByStock_Id(attached.getId());
+        java.util.Map<String, EarningsResult> byLabel = new java.util.HashMap<>();
+        java.util.Set<LocalDate> usedDates = new java.util.HashSet<>();
+        List<EarningsResult> legacy = new java.util.ArrayList<>();
+        for (EarningsResult er : existing) {
+            if (isLegacy(er.getAnnouncedAt())) {
+                legacy.add(er);
+            } else {
+                byLabel.putIfAbsent(er.getFiscalPeriodLabel(), er);
+                usedDates.add(er.getAnnouncedAt().atZone(ZoneOffset.UTC).toLocalDate());
+            }
+        }
+
+        List<EarningsReportDateResolver.Report> reports = null;
         int inserted = 0;
         for (FinnhubEarningsRow row : rows) {
             if (row.period() == null) continue;
-            Instant announcedAt = row.period()
-                    .atTime(DEFAULT_ANNOUNCEMENT_TIME)
-                    .toInstant(ZoneOffset.UTC);
             String fiscalLabel = buildFiscalLabel(row);
             BigDecimal surprisePercent = resolveSurprisePercent(row);
 
-            Optional<EarningsResult> existing = earningsResultRepository
-                    .findByStock_IdAndAnnouncedAt(attached.getId(), announcedAt);
-
-            if (existing.isPresent()) {
-                existing.get().updateActuals(row.epsEstimate(), row.epsActual(), surprisePercent);
-            } else {
-                earningsResultRepository.save(EarningsResult.builder()
-                        .stock(attached)
-                        .announcedAt(announcedAt)
-                        .fiscalPeriodLabel(fiscalLabel)
-                        .epsEstimate(row.epsEstimate())
-                        .epsActual(row.epsActual())
-                        .surprisePercent(surprisePercent)
-                        .priceReactionPercent(null)
-                        .build());
-                inserted++;
+            EarningsResult known = byLabel.get(fiscalLabel);
+            if (known != null) {
+                known.updateActuals(row.epsEstimate(), row.epsActual(), surprisePercent);
+                continue;
             }
+            if (reports == null) {
+                reports = reportDateResolver.reports(ticker, priority);
+            }
+            // period 는 분기 말일이라 발표일로 쓰면 가격반응이 엉뚱한 날짜로 계산된다. 발표일을 못 찾으면 저장하지 않는다.
+            Optional<LocalDate> reportDate =
+                    EarningsReportDateResolver.match(row.period(), row.epsActual(), reports, usedDates);
+            if (reportDate.isEmpty()) {
+                log.info("[EarningsResultSync] 발표일을 찾지 못해 건너뜁니다 ticker={} period={}", ticker, row.period());
+                continue;
+            }
+            usedDates.add(reportDate.get());
+            Instant announcedAt = reportDate.get()
+                    .atTime(DEFAULT_ANNOUNCEMENT_TIME)
+                    .toInstant(ZoneOffset.UTC);
+            EarningsResult saved = earningsResultRepository.save(EarningsResult.builder()
+                    .stock(attached)
+                    .announcedAt(announcedAt)
+                    .fiscalPeriodLabel(fiscalLabel)
+                    .epsEstimate(row.epsEstimate())
+                    .epsActual(row.epsActual())
+                    .surprisePercent(surprisePercent)
+                    .priceReactionPercent(null)
+                    .build());
+            byLabel.put(fiscalLabel, saved);
+            inserted++;
+        }
+
+        // 실제 발표일로 새 행을 넣었을 때만 예전 행을 같은 트랜잭션에서 지운다. 발표일을 하나도 못 찾았으면(FMP 장애 ·
+        // 한도) 예전 행을 그대로 두어, 화면이 비지 않고 다음 동기화에서 다시 바로잡는다.
+        if (inserted > 0 && !legacy.isEmpty()) {
+            earningsResultRepository.deleteAll(legacy);
+            log.info("[EarningsResultSync] 분기 말일로 저장된 예전 행 {}건을 지웠습니다 ticker={}", legacy.size(), ticker);
         }
         return inserted;
+    }
+
+    /**
+     * 예전 동기화가 Finnhub period(분기 말일)를 발표일로 쓴 행인지. 분기 말일(3 · 6 · 9 · 12월 말일) 13:00 UTC.
+     * 지금 동기화는 실제 발표일을 12:00 으로 저장하므로 겹치지 않는다.
+     */
+    public static boolean isLegacy(Instant announcedAt) {
+        if (announcedAt == null) {
+            return false;
+        }
+        java.time.ZonedDateTime at = announcedAt.atZone(ZoneOffset.UTC);
+        LocalDate date = at.toLocalDate();
+        return at.toLocalTime().equals(LEGACY_TIME)
+                && QUARTER_END_MONTHS.contains(date.getMonth())
+                && date.getDayOfMonth() == date.lengthOfMonth();
     }
 
     /**
@@ -138,14 +193,17 @@ public class EarningsResultSyncService {
     /**
      * fiscalPeriodLabel 결정.
      *
-     * <p>"Q{n} FY{yy}" 형태. quarter 가 응답에 있으면 그대로, 없으면 period 의 월에서 derive.
-     * fiscal year 정보가 응답에 별도로 없어 calendar year 의 2자리 사용.
-     * (정확한 fiscal year 매핑은 ai-engine 영역 — 본 phase 는 derived label 만 제공.)
+     * <p>"Q{n} FY{yy}" 형태. quarter · year(회계연도)가 응답에 있으면 그대로 쓰고,
+     * year 가 없을 때만 period 의 달력 연도로 대신한다.
      */
     static String buildFiscalLabel(FinnhubEarningsRow row) {
         String quarter = row.quarterLabel();
         if (quarter == null) {
             quarter = "Q?";
+        }
+        // 회계연도가 오면 그대로 쓴다. 달력 연도로 대신하면 6월 결산(MSFT) · 1월 결산(WMT) 회사의 라벨이 1년 틀린다.
+        if (row.year() != null) {
+            return String.format("%s FY%02d", quarter, row.year() % 100);
         }
         if (row.period() == null) {
             return quarter + " FY??";

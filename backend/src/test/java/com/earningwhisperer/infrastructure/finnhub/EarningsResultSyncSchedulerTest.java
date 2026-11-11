@@ -39,6 +39,8 @@ class EarningsResultSyncSchedulerTest {
 
     @Mock private EarningsResultSyncService earningsResultSyncService;
     @Mock private WatchlistRepository watchlistRepository;
+    @Mock private com.earningwhisperer.domain.portfolio.PositionRepository positionRepository;
+    @Mock private com.earningwhisperer.domain.stock.StockRepository stockRepository;
 
     @InjectMocks
     private EarningsResultSyncScheduler scheduler;
@@ -144,7 +146,7 @@ class EarningsResultSyncSchedulerTest {
 
         verify(earningsResultSyncService, never()).syncTicker(any(), any(), any());
         assertThat(latestEvent().getLevel()).isEqualTo(Level.INFO);
-        assertThat(latestEvent().getFormattedMessage()).contains("관심종목 비어있음");
+        assertThat(latestEvent().getFormattedMessage()).contains("관심 · 보유 종목 비어있음");
     }
 
     // ─────────── helpers ───────────

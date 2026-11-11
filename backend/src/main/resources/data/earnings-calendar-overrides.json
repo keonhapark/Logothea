@@ -1,5 +1,5 @@
 {
-  "verifiedOn": "2026-11-11",
+  "verifiedOn": "2026-11-12",
   "entries": [
     {
       "ticker": "CSCO",
@@ -58,6 +58,36 @@
       "sourceUrl": "https://www.adobe.com/investor-relations/events-presentations.html"
     },
     {
+      "ticker": "COST",
+      "scheduledAt": "2026-12-10T22:00:00Z",
+      "marketSession": "amc",
+      "confirmed": false,
+      "replaces": [
+        "2026-12-10T00:00:00Z"
+      ],
+      "sourceUrl": "https://finviz.com/news/395411/costco-wholesale-corporation-reports-fourth-quarter-and-fiscal-year-2026-operating-results"
+    },
+    {
+      "ticker": "NKE",
+      "scheduledAt": "2026-12-17T22:00:00Z",
+      "marketSession": "amc",
+      "confirmed": false,
+      "replaces": [
+        "2026-12-17T00:00:00Z"
+      ],
+      "sourceUrl": "https://www.barchart.com/story/news/4328265/nike-inc-announces-first-quarter-fiscal-2027-earnings-and-conference-call"
+    },
+    {
+      "ticker": "JPM",
+      "scheduledAt": "2027-01-14T13:30:00Z",
+      "marketSession": "bmo",
+      "confirmed": true,
+      "replaces": [
+        "2027-01-14T00:00:00Z"
+      ],
+      "sourceUrl": "https://www.jpmorganchase.com/ir/news/2025/jpmc-announces-conference-calls-to-review-first-quarter-second-quarter-third-quarter-and-fourth-quarter-2026-earnings"
+    },
+    {
       "ticker": "WFC",
       "scheduledAt": "2027-01-14T15:00:00Z",
       "marketSession": "dmh",
@@ -83,6 +113,347 @@
         "2027-01-15T00:00:00Z"
       ],
       "sourceUrl": "https://newsroom.bankofamerica.com/content/newsroom/press-releases/2026/03/bank-of-america-announces-fourth-quarter-2026-and-quarterly-2027"
+    },
+    {
+      "ticker": "GS",
+      "scheduledAt": "2027-01-19T14:30:00Z",
+      "marketSession": "dmh",
+      "confirmed": false,
+      "replaces": [
+        "2027-01-19T00:00:00Z"
+      ],
+      "sourceUrl": "https://www.sec.gov/Archives/edgar/data/0000886982/000088698226000529/gs-20261013.htm"
+    },
+    {
+      "ticker": "NFLX",
+      "scheduledAt": "2027-01-19T21:45:00Z",
+      "marketSession": "amc",
+      "confirmed": false,
+      "replaces": [
+        "2027-01-19T00:00:00Z"
+      ],
+      "sourceUrl": "https://s22.q4cdn.com/959853165/files/content_files/Netflix-Inc-_Earnings-Call_2026-10-20_English.pdf"
+    },
+    {
+      "ticker": "UNH",
+      "scheduledAt": "2027-01-20T13:00:00Z",
+      "marketSession": "bmo",
+      "confirmed": false,
+      "replaces": [
+        "2027-01-20T00:00:00Z"
+      ],
+      "sourceUrl": "https://finviz.com/news/401499/unitedhealth-group-reports-third-quarter-2026-results"
+    },
+    {
+      "ticker": "GE",
+      "scheduledAt": "2027-01-21T12:30:00Z",
+      "marketSession": "bmo",
+      "confirmed": false,
+      "replaces": [
+        "2027-01-21T00:00:00Z"
+      ],
+      "sourceUrl": "https://www.geaerospace.com/investor-relations/events-reports/ge-aerospace-3rd-quarter-2026-earnings-webcast"
+    },
+    {
+      "ticker": "GM",
+      "scheduledAt": "2027-01-26T13:30:00Z",
+      "marketSession": "bmo",
+      "confirmed": false,
+      "replaces": [
+        "2027-01-26T00:00:00Z",
+        "2027-01-27T00:00:00Z"
+      ],
+      "sourceUrl": "https://www.sec.gov/Archives/edgar/data/0001467858/000146785826000056/gmq32026pressreleaseandfin.htm"
+    },
+    {
+      "ticker": "JNJ",
+      "scheduledAt": "2027-01-26T13:30:00Z",
+      "marketSession": "bmo",
+      "confirmed": false,
+      "replaces": [
+        "2027-01-20T00:00:00Z",
+        "2027-01-26T00:00:00Z"
+      ],
+      "sourceUrl": "https://www.jnj.com/media-center/press-releases/johnson-johnson-host-investor-conference-call-on-third-quarter-results"
+    },
+    {
+      "ticker": "LMT",
+      "scheduledAt": "2027-01-26T13:30:00Z",
+      "marketSession": "bmo",
+      "confirmed": false,
+      "replaces": [
+        "2027-01-26T00:00:00Z"
+      ],
+      "sourceUrl": "https://news.lockheedmartin.com/2026-10-01-Lockheed-Martin-Announces-Third-Quarter-2026-Earnings-Results-Webcast"
+    },
+    {
+      "ticker": "HCA",
+      "scheduledAt": "2027-01-26T15:00:00Z",
+      "marketSession": "dmh",
+      "confirmed": false,
+      "replaces": [
+        "2027-01-26T00:00:00Z"
+      ],
+      "sourceUrl": "https://finviz.com/news/397389/hca-healthcare-inc-3rd-quarter-2026-earnings-conference-call"
+    },
+    {
+      "ticker": "BA",
+      "scheduledAt": "2027-01-26T15:30:00Z",
+      "marketSession": "dmh",
+      "confirmed": false,
+      "replaces": [
+        "2027-01-26T00:00:00Z"
+      ],
+      "sourceUrl": "https://investors.boeing.com/investors/news/press-release-details/2026/Boeing-to-Release-Third-Quarter-Results-on-October-27/default.aspx"
+    },
+    {
+      "ticker": "T",
+      "scheduledAt": "2027-01-27T13:30:00Z",
+      "marketSession": "bmo",
+      "confirmed": false,
+      "replaces": [
+        "2027-01-27T00:00:00Z"
+      ],
+      "sourceUrl": "https://about.att.com/story/2026/q3-earnings-reminder.html"
+    },
+    {
+      "ticker": "SBUX",
+      "scheduledAt": "2027-01-27T21:15:00Z",
+      "marketSession": "amc",
+      "confirmed": false,
+      "replaces": [
+        "2027-01-27T00:00:00Z"
+      ],
+      "sourceUrl": "https://s203.q4cdn.com/326826266/files/content_files/Q4-FY26-SBUX-Transcript.pdf"
+    },
+    {
+      "ticker": "META",
+      "scheduledAt": "2027-01-27T21:30:00Z",
+      "marketSession": "amc",
+      "confirmed": false,
+      "replaces": [
+        "2027-01-27T00:00:00Z"
+      ],
+      "sourceUrl": "https://investor.atmeta.com/investor-news/press-release-details/2026/Meta-Reports-Third-Quarter-2026-Results/default.aspx"
+    },
+    {
+      "ticker": "MSFT",
+      "scheduledAt": "2027-01-27T22:30:00Z",
+      "marketSession": "amc",
+      "confirmed": false,
+      "replaces": [
+        "2027-01-26T00:00:00Z",
+        "2027-01-27T00:00:00Z"
+      ],
+      "sourceUrl": "https://www.microsoft.com/en-us/investor/earnings/FY-2027-Q1/press-release-webcast"
+    },
+    {
+      "ticker": "TSLA",
+      "scheduledAt": "2027-01-27T22:30:00Z",
+      "marketSession": "amc",
+      "confirmed": false,
+      "replaces": [
+        "2027-01-27T00:00:00Z"
+      ],
+      "sourceUrl": "https://www.sec.gov/Archives/edgar/data/0001318605/000162828026064366/exhibit991111111.htm"
+    },
+    {
+      "ticker": "AAPL",
+      "scheduledAt": "2027-01-28T22:00:00Z",
+      "marketSession": "amc",
+      "confirmed": false,
+      "replaces": [
+        "2027-02-04T00:00:00Z"
+      ],
+      "sourceUrl": "https://www.apple.com/newsroom/2026/11/apple-reports-fourth-quarter-results/"
+    },
+    {
+      "ticker": "INTC",
+      "scheduledAt": "2027-01-28T22:00:00Z",
+      "marketSession": "amc",
+      "confirmed": false,
+      "replaces": [
+        "2027-01-28T00:00:00Z"
+      ],
+      "sourceUrl": "https://www.intc.com/news-events/press-releases/detail/1786/intel-reports-third-quarter-2026-financial-results"
+    },
+    {
+      "ticker": "V",
+      "scheduledAt": "2027-01-28T22:00:00Z",
+      "marketSession": "amc",
+      "confirmed": false,
+      "replaces": [
+        "2027-01-28T00:00:00Z"
+      ],
+      "sourceUrl": "https://investor.visa.com/news/news-details/2026/Visa-Fiscal-Fourth-Quarter-and-Full-Year-2026-Financial-Results/default.aspx"
+    },
+    {
+      "ticker": "VZ",
+      "scheduledAt": "2027-01-29T13:30:00Z",
+      "marketSession": "bmo",
+      "confirmed": false,
+      "replaces": [
+        "2027-01-29T00:00:00Z"
+      ],
+      "sourceUrl": "https://www.verizon.com/about/news/verizon-q3-2026-earnings-report-date"
+    },
+    {
+      "ticker": "XOM",
+      "scheduledAt": "2027-01-29T14:30:00Z",
+      "marketSession": "dmh",
+      "confirmed": false,
+      "replaces": [
+        "2027-01-29T00:00:00Z"
+      ],
+      "sourceUrl": "https://investor.exxonmobil.com/company-information/press-releases/detail/1212/exxonmobil-to-release-third-quarter-2026-financial-results"
+    },
+    {
+      "ticker": "CVX",
+      "scheduledAt": "2027-01-29T16:00:00Z",
+      "marketSession": "dmh",
+      "confirmed": false,
+      "replaces": [
+        "2027-01-29T00:00:00Z"
+      ],
+      "sourceUrl": "https://investingnews.com/advisory-chevron-corporation-s-3q-2026-earnings-conference-call-and-webcast/"
+    },
+    {
+      "ticker": "PLTR",
+      "scheduledAt": "2027-02-01T22:00:00Z",
+      "marketSession": "amc",
+      "confirmed": false,
+      "replaces": [
+        "2027-02-01T00:00:00Z"
+      ],
+      "sourceUrl": "https://www.sec.gov/Archives/edgar/data/0001321655/000132165526000045/a2026q3ex991pressrelease.htm"
+    },
+    {
+      "ticker": "PYPL",
+      "scheduledAt": "2027-02-02T13:00:00Z",
+      "marketSession": "bmo",
+      "confirmed": false,
+      "replaces": [
+        "2027-02-02T00:00:00Z"
+      ],
+      "sourceUrl": "https://newsroom.paypal-corp.com/2026-10-27-PayPal-Reports-Third-Quarter-2026-Results"
+    },
+    {
+      "ticker": "PEP",
+      "scheduledAt": "2027-02-02T13:15:00Z",
+      "marketSession": "bmo",
+      "confirmed": false,
+      "replaces": [
+        "2027-02-02T00:00:00Z"
+      ],
+      "sourceUrl": "https://www.pepsico.com/newsroom/press-releases/2026/pepsico-announces-timing-and-availability-of-third-quarter-2026-financial-results"
+    },
+    {
+      "ticker": "PFE",
+      "scheduledAt": "2027-02-02T15:00:00Z",
+      "marketSession": "dmh",
+      "confirmed": false,
+      "replaces": [
+        "2027-02-02T00:00:00Z"
+      ],
+      "sourceUrl": "https://s206.q4cdn.com/795948973/files/doc_events/2026/Nov/03/Pfizer-Invites-Public-Q3-2026-Earnings_FINAL.pdf"
+    },
+    {
+      "ticker": "AMD",
+      "scheduledAt": "2027-02-02T22:00:00Z",
+      "marketSession": "amc",
+      "confirmed": false,
+      "replaces": [
+        "2027-02-02T00:00:00Z"
+      ],
+      "sourceUrl": "https://mfn.se/all/a/advanced-micro-devices/amd-reports-third-quarter-2026-financial-results-f24509e4"
+    },
+    {
+      "ticker": "FDX",
+      "scheduledAt": "2027-02-02T22:30:00Z",
+      "marketSession": "amc",
+      "confirmed": false,
+      "replaces": [
+        "2027-02-02T00:00:00Z"
+      ],
+      "sourceUrl": "https://www.financialcontent.com/article/bizwire-2026-10-28-fedex-reports-strong-third-quarter-results"
+    },
+    {
+      "ticker": "UBER",
+      "scheduledAt": "2027-02-03T13:00:00Z",
+      "marketSession": "bmo",
+      "confirmed": false,
+      "replaces": [
+        "2027-02-03T00:00:00Z"
+      ],
+      "sourceUrl": "https://s23.q4cdn.com/407969754/files/doc_events/2026/Nov/04/Uber-Q3-Earnings-Call-Transcript.pdf"
+    },
+    {
+      "ticker": "ABBV",
+      "scheduledAt": "2027-02-03T14:00:00Z",
+      "marketSession": "bmo",
+      "confirmed": false,
+      "replaces": [
+        "2027-02-03T00:00:00Z"
+      ],
+      "sourceUrl": "https://news.abbvie.com/2026-10-01-AbbVie-to-Host-Third-Quarter-2026-Earnings-Conference-Call"
+    },
+    {
+      "ticker": "GOOGL",
+      "scheduledAt": "2027-02-03T21:30:00Z",
+      "marketSession": "amc",
+      "confirmed": false,
+      "replaces": [
+        "2027-02-03T00:00:00Z"
+      ],
+      "sourceUrl": "https://s206.q4cdn.com/479360582/files/doc_events/2026/Oct/28/2026_Q3_Earnings_Transcript.pdf"
+    },
+    {
+      "ticker": "CARR",
+      "scheduledAt": "2027-02-04T12:30:00Z",
+      "marketSession": "bmo",
+      "confirmed": false,
+      "replaces": [
+        "2027-02-04T00:00:00Z"
+      ],
+      "sourceUrl": "https://www.carrier.com/us/en/news/corporate/2026/carrierthird-quarter-2026-earnings-advisory/"
+    },
+    {
+      "ticker": "LLY",
+      "scheduledAt": "2027-02-04T15:00:00Z",
+      "marketSession": "dmh",
+      "confirmed": false,
+      "replaces": [],
+      "sourceUrl": "https://lilly.gcs-web.com/events/event-details/q3-2026-earnings-call"
+    },
+    {
+      "ticker": "AMZN",
+      "scheduledAt": "2027-02-04T22:00:00Z",
+      "marketSession": "amc",
+      "confirmed": false,
+      "replaces": [
+        "2027-02-04T00:00:00Z"
+      ],
+      "sourceUrl": "https://ir.aboutamazon.com/events/event-details/2026/Q3-2026-Amazoncom-Inc-Earnings-Conference-Call/default.aspx"
+    },
+    {
+      "ticker": "KO",
+      "scheduledAt": "2027-02-09T13:30:00Z",
+      "marketSession": "bmo",
+      "confirmed": false,
+      "replaces": [
+        "2027-02-09T00:00:00Z"
+      ],
+      "sourceUrl": "https://investors.coca-colacompany.com/news-events/events/detail/20261027-3rd-quarter-2026-earnings-call"
+    },
+    {
+      "ticker": "F",
+      "scheduledAt": "2027-02-09T22:00:00Z",
+      "marketSession": "amc",
+      "confirmed": false,
+      "replaces": [
+        "2027-02-09T00:00:00Z"
+      ],
+      "sourceUrl": "https://finviz.com/news/410535/ford-reports-third-quarter-2026-financial-results"
     }
   ]
 }

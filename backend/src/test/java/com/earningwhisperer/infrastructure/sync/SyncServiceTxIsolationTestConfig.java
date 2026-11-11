@@ -8,6 +8,7 @@ import com.earningwhisperer.domain.stock.DailyBarRepository;
 import com.earningwhisperer.domain.stock.Stock;
 import com.earningwhisperer.domain.stock.StockMetaRepository;
 import com.earningwhisperer.domain.stock.StockRepository;
+import com.earningwhisperer.infrastructure.finnhub.EarningsReportDateResolver;
 import com.earningwhisperer.infrastructure.finnhub.EarningsResultSyncService;
 import com.earningwhisperer.infrastructure.finnhub.FinnhubClient;
 import com.earningwhisperer.infrastructure.fmp.DailyBarSyncService;
@@ -95,6 +96,12 @@ public class SyncServiceTxIsolationTestConfig {
     public EarningsResultSyncService earningsResultSyncService(FinnhubClient finnhubClient,
                                                                StockRepository stockRepository,
                                                                EarningsResultRepository earningsResultRepository) {
-        return new EarningsResultSyncService(finnhubClient, stockRepository, earningsResultRepository);
+        // 이 설정이 검증하는 것은 트랜잭션 격리다. 테스트의 period(2026-03-31 · 2025-12-31) 뒤 발표일을 고정으로 준다.
+        EarningsReportDateResolver resolver = org.mockito.Mockito.mock(EarningsReportDateResolver.class);
+        org.mockito.Mockito.when(resolver.reports(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.any()))
+                .thenReturn(java.util.List.of(
+                        new EarningsReportDateResolver.Report(java.time.LocalDate.of(2026, 4, 20), null),
+                        new EarningsReportDateResolver.Report(java.time.LocalDate.of(2026, 1, 20), null)));
+        return new EarningsResultSyncService(finnhubClient, stockRepository, earningsResultRepository, resolver);
     }
 }

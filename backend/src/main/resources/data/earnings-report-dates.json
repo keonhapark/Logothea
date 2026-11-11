@@ -1,0 +1,12 @@
+{
+  "verifiedOn": "2026-11-12",
+  "note": "FMP 무료 등급에서 발표 이력을 주지 않는 종목의 실제 발표일. EPS 는 non-GAAP(Finnhub actual 과 같은 기준).",
+  "tickers": {
+    "LLY": [
+      { "date": "2026-10-29", "epsActual": 7.48, "sourceUrl": "https://www.sec.gov/Archives/edgar/data/0000059478/000005947826000104/q326lillysalesandearningsp.htm" },
+      { "date": "2026-08-05", "epsActual": 8.38, "sourceUrl": "https://www.biospace.com/press-releases/lilly-reports-second-quarter-2026-financial-results-raises-full-year-guidance-and-highlights-continued-growth-and-pipeline-progress" },
+      { "date": "2026-04-30", "epsActual": 8.55, "sourceUrl": "https://investor.lilly.com/news-releases/news-release-details/lilly-reports-first-quarter-2026-financial-results-raises-full" },
+      { "date": "2026-02-04", "epsActual": 7.54, "sourceUrl": "https://seekingalpha.com/pr/20387250" }
+    ]
+  }
+}

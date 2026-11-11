@@ -81,8 +81,12 @@ public class EarningsCalendarOverrides {
 
     private record Document(String verifiedOn, List<Entry> entries) {}
 
+    /**
+     * @param confirmed 회사가 날짜 · 시각을 공식 발표했는지. 생략하면 true. 아직 발표 전이라 직전 콜 시각과 업체 예상
+     *                  날짜로 채운 행사는 false 로 두어 화면이 "예상" 으로 보이게 한다.
+     */
     public record Entry(String ticker, Instant scheduledAt, String marketSession,
-                        List<Instant> replaces, String sourceUrl) {
+                        List<Instant> replaces, String sourceUrl, Boolean confirmed) {
         public Entry {
             if (ticker == null || !ticker.matches("[A-Z][A-Z0-9.\\-]{0,9}")) {
                 throw new IllegalArgumentException("A valid uppercase ticker is required");
@@ -101,6 +105,15 @@ public class EarningsCalendarOverrides {
                 throw new IllegalArgumentException("Source must be an HTTPS URL without credentials");
             }
             replaces = List.copyOf(replaces);
+        }
+
+        public Entry(String ticker, Instant scheduledAt, String marketSession,
+                     List<Instant> replaces, String sourceUrl) {
+            this(ticker, scheduledAt, marketSession, replaces, sourceUrl, null);
+        }
+
+        public boolean isConfirmed() {
+            return confirmed == null || confirmed;
         }
     }
 }

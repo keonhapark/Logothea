@@ -12,6 +12,8 @@ import org.springframework.core.io.ClassPathResource;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -21,22 +23,24 @@ class EarningsCalendarOverridesTest {
     private final ObjectMapper mapper = new ObjectMapper().registerModule(new JavaTimeModule());
 
     @Test
-    void packagedDataContainsOnlyTheNineReviewedCompanies() {
+    void packagedDataKeepsTheNineOfficialCallsAndMarksEstimatesUnconfirmed() {
         EarningsCalendarOverrides overrides = new EarningsCalendarOverrides(mapper, true);
 
-        assertThat(overrides.entries()).extracting(EarningsCalendarOverrides.Entry::ticker)
-                .containsExactly("CSCO", "DIS", "NVDA", "TGT", "WMT", "ADBE", "WFC", "C", "BAC");
-        assertThat(overrides.entries()).extracting(EarningsCalendarOverrides.Entry::scheduledAt)
-                .containsExactly(
-                        Instant.parse("2026-11-12T21:30:00Z"),
-                        Instant.parse("2026-11-17T13:30:00Z"),
-                        Instant.parse("2026-11-17T22:00:00Z"),
-                        Instant.parse("2026-11-18T13:00:00Z"),
-                        Instant.parse("2026-11-19T13:00:00Z"),
-                        Instant.parse("2026-12-09T22:00:00Z"),
-                        Instant.parse("2027-01-14T15:00:00Z"),
-                        Instant.parse("2027-01-14T16:00:00Z"),
-                        Instant.parse("2027-01-15T13:30:00Z"));
+        Map<String, EarningsCalendarOverrides.Entry> byTicker = overrides.entries().stream()
+                .collect(Collectors.toMap(EarningsCalendarOverrides.Entry::ticker, e -> e));
+        // 2026-11-11 에 공식 IR 로 확인한 9건은 그대로다.
+        Map<String, String> official = Map.of(
+                "CSCO", "2026-11-12T21:30:00Z", "DIS", "2026-11-17T13:30:00Z", "NVDA", "2026-11-17T22:00:00Z",
+                "TGT", "2026-11-18T13:00:00Z", "WMT", "2026-11-19T13:00:00Z", "ADBE", "2026-12-09T22:00:00Z",
+                "WFC", "2027-01-14T15:00:00Z", "C", "2027-01-14T16:00:00Z", "BAC", "2027-01-15T13:30:00Z");
+        official.forEach((ticker, utc) -> {
+            assertThat(byTicker.get(ticker).scheduledAt()).isEqualTo(Instant.parse(utc));
+            assertThat(byTicker.get(ticker).isConfirmed()).isTrue();
+        });
+        // 2026-11-12 에 추가한 행사는 공식 발표가 확인된 JPM 만 확정이고 나머지는 직전 콜 시각으로 채운 예상이다.
+        assertThat(byTicker.get("JPM").isConfirmed()).isTrue();
+        assertThat(byTicker.get("COST").isConfirmed()).isFalse();
+        assertThat(overrides.entries()).hasSize(46);
         for (EarningsCalendarOverrides.Entry entry : overrides.entries()) {
             assertThat(overrides.find(entry.ticker(), entry.scheduledAt())).contains(entry);
             for (Instant replaced : entry.replaces()) {
@@ -54,8 +58,8 @@ class EarningsCalendarOverridesTest {
         assertThat(overrides.find("DIS", Instant.parse("2026-11-12T00:00:00.001Z"))).isEmpty();
         assertThat(overrides.find("DIS", Instant.parse("2026-11-17T13:30:01Z"))).isEmpty();
         assertThat(overrides.find("dis", Instant.parse("2026-11-12T00:00:00Z"))).isEmpty();
-        assertThat(overrides.find("COST", Instant.parse("2026-12-10T00:00:00Z"))).isEmpty();
-        assertThat(overrides.find("NKE", Instant.parse("2026-12-17T00:00:00Z"))).isEmpty();
+        assertThat(overrides.find("MMM", Instant.parse("2026-12-10T00:00:00Z"))).isEmpty();
+        assertThat(overrides.find("ORCL", Instant.parse("2026-12-17T00:00:00Z"))).isEmpty();
         assertThat(overrides.find("AMAT", Instant.parse("2026-11-12T00:00:00Z"))).isEmpty();
         assertThat(overrides.find(null, Instant.parse("2026-11-12T00:00:00Z"))).isEmpty();
         assertThat(overrides.find("DIS", null)).isEmpty();

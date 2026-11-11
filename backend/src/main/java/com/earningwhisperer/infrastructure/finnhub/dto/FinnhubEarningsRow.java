@@ -43,8 +43,17 @@ public record FinnhubEarningsRow(
         @JsonProperty("surprisePercent") BigDecimal surprisePercent,
 
         /** Finnhub 응답상 숫자(1~4). 응답에 없으면 null — 호출자는 period 에서 derive 가능. */
-        @JsonProperty("quarter") Integer quarter
+        @JsonProperty("quarter") Integer quarter,
+
+        /** 회계연도. MSFT 2026-09-30 분기는 year=2027 (FY27 Q1) 처럼 달력 연도와 다를 수 있다. */
+        @JsonProperty("year") Integer year
 ) {
+
+    /** 회계연도 없이 만드는 생성자(테스트 · 이전 응답 호환). */
+    public FinnhubEarningsRow(String symbol, LocalDate period, BigDecimal epsActual, BigDecimal epsEstimate,
+                              BigDecimal surprise, BigDecimal surprisePercent, Integer quarter) {
+        this(symbol, period, epsActual, epsEstimate, surprise, surprisePercent, quarter, null);
+    }
 
     /** "Q{n}" 형태 분기 라벨. quarter 가 null 이면 period 의 월에서 derive (1~3=Q1, ..., 10~12=Q4). */
     public String quarterLabel() {

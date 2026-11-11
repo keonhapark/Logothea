@@ -19,6 +19,9 @@ public interface EarningsResultRepository extends JpaRepository<EarningsResult, 
      */
     List<EarningsResult> findByPriceReactionPercentIsNullAndAnnouncedAtAfter(Instant threshold);
 
+    /** 한 종목의 모든 어닝 결과. 동기화가 분기 라벨로 기존 행을 찾고, 예전 방식으로 저장된 행을 가려낸다. */
+    List<EarningsResult> findByStock_Id(Long stockId);
+
     /** Upsert 용 — (stock_id, announced_at) unique constraint 매칭. */
     Optional<EarningsResult> findByStock_IdAndAnnouncedAt(Long stockId, Instant announcedAt);
 }
