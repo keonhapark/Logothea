@@ -555,6 +555,71 @@ DROP TABLE portfolio_settings;
 
 ---
 
+### 5-5. 시연용 어닝 일정 보정 (2026-11-11)
+
+`main`의 새 백엔드를 빌드·재배포하면 기동 중 `EarningsCalendarStartup`이
+`backend/src/main/resources/data/earnings-calendar-overrides.json`을 읽어 팀 백엔드의
+`earnings_calendar`를 보정합니다. 별도 SQL 실행이나 새 API 키는 필요하지 않습니다.
+FMP 키가 없거나 외부 일정 API가 응답하지 않아도 이 보정은 실행됩니다.
+
+대상은 공식 IR에서 확인한 **이번 9개 행사**입니다. UTC 자정으로 저장된 잘못된 시각을
+공식 시각으로 바꾸고 DIS·NVDA의 명시된 중복만 합칩니다. 이미 공식 시각 행이 있으면
+그 ID와 예상 EPS·매출을 우선 보존하고, 값이 비었을 때만 중복 행에서 보충합니다.
+이후 FMP가 같은 날짜 별칭을 다시 보내도 해당 행사만 공식 시각으로 저장합니다.
+다른 종목, 명시하지 않은 날짜, 다음 분기 수집은 기존대로 동작합니다.
+
+| 종목 | 표시될 한국 시각 |
+|---|---|
+| CSCO | 2026-11-13 06:30 |
+| DIS | 2026-11-17 22:30 |
+| NVDA | 2026-11-18 07:00 |
+| TGT | 2026-11-18 22:00 |
+| WMT | 2026-11-19 22:00 |
+| ADBE | 2026-12-10 07:00 |
+| WFC | 2027-01-15 00:00 |
+| C | 2027-01-15 01:00 |
+| BAC | 2027-01-15 22:30 |
+
+출처와 정확한 기존 날짜 목록은 JSON 안에 있습니다. 실적 자료 공개 시각과 콜 시각을
+혼동하지 않습니다. WFC는 공식 IR의 예정 실적 이벤트 시각이며 별도 방송 링크까지 검증한 것은
+아닙니다. COST·NKE는 정확한 시각을 확인하지 못해 제외했고, AMAT는 기존 화면에 없어서
+추가하지 않았습니다. 화면의 다른 09:00 표기는 이번 보정의 범위 밖입니다.
+
+재배포 전에는 기존 운영 DB 백업을 보관합니다. 접근이 설정된 개발 PC의 최신 `main`에서
+기존 배포 스크립트를 사용할 수 있습니다. 이 스크립트는 로컬 JDK 17로 jar를 빌드해
+EC2로 전송합니다. EC2에서 직접 빌드하는 환경은 [5-1](#5-1-backend)의 jar 교체 절차를 따릅니다.
+
+```bash
+git pull --ff-only origin main
+./infra/deploy.sh backend
+```
+
+배포 후 서버에서 이번 시작 시점 이후의 로그를 확인합니다.
+
+```bash
+journalctl -u earning-whisperer-backend --since '10 minutes ago' --no-pager \
+  | grep 'EarningsCalendarCorrection'
+```
+
+`startup complete`와 `checked=9 available=9 missing=0`가 나와야 합니다. `stock_missing`이면
+해당 종목이 `stocks`에 없어 건너뛴 것이므로, 종목 동기화 후 다시 시작하거나 다음 해당
+FMP 일정 수집을 확인합니다. 보정은 재실행해도 같은 ID·시각을 유지합니다. 새 DB에서는
+기존 종목에 대해서만 공식 일정 행을 생성하며, 종목 자체를 임의로 만들지 않습니다.
+
+`/actuator/health`가 정상인지 확인한 뒤 로그인한 클라이언트에서
+`GET /api/v1/earnings-calendar/terminal-timeline?days=90`을 조회하고 화면을 새로고침합니다.
+각 종목의 이번 행사가 하나씩이며 위 한국 시각으로 표시되어야 합니다. 콜이 지난 뒤
+미래 일정 조회에서 사라지는 것은 정상입니다. 단순 프로세스 재시작만으로는 코드가 갱신되지
+않으므로 반드시 새 jar를 배포합니다.
+
+긴급히 보정을 끄려면 서버의 `backend.env`에
+`EARNINGS_CALENDAR_DEMO_OVERRIDES_ENABLED='false'`를 설정하고 재시작합니다. 기본은 `true`입니다.
+끄는 것은 이후 보정만 중단하며 이미 변경한 DB를 되돌리지는 않습니다. 트랜잭션 중 실패하면
+그 변경은 롤백되고 시작 실패가 기록됩니다. 적용 후 과거 상태로 되돌릴 때는 배포 전 백업을
+사용해야 합니다. 영구 자동 일정 탐색 기능이 마련되면 이 행사별 임시 보정표를 제거할 수 있습니다.
+
+---
+
 ## 6. 근거 데이터 (Qdrant)
 
 팩트체크가 참조하는 근거 뉴스 395건이 Qdrant 컬렉션 `earningwhisperer_evidence` 에 들어 있습니다.

@@ -57,6 +57,11 @@ fmp:
   base-url: https://financialmodelingprep.com
   api-key: ${FMP_API_KEY:}       # 미설정 시 S&P 500 분기 동기화 스케줄러 비활성화
 
+earnings-calendar:
+  demo-overrides:
+    # 공식 확인한 특정 행사만 기동 시 보정. FMP/다른 종목 수집은 그대로 유지한다.
+    enabled: ${EARNINGS_CALENDAR_DEMO_OVERRIDES_ENABLED:true}
+
 ai-engine:
   # 실시간 어닝콜 팩트체크 (Contract 9). 같은 인스턴스에 올릴 경우 localhost.
   base-url: ${AI_ENGINE_BASE_URL:http://localhost:8000}

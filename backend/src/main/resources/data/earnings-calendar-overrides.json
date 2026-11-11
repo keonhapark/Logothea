@@ -1,0 +1,88 @@
+{
+  "verifiedOn": "2026-11-11",
+  "entries": [
+    {
+      "ticker": "CSCO",
+      "scheduledAt": "2026-11-12T21:30:00Z",
+      "marketSession": "amc",
+      "replaces": [
+        "2026-11-12T00:00:00Z"
+      ],
+      "sourceUrl": "https://investor.cisco.com/news/news-details/2026/Cisco-Schedules-Conference-Call-for-Q1-Fiscal-Year-2027-Financial-Results/default.aspx"
+    },
+    {
+      "ticker": "DIS",
+      "scheduledAt": "2026-11-17T13:30:00Z",
+      "marketSession": "bmo",
+      "replaces": [
+        "2026-11-12T00:00:00Z",
+        "2026-11-17T00:00:00Z"
+      ],
+      "sourceUrl": "https://investor.thewaltdisneycompany.com/news/news-details/2026/The-Walt-Disney-Company-Executives-to-Discuss-Fiscal-Full-Year-and-Fourth-Quarter-2026-Financial-Results-via-Webcast/default.aspx"
+    },
+    {
+      "ticker": "NVDA",
+      "scheduledAt": "2026-11-17T22:00:00Z",
+      "marketSession": "amc",
+      "replaces": [
+        "2026-11-17T00:00:00Z",
+        "2026-11-18T00:00:00Z"
+      ],
+      "sourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Sets-Conference-Call-for-Third-Quarter-Financial-Results/default.aspx"
+    },
+    {
+      "ticker": "TGT",
+      "scheduledAt": "2026-11-18T13:00:00Z",
+      "marketSession": "bmo",
+      "replaces": [
+        "2026-11-18T00:00:00Z"
+      ],
+      "sourceUrl": "https://corporate.target.com/investors/events-presentations"
+    },
+    {
+      "ticker": "WMT",
+      "scheduledAt": "2026-11-19T13:00:00Z",
+      "marketSession": "bmo",
+      "replaces": [
+        "2026-11-19T00:00:00Z"
+      ],
+      "sourceUrl": "https://corporate.walmart.com/news/events/fy2027-q3-earnings-release"
+    },
+    {
+      "ticker": "ADBE",
+      "scheduledAt": "2026-12-09T22:00:00Z",
+      "marketSession": "amc",
+      "replaces": [
+        "2026-12-09T00:00:00Z"
+      ],
+      "sourceUrl": "https://www.adobe.com/investor-relations/events-presentations.html"
+    },
+    {
+      "ticker": "WFC",
+      "scheduledAt": "2027-01-14T15:00:00Z",
+      "marketSession": "dmh",
+      "replaces": [
+        "2027-01-14T00:00:00Z"
+      ],
+      "sourceUrl": "https://www.wellsfargo.com/about/investor-relations/events/"
+    },
+    {
+      "ticker": "C",
+      "scheduledAt": "2027-01-14T16:00:00Z",
+      "marketSession": "dmh",
+      "replaces": [
+        "2027-01-14T00:00:00Z"
+      ],
+      "sourceUrl": "https://www.citigroup.com/global/news/press-release/2025/citi-third-fourth-quarter-2025-and-2026-earnings-calls"
+    },
+    {
+      "ticker": "BAC",
+      "scheduledAt": "2027-01-15T13:30:00Z",
+      "marketSession": "bmo",
+      "replaces": [
+        "2027-01-15T00:00:00Z"
+      ],
+      "sourceUrl": "https://newsroom.bankofamerica.com/content/newsroom/press-releases/2026/03/bank-of-america-announces-fourth-quarter-2026-and-quarterly-2027"
+    }
+  ]
+}

@@ -1,16 +1,23 @@
 package com.earningwhisperer.domain.earnings;
 
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
 public interface EarningsCalendarRepository extends JpaRepository<EarningsCalendar, Long> {
 
     Optional<EarningsCalendar> findByStockTickerAndScheduledAt(String ticker, Instant scheduledAt);
+
+    // Use a current read even if startup has already established a MySQL REPEATABLE_READ snapshot.
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    List<EarningsCalendar> findByStock_IdAndScheduledAtIn(Long stockId, Collection<Instant> scheduledAt);
 
     @Query("""
             SELECT e FROM EarningsCalendar e JOIN FETCH e.stock s
