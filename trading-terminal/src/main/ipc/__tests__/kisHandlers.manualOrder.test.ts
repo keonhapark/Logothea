@@ -137,4 +137,15 @@ describe('KIS_PLACE_MANUAL_ORDER — 즉시 체결 지정가 환산', () => {
       expect.objectContaining({ order_type: 'LIMIT', price: 98.33, status: 'PENDING' }),
     )
   })
+
+  it('일부만 체결되고 미체결이 남으면 PENDING 으로 기록해 나머지 체결을 기다린다', async () => {
+    Kis.placeOrder.mockResolvedValue({ orderId: 'O5', executedPrice: 520.71, executedQty: 3, remainingQty: 12 })
+
+    const res = await handler()({}, { side: 'BUY', ticker: 'MSFT', qty: 15, price: 525 })
+
+    expect(res.status).toBe('PENDING')
+    expect(Backend.recordManualTrade).toHaveBeenCalledWith(
+      expect.objectContaining({ order_qty: 15, executed_qty: 3, status: 'PENDING' }),
+    )
+  })
 })

@@ -68,7 +68,7 @@ const STATIC_NYSE: ReadonlySet<string> = new Set([
   // Energy
   'XOM', 'CVX', 'COP',
   // Healthcare
-  'JNJ', 'PFE', 'MRK', 'ABT', 'BMY', 'UNH',
+  'JNJ', 'PFE', 'MRK', 'ABT', 'BMY', 'UNH', 'LLY', 'ABBV',
   // Industrials / Defense / Telecom
   'IBM', 'GE', 'BA', 'CAT', 'MMM', 'F', 'GM', 'T', 'VZ', 'UPS', 'FDX', 'LMT', 'RTX',
   // Payments
@@ -109,6 +109,20 @@ export function describeSystemReject(msg: {
 
 export function resolveExchange(ticker: string): KisExchange {
   return exchangeOverrides.get(ticker) ?? (STATIC_NYSE.has(ticker) ? 'NYS' : 'NAS')
+}
+
+/**
+ * 거래소를 아무 근거 없이 나스닥으로 추정했는지. 정적 NYSE 목록이나 주입 · 학습한 거래소가 있으면 false.
+ * 현재가가 비어 올 때 다른 거래소로 다시 묻는 것은 이 경우뿐이다 — 근거가 있는 종목까지 다시 물으면
+ * 원래 시세가 비는 종목(모의계좌 제약 · 장 외)이 사이클마다 호출 예산을 세 배로 쓴다.
+ */
+export function isDefaultExchangeGuess(ticker: string): boolean {
+  return !exchangeOverrides.has(ticker) && !STATIC_NYSE.has(ticker)
+}
+
+/** 테스트 전용 — 학습 · 주입한 거래소를 비운다. */
+export function __resetExchangeOverridesForTest(): void {
+  exchangeOverrides.clear()
 }
 
 type WsState = 'DISCONNECTED' | 'CONNECTING' | 'CONNECTED'
@@ -254,30 +268,37 @@ function sendUnsubscribe(ticker: string) {
 }
 
 /**
- * HDFSCNT0 시세 메시지 파싱.
- * 형식: "0|HDFSCNT0|count|MKSC_SHRN_ISCD^STCK_CNTG_HOUR^STCK_PRPR^PRDY_VRSS_SIGN^PRDY_VRSS^..."
- * - fields[0]: tr_key (예: "DNASAAPL")
- * - fields[2]: STCK_PRPR (현재가)
- * - fields[3]: PRDY_VRSS_SIGN (부호: 1/2=상승, 4/5=하락)
- * - fields[4]: PRDY_VRSS (전일 대비 절대값)
+ * HDFSCNT0(해외주식 실시간지연체결가) 시세 메시지 파싱.
+ * 형식: "0|HDFSCNT0|count|RSYM^SYMB^ZDIV^TYMD^XYMD^XHMS^KYMD^KHMS^OPEN^HIGH^LOW^LAST^SIGN^DIFF^RATE^..."
+ * 공식 샘플 examples_user/overseas_stock 의 delayed_ccnl 컬럼 정의 기준(앞의 RSYM 은 tr_key).
+ * - fields[0]: RSYM, tr_key (예: "DNASAAPL")
+ * - fields[2]: ZDIV, 소수점 자리수. 가격이 아니다 — 이걸 가격으로 읽으면 모든 종목이 $4.00 으로 뜬다
+ * - fields[11]: LAST (현재가)
+ * - fields[12]: SIGN (1/2=상승, 3=보합, 4/5=하락)
+ * - fields[13]: DIFF (전일 대비 절대값)
  */
-function parseHdfscnt0(raw: string): { ticker: string; price: number; previousClose: number } | null {
+const HDFSCNT0_LAST = 11
+const HDFSCNT0_SIGN = 12
+const HDFSCNT0_DIFF = 13
+
+export function parseHdfscnt0(raw: string): { ticker: string; price: number; previousClose: number } | null {
   const parts = raw.split('|')
   if (parts.length < 4 || parts[0] !== '0' || parts[1] !== TR_HDFSCNT0) return null
   const fields = parts[3].split('^')
-  if (fields.length < 5) return null
+  if (fields.length <= HDFSCNT0_DIFF) return null
 
   const trKey = fields[0]
   if (!trKey || trKey.length < 5) return null
   const ticker = trKey.slice(4)  // 1-char prefix + 3-char exchange = 4 chars
 
-  const price = parseFloat(fields[2])
+  const price = parseFloat(fields[HDFSCNT0_LAST])
   if (!ticker || !Number.isFinite(price) || price <= 0) return null
 
-  const sign = fields[3]
-  const diffAbs = parseFloat(fields[4])
-  const diff = (sign === '4' || sign === '5') ? -Math.abs(diffAbs) : Math.abs(diffAbs)
-  const previousClose = Number.isFinite(diff) ? price - diff : 0
+  const sign = fields[HDFSCNT0_SIGN]
+  const diffAbs = Math.abs(parseFloat(fields[HDFSCNT0_DIFF]))
+  const diff = (sign === '4' || sign === '5') ? -diffAbs : diffAbs
+  // 전일 대비를 못 읽으면 0 이 아니라 현재가로 둔다. 0 이면 화면이 등락률을 계산하다 터무니없는 값이 나온다.
+  const previousClose = Number.isFinite(diff) && price - diff > 0 ? price - diff : price
 
   return { ticker, price, previousClose }
 }
@@ -488,5 +509,18 @@ export const KisWebSocketService = {
     if (!subscribedTickers.has(ticker)) return
     subscribedTickers.delete(ticker)
     if (wsState === 'CONNECTED') sendUnsubscribe(ticker)
+  },
+
+  /**
+   * 조회로 알아낸 실제 거래소를 기억한다. 이미 구독 중이면 옛 거래소 키를 풀고 새 키로 다시 구독한다.
+   * 거래소를 틀리게 구독하면 KIS 가 아무 시세도 보내지 않아 그 종목만 조용히 멈춘다.
+   */
+  learnExchange(ticker: string, exchange: KisExchange): void {
+    if (resolveExchange(ticker) === exchange) return
+    const subscribed = subscribedTickers.has(ticker) && wsState === 'CONNECTED'
+    if (subscribed) sendUnsubscribe(ticker)
+    exchangeOverrides.set(ticker, exchange)
+    if (subscribed) sendSubscribe(ticker)
+    console.info(`[KisWS] 거래소 정정 — ${ticker} → ${exchange}`)
   },
 }

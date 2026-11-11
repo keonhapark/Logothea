@@ -65,6 +65,42 @@ describe('TRADES_RECONCILE_PENDING', () => {
     expect(res).toEqual({ checked: 1, reconciled: 1, failed: 0 })
   })
 
+  it('부분 체결이면 확정하지 않고, 남은 수량까지 체결된 뒤 전체 수량으로 확정한다', async () => {
+    // MSFT 15주가 3주 → 12주로 나눠 체결됐는데 첫 3주로 확정돼 거래 내역에 3주로 남았던 경우.
+    const pendingMsft = { id: 12, ticker: 'MSFT', status: 'PENDING', brokerOrderId: '0000031554', orderQty: 15 }
+    Backend.getTrades.mockResolvedValue({ content: [pendingMsft] })
+    Kis.inquireFill.mockResolvedValueOnce({ executedQty: 3, avgPrice: 520.71, remainingQty: 12 })
+
+    const partial = await handler()({})
+    expect(Backend.sendCallback).not.toHaveBeenCalled()
+    expect(partial).toEqual({ checked: 1, reconciled: 0, failed: 0 })
+
+    Kis.inquireFill.mockResolvedValueOnce({ executedQty: 15, avgPrice: 520.67, remainingQty: 0 })
+    const done = await handler()({})
+    expect(Backend.sendCallback).toHaveBeenCalledWith('12', {
+      status: 'EXECUTED',
+      broker_order_id: '0000031554',
+      executed_price: 520.67,
+      executed_qty: 15,
+      error_message: null,
+    })
+    expect(done).toEqual({ checked: 1, reconciled: 1, failed: 0 })
+  })
+
+  it('부분 체결이 장이 끝날 만큼 오래 남아 있으면 체결된 수량으로 확정한다', async () => {
+    // 그대로 두면 TTL 만료(EXPIRED)로 이미 체결된 3주까지 기록에서 사라진다.
+    const nineHoursAgo = new Date(Date.now() - 9 * 3600_000).toISOString().replace('Z', '')
+    Backend.getTrades.mockResolvedValue({
+      content: [{ id: 13, ticker: 'LLY', status: 'PENDING', brokerOrderId: '0000031571', orderQty: 5, createdAt: nineHoursAgo }],
+    })
+    Kis.inquireFill.mockResolvedValue({ executedQty: 3, avgPrice: 1429.26, remainingQty: 2 })
+
+    const res = await handler()({})
+
+    expect(Backend.sendCallback).toHaveBeenCalledWith('13', expect.objectContaining({ status: 'EXECUTED', executed_qty: 3 }))
+    expect(res.reconciled).toBe(1)
+  })
+
   it('아직 미체결(0)이면 아무 상태도 바꾸지 않는다', async () => {
     Backend.getTrades.mockResolvedValue({ content: [PENDING_WMT] })
     Kis.inquireFill.mockResolvedValue({ executedQty: 0, avgPrice: null })

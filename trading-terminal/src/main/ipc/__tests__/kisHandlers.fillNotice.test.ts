@@ -121,12 +121,18 @@ describe('onFillNotice — 체결통보 반영', () => {
     expect(closedSend).not.toHaveBeenCalled()
   })
 
-  it('통보가 연달아 와도 진행 중인 재확인을 함께 기다려 백엔드 조회는 한 번이다', async () => {
+  it('재확인 도중 온 통보는 끝난 뒤 한 번만 더 돌린다 (부분 체결의 나머지를 놓치지 않게)', async () => {
+    // 첫 재확인이 이미 KIS 를 본 뒤 온 통보의 체결은 그 재확인에 없다. 통보는 다시 오지 않으므로
+    // 한 번 더 돈다. 여러 통보가 겹쳐도 추가 실행은 한 번이다(예산 보호).
     Backend.getTrades.mockResolvedValue({ content: [] })
 
-    await Promise.all([onFillNotice(notice('0000044600')), onFillNotice(notice('0000044601'))])
+    await Promise.all([
+      onFillNotice(notice('0000044600')),
+      onFillNotice(notice('0000044601')),
+      onFillNotice(notice('0000044602')),
+    ])
 
-    expect(Backend.getTrades).toHaveBeenCalledTimes(1)
+    expect(Backend.getTrades).toHaveBeenCalledTimes(2)
   })
 })
 
