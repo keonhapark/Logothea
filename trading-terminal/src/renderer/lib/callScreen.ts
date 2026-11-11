@@ -211,3 +211,33 @@ export function timelineMarks(
   }
   return { totalMs, marks: [...bySeq.values()].sort((x, y) => x.startMs - y.startMs) }
 }
+
+/**
+ * 세로 시간축에서 현재 스크롤 중인 뷰포트 영역의 위치와 높이 비율(0~100%).
+ * 스크롤 높이가 컨테이너 이하이면 전체(0~100%)를 채우고,
+ * 스크롤 가능한 경우 현재 보이는 높이 비율에 맞춰 계산하되 최소 높이(minHeightRatio)를 보장한다.
+ */
+export interface ViewportIndicator {
+  topPercent: number
+  heightPercent: number
+}
+
+export function computeViewportIndicator(
+  scrollTop: number,
+  clientHeight: number,
+  scrollHeight: number,
+  minHeightRatio = 0.08,
+): ViewportIndicator {
+  if (scrollHeight <= 0 || clientHeight <= 0 || scrollHeight <= clientHeight) {
+    return { topPercent: 0, heightPercent: 100 }
+  }
+  const rawHeightRatio = clientHeight / scrollHeight
+  const heightRatio = Math.min(1, Math.max(minHeightRatio, rawHeightRatio))
+  const maxScroll = scrollHeight - clientHeight
+  const scrollFraction = Math.max(0, Math.min(1, scrollTop / maxScroll))
+  const topRatio = scrollFraction * (1 - heightRatio)
+  return {
+    topPercent: topRatio * 100,
+    heightPercent: heightRatio * 100,
+  }
+}
