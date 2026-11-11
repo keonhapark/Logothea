@@ -243,9 +243,12 @@ export function createFixtureHttp(): Pick<HttpClient, 'getJson'> & Pick<HttpClie
     [/^\/api\/v1\/stocks\/prices/, () => prices()],
     [/^\/api\/v1\/stocks\/([A-Z.]+)\/detail/, (m) => detail(m[1])],
     [/^\/api\/v1\/market\/indices/, () => [
-      { symbol: 'SPX', price: 6512.3, change_percent: 0.42, trend: 'up', format: 'index', timestamp: now() },
-      { symbol: 'NDX', price: 21880.4, change_percent: 0.61, trend: 'up', format: 'index', timestamp: now() },
-      { symbol: 'VIX', price: 15.2, change_percent: -3.1, trend: 'down', format: 'index', timestamp: now() },
+      // 운영 백엔드와 같은 추종 ETF 심볼
+      { symbol: 'SPY', price: 749.92, change_percent: 0.42, trend: 'up', format: 'index', timestamp: now() },
+      { symbol: 'QQQ', price: 674.76, change_percent: 0.61, trend: 'up', format: 'index', timestamp: now() },
+      { symbol: 'DIA', price: 521.73, change_percent: -0.31, trend: 'down', format: 'index', timestamp: now() },
+      { symbol: 'IWM', price: 280.58, change_percent: -0.68, trend: 'down', format: 'index', timestamp: now() },
+      { symbol: 'VIXY', price: 18.16, change_percent: -0.27, trend: 'down', format: 'index', timestamp: now() },
     ]],
     [/^\/api\/v1\/earnings-calendar\/terminal-timeline/, () => timeline()],
     [/^\/api\/v1\/demo\/earnings-call\/status/, () => {

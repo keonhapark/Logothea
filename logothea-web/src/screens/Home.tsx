@@ -124,13 +124,13 @@ function BetweenCard({ view, companyName }: { view: Extract<BroadcastView, { kin
 // ── 주요 지수 ─────────────────────────────────────────────────────────────
 
 /**
- * 세 칸. 명세는 S&P 500 · 나스닥 · 다우인데 백엔드 지수는 SPX · NDX · VIX · DXY · 10Y 라 다우가 없다.
- * 다우 자리에 VIX 를 둔다.
+ * 세 칸(명세: S&P 500 · 나스닥 · 다우). 백엔드(MarketIndicesScheduler)는 원지수가 유료라 추종 ETF 시세를 준다
+ * (SPY · QQQ · DIA · IWM · VIXY). 지수가 아니라 ETF 가격이므로 이름 옆에 심볼을 적는다. VIXY 는 VIX 지수가 아니라 뺀다.
  */
 const INDEX_SLOTS: { symbol: string; label: string }[] = [
-  { symbol: 'SPX', label: 'S&P 500' },
-  { symbol: 'NDX', label: '나스닥 100' },
-  { symbol: 'VIX', label: 'VIX 변동성' },
+  { symbol: 'SPY', label: 'S&P 500 · SPY' },
+  { symbol: 'QQQ', label: '나스닥 100 · QQQ' },
+  { symbol: 'DIA', label: '다우 · DIA' },
 ]
 
 function Indices() {
