@@ -202,9 +202,9 @@ export default function ScheduleCalendar({ groups, tags, onPick }: ScheduleCalen
                   onClick={() => setSelectedDate(dateKey)}
                   className={`relative aspect-square flex flex-col items-center justify-center rounded-[10px] text-[12.5px] font-medium transition-all duration-150 ${
                     isSelected
-                      ? 'bg-lapis text-white font-bold'
+                      ? 'glass gbtn-lapis font-bold shadow-sm'
                       : isToday
-                      ? 'border border-lapis text-ink-1 font-semibold hover:bg-wash/[0.06]'
+                      ? 'border border-lapis/50 text-ink-1 font-semibold hover:bg-wash/[0.06]'
                       : 'text-ink-2 hover:bg-wash/[0.05] hover:text-ink-1'
                   }`}
                   aria-label={`${dateKey} 일정 ${dayEvents.length}건`}
@@ -214,13 +214,13 @@ export default function ScheduleCalendar({ groups, tags, onPick }: ScheduleCalen
                     <div className="flex gap-0.5 absolute bottom-1">
                       <span
                         className={`w-1 h-1 rounded-full ${
-                          isSelected ? 'bg-white' : hasMine ? 'bg-gold' : 'bg-ink-3'
+                          isSelected ? 'bg-current opacity-90' : hasMine ? 'bg-gold' : 'bg-ink-3'
                         }`}
                       />
                       {dayEvents.length > 1 && (
                         <span
                           className={`w-1 h-1 rounded-full ${
-                            isSelected ? 'bg-white opacity-80' : 'bg-ink-3'
+                            isSelected ? 'bg-current opacity-60' : 'bg-ink-3'
                           }`}
                         />
                       )}
@@ -264,22 +264,22 @@ export default function ScheduleCalendar({ groups, tags, onPick }: ScheduleCalen
                     <button
                       type="button"
                       onClick={() => onPick(e.ticker)}
-                      className="w-full flex items-center justify-between p-3 rounded-[14px] bg-wash/[0.03] border border-edge/[0.06] hover:bg-wash/[0.06] transition-colors text-left group"
+                      className="w-full flex items-center justify-between gap-3 p-3 rounded-[14px] bg-wash/[0.03] border border-edge/[0.06] hover:bg-wash/[0.06] transition-colors text-left group"
                     >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <span className="px-2.5 py-1 rounded-[8px] bg-wash/[0.05] border border-edge/[0.06] text-[12px] font-semibold text-ink-2 tabular-nums">
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <span className="shrink-0 px-2.5 py-1 rounded-[8px] bg-wash/[0.05] border border-edge/[0.06] text-[12px] font-semibold text-ink-2 tabular-nums">
                           {formatClock(e.scheduledAt)}
                         </span>
-                        <div className="flex items-baseline gap-2 min-w-0">
-                          <span className="num text-[14.5px] font-bold text-ink-1">
+                        <div className="flex items-baseline gap-2 min-w-0 flex-1">
+                          <span className="shrink-0 num text-[14.5px] font-bold text-ink-1">
                             {e.ticker}
                           </span>
-                          <span className="text-[13px] text-ink-2 truncate max-w-[200px]">
+                          <span className="text-[13px] text-ink-2 truncate min-w-0">
                             {e.name}
                           </span>
                           {tag && (
                             <span
-                              className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10.5px] font-semibold border ${
+                              className={`shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[10.5px] font-semibold border ${
                                 tag === '보유'
                                   ? 'text-ink-1 border-edge/25'
                                   : 'text-ink-3 border-edge/10'
@@ -291,8 +291,8 @@ export default function ScheduleCalendar({ groups, tags, onPick }: ScheduleCalen
                         </div>
                       </div>
 
-                      <span className="text-[12px] font-semibold text-ink-3 group-hover:text-ink-1 transition-colors">
-                        종목 브리핑 ›
+                      <span className="shrink-0 whitespace-nowrap text-[12px] font-semibold text-ink-3 group-hover:text-ink-1 transition-colors">
+                        브리핑 ›
                       </span>
                     </button>
                   </li>

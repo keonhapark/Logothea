@@ -287,6 +287,11 @@ export default function TradingRoomPage() {
   const defaultSplitPct = DEFAULT_SPLIT[phase];
   const splitPct = userSplitPct ?? defaultSplitPct;
 
+  // 콜 단계가 바뀌면(BEFORE→LIVE→ENDED) 사용자의 분할 비율을 해당 단계 기본 비율로 되돌린다.
+  useEffect(() => {
+    setUserSplitPct(null);
+  }, [phase]);
+
   const handleSplitPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     e.currentTarget.setPointerCapture(e.pointerId);
     setIsDraggingSplit(true);
@@ -298,8 +303,15 @@ export default function TradingRoomPage() {
     if (!container) return;
     const rect = container.getBoundingClientRect();
     const offset = e.clientX - rect.left;
-    const pct = Math.max(25, Math.min(75, (offset / rect.width) * 100));
-    setUserSplitPct(pct);
+    const minLeftPx = 280;
+    const minRightPx = 280;
+    const w = rect.width;
+    if (w > minLeftPx + minRightPx) {
+      const minPct = Math.max(25, (minLeftPx / w) * 100);
+      const maxPct = Math.min(75, ((w - minRightPx) / w) * 100);
+      const rawPct = (offset / w) * 100;
+      setUserSplitPct(Math.max(minPct, Math.min(maxPct, rawPct)));
+    }
   };
 
   const handleSplitPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -343,6 +355,7 @@ export default function TradingRoomPage() {
     setSessionOrders([]);
     setOrderOpen(false);
     setStoppedCallId(null);
+    setUserSplitPct(null);
   }, [ticker]);
 
   // 접수 주문의 체결 반영. 체결 재확인은 백엔드 기록만 고치므로, 그 기록을 다시 받아
@@ -589,7 +602,7 @@ export default function TradingRoomPage() {
         className={`flex h-full min-h-0 ${isDraggingSplit ? "select-none cursor-col-resize" : ""}`}
       >
         <div
-          className="h-full min-h-0 min-w-[300px] overflow-hidden flex-shrink-0"
+          className="h-full min-h-0 min-w-0 flex-shrink-0"
           style={{ width: `calc(${splitPct}% - 6px)` }}
         >
           {phase === "BEFORE" && (
@@ -656,7 +669,7 @@ export default function TradingRoomPage() {
           />
         </div>
 
-        <div className="h-full min-h-0 min-w-[300px] overflow-hidden flex-1">
+        <div className="h-full min-h-0 min-w-0 flex-1">
           {phase === "BEFORE" && (
             <aside
               className="cloud h-full rounded-[28px] overflow-y-auto px-6 pb-6"
