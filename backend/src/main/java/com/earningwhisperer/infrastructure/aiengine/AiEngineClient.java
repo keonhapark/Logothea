@@ -245,7 +245,7 @@ public class AiEngineClient {
         // 기억한 손절 계획의 가격 수준은 첫 회차 시세 기준이다.
         Object key = List.of("intelligence", new EarningsSummaryModels.IntelligenceRequest(request.ticker(),
                 request.eventText(), request.question(), request.answer(), request.relatedTickers(), null,
-                request.directionHint(), request.confidenceHint()));
+                request.directionHint(), request.confidenceHint(), request.asOfEpoch()));
         return memoized(key, r -> true, () -> post(INTELLIGENCE_PATH, request,
                 EarningsSummaryModels.IntelligenceResponse.class, request.ticker(), "종합 인텔리전스"));
     }

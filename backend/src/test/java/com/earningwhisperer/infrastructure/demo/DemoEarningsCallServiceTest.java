@@ -477,6 +477,10 @@ class DemoEarningsCallServiceTest {
 
         await().atMost(5, TimeUnit.SECONDS).untilAsserted(() -> assertThat(summary.calls).hasSize(1));
         assertThat(summary.calls.get(0)).isEqualTo("ORCL|" + result.callId());
+        // 과거 콜 재생의 종합 판단은 재생 시각이 아니라 원래 콜이 끝난 시각을 기준으로 근거를 찾는다.
+        assertThat(summary.asOfs.get(0))
+                .isNotNull()
+                .isEqualTo(EarningsSummaryService.summaryAsOfEpoch(loadDeployedScript(svc)));
     }
 
     @Test
@@ -529,6 +533,7 @@ class DemoEarningsCallServiceTest {
     /** 종합 판단 호출을 기록만 하는 스텁. */
     private static final class RecordingSummaryService extends EarningsSummaryService {
         final List<String> calls = new CopyOnWriteArrayList<>();
+        final List<Long> asOfs = new CopyOnWriteArrayList<>();
 
         RecordingSummaryService() {
             super(new AiEngineClient("http://localhost:1", false, false, false, false, 100, 100), null, null);
@@ -536,7 +541,9 @@ class DemoEarningsCallServiceTest {
 
         @Override
         public boolean summarizeAndPublish(String ticker, String callId, String transcript,
-                                           List<String> relatedTickers, String analystQuestion, String analystAnswer) {
+                                           List<String> relatedTickers, String analystQuestion, String analystAnswer,
+                                           Long asOfEpoch) {
+            asOfs.add(asOfEpoch);
             calls.add(ticker + "|" + callId);
             return true;
         }

@@ -135,10 +135,23 @@ class AiEngineClientMemoTest {
         client.setMemoEnabled(true);
 
         client.earningsIntelligence(new EarningsSummaryModels.IntelligenceRequest(
-                "WMT", "전문", null, null, List.of(), Map.of("current_price", 100), "BULLISH", 0.6));
+                "WMT", "전문", null, null, List.of(), Map.of("current_price", 100), "BULLISH", 0.6, null));
         client.earningsIntelligence(new EarningsSummaryModels.IntelligenceRequest(
-                "WMT", "전문", null, null, List.of(), Map.of("current_price", 102), "BULLISH", 0.6));
+                "WMT", "전문", null, null, List.of(), Map.of("current_price", 102), "BULLISH", 0.6, null));
 
         assertThat(hits("/v1/engine/earnings/intelligence")).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("부가 정보는 기준 시각(as_of_epoch)이 다르면 따로 부른다")
+    void intelligenceMemoKeyIncludesAsOf() {
+        client.setMemoEnabled(true);
+
+        client.earningsIntelligence(new EarningsSummaryModels.IntelligenceRequest(
+                "WMT", "전문", null, null, List.of(), null, "BULLISH", 0.6, 1_787_230_000L));
+        client.earningsIntelligence(new EarningsSummaryModels.IntelligenceRequest(
+                "WMT", "전문", null, null, List.of(), null, "BULLISH", 0.6, null));
+
+        assertThat(hits("/v1/engine/earnings/intelligence")).isEqualTo(2);
     }
 }

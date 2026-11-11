@@ -101,13 +101,14 @@ public class CallAnalysisService {
      *
      * @param replayKey        같은 스크립트를 가리키는 키. 있으면 팩트체크를 회차 단위로 녹화 · 재생한다(응답 기억이 켜졌을 때)
      * @param expectedSegments 한 회차의 세그먼트 수. 녹화가 다 찼는지 판단한다
+     * @param summaryAsOfEpoch 종합 판단의 기준 시각(Unix 초). 과거 콜 재생은 원래 콜이 끝난 시각, 실시간은 null(엔진이 현재 시각을 씀)
      */
     public record CallContext(List<String> relatedTickers, String analystQuestion, String analystAnswer,
-                              String replayKey, int expectedSegments) {
-        public static final CallContext NONE = new CallContext(List.of(), null, null, null, 0);
+                              String replayKey, int expectedSegments, Long summaryAsOfEpoch) {
+        public static final CallContext NONE = new CallContext(List.of(), null, null, null, 0, null);
 
         public CallContext(List<String> relatedTickers, String analystQuestion, String analystAnswer) {
-            this(relatedTickers, analystQuestion, analystAnswer, null, 0);
+            this(relatedTickers, analystQuestion, analystAnswer, null, 0, null);
         }
     }
 
@@ -354,7 +355,7 @@ public class CallAnalysisService {
                     }
                     try {
                         summaryService.summarizeAndPublish(ticker, callId, transcript, context.relatedTickers(),
-                                context.analystQuestion(), context.analystAnswer());
+                                context.analystQuestion(), context.analystAnswer(), context.summaryAsOfEpoch());
                     } catch (Throwable e) {
                         // Exception 만 잡으면 Error 계열이 스레드를 조용히 죽이고 다음 회차부터 판단이 사라진다.
                         log.error("[CallAnalysis] 종합 판단 실패 - ticker={} call_id={} error={}",

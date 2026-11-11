@@ -5,6 +5,7 @@ import com.earningwhisperer.domain.assistant.AssistantQuota;
 import com.earningwhisperer.domain.transcript.TranscriptSegment;
 import com.earningwhisperer.domain.transcript.TranscriptSegmentStore;
 import com.earningwhisperer.global.config.AssistantConfig;
+import com.earningwhisperer.global.config.GuestConfig;
 import com.earningwhisperer.global.config.SecurityConfig;
 import com.earningwhisperer.infrastructure.assistant.AssistantStreamClient;
 import com.earningwhisperer.infrastructure.security.InternalSecretFilter;
@@ -48,7 +49,7 @@ class AssistantHttpFlowTest {
     @EnableAutoConfiguration(exclude = {DataSourceAutoConfiguration.class, HibernateJpaAutoConfiguration.class,
             RedisAutoConfiguration.class, RedisRepositoriesAutoConfiguration.class})
     @Import({AssistantController.class, AssistantAskService.class, AssistantRelay.class, AssistantStreamClient.class,
-            AssistantConfig.class, SecurityConfig.class, InternalSecretFilter.class})
+            AssistantConfig.class, GuestConfig.class, SecurityConfig.class, InternalSecretFilter.class})
     static class Config {}
 
     static final AtomicReference<String> forwarded = new AtomicReference<>();
@@ -80,8 +81,8 @@ class AssistantHttpFlowTest {
         when(jwt.getUserIdFromToken("local-token")).thenReturn(7L);
         when(segments.findUntil("call-local", 99)).thenReturn(List.of(
                 new TranscriptSegment("WMT", "call-local", 3, 0, 6000, "Revenue rose.", null, 1787227200L, false)));
-        when(quota.tryLock(eq(7L), any())).thenReturn(true);
-        when(quota.tryConsumeDaily(eq(7L), any(), anyInt())).thenReturn(true);
+        when(quota.tryLock(eq("7"), any())).thenReturn(true);
+        when(quota.tryConsumeDaily(eq("7"), any(), anyInt())).thenReturn(true);
     }
     HttpResponse<String> ask(boolean authenticated) throws Exception {
         var request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/api/v1/assistant/ask"))
@@ -102,7 +103,7 @@ class AssistantHttpFlowTest {
         assertThat(body.path("as_of_epoch").asLong()).isEqualTo(1787227200L);
         assertThat(body.path("call_ended").asBoolean()).isFalse();
         assertThat(secret.get()).isEqualTo("local-test-secret");
-        verify(quota, timeout(2000)).unlock(7L);
+        verify(quota, timeout(2000)).unlock("7");
     }
     @Test void unauthenticatedRequestDoesNotReachQuotaOrUpstream() throws Exception {
         assertThat(ask(false).statusCode()).isEqualTo(401);

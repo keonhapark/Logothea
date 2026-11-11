@@ -150,7 +150,8 @@ public class DemoEarningsCallService {
         created.analysis = callAnalysis.open(ticker, callId, new CallAnalysisService.CallContext(
                 script.relatedTickers() == null ? List.of() : script.relatedTickers(),
                 qa == null ? null : qa.question(), qa == null ? null : qa.answer(),
-                replayKey(ticker, script), script.segments().size()), "demo-call");
+                replayKey(ticker, script), script.segments().size(),
+                EarningsSummaryService.summaryAsOfEpoch(script)), "demo-call");
         try {
             created.playbackFuture = created.playback.submit(() -> runPlayback(created, script));
         } catch (RuntimeException e) {
