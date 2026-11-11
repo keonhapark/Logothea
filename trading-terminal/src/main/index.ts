@@ -96,7 +96,9 @@ function createWindow() {
 
   if (process.env['ELECTRON_RENDERER_URL']) {
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
-    mainWindow.webContents.openDevTools()
+    // 개발 실행 때 개발자 도구를 바로 열지 않는다. 시연 · 확인 때마다 창이 하나 더 떠서 가린다.
+    // 필요하면 Cmd+Option+I(Windows Ctrl+Shift+I)로 열거나, EW_OPEN_DEVTOOLS=1 로 띄운다.
+    if (process.env['EW_OPEN_DEVTOOLS'] === '1') mainWindow.webContents.openDevTools()
   } else {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
