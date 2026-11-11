@@ -1,5 +1,7 @@
 package com.earningwhisperer.presentation.demo;
 
+import org.springframework.beans.factory.ObjectProvider;
+import com.earningwhisperer.infrastructure.demo.DemoLoopRunner;
 import java.util.regex.Pattern;
 import java.util.Optional;
 import com.earningwhisperer.infrastructure.broadcast.CallBroadcastStore;
@@ -36,6 +38,21 @@ public class DemoEarningsCallController {
 
     private final DemoEarningsCallService service;
     private final CallBroadcastStore broadcastStore;
+    /** 반복 방송. 꺼져 있으면 빈이 없다. */
+    private final ObjectProvider<DemoLoopRunner> loopRunner;
+
+    private boolean loopControls(String ticker) {
+        DemoLoopRunner runner = loopRunner.getIfAvailable();
+        return runner != null && runner.controls(ticker);
+    }
+
+    private static ResponseEntity<?> loopRunning(String ticker) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("error", "반복 방송 중인 종목이라 시작 · 중지할 수 없습니다.");
+        body.put("code", "loop_running");
+        body.put("ticker", ticker);
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
+    }
 
     /**
      * 재생 시작. body 의 {@code ticker} 는 선택이며, 없으면 스크립트 기본 종목을 쓴다.
@@ -49,6 +66,9 @@ public class DemoEarningsCallController {
     @PostMapping("/start")
     public ResponseEntity<?> start(@RequestBody(required = false) StartRequest request) {
         String ticker = request == null ? null : request.ticker();
+        if (loopControls(ticker)) {
+            return loopRunning(ticker);
+        }
         DemoEarningsCallService.StartResult result = service.start(ticker);
         return switch (result.outcome()) {
             case STARTED -> ResponseEntity.accepted().body(startedBody(result));
@@ -66,6 +86,9 @@ public class DemoEarningsCallController {
     @PostMapping("/stop")
     public ResponseEntity<?> stop(@RequestBody(required = false) StartRequest request) {
         String ticker = request == null ? null : request.ticker();
+        if (loopControls(ticker)) {
+            return loopRunning(ticker);
+        }
         if (service.stop(ticker)) {
             return ResponseEntity.ok(Map.of("ticker", ticker, "stopped", true));
         }
@@ -82,26 +105,31 @@ public class DemoEarningsCallController {
      */
     @GetMapping("/status")
     public ResponseEntity<?> status(@RequestParam String ticker) {
-        return service.status(ticker)
-                .<ResponseEntity<?>>map(s -> ResponseEntity.ok(Map.of(
-                        "running", true,
-                        "ticker", s.ticker(),
-                        "call_id", s.callId(),
-                        "published_count", s.publishedCount(),
-                        "total_segments", s.totalSegments()
-                )))
-                .orElseGet(() -> service.lastRun(ticker)
-                        .<ResponseEntity<?>>map(last -> ResponseEntity.ok(Map.of(
-                                "running", false,
-                                "ticker", last.ticker(),
-                                "last_run", Map.of(
-                                        "call_id", last.callId(),
-                                        "outcome", last.outcome(),
-                                        "published_count", last.publishedCount(),
-                                        "total_segments", last.totalSegments()
-                                )
-                        )))
-                        .orElseGet(() -> ResponseEntity.ok(Map.of("running", false, "ticker", ticker))));
+        boolean loop = loopControls(ticker);
+        Map<String, Object> body = new LinkedHashMap<>();
+        var running = service.status(ticker);
+        if (running.isPresent()) {
+            var s = running.get();
+            body.put("running", true);
+            body.put("ticker", s.ticker());
+            body.put("call_id", s.callId());
+            body.put("published_count", s.publishedCount());
+            body.put("total_segments", s.totalSegments());
+        } else {
+            body.put("running", false);
+            body.put("ticker", ticker);
+            service.lastRun(ticker).ifPresent(last -> {
+                body.put("ticker", last.ticker());
+                body.put("last_run", Map.of(
+                        "call_id", last.callId(),
+                        "outcome", last.outcome(),
+                        "published_count", last.publishedCount(),
+                        "total_segments", last.totalSegments()));
+            });
+        }
+        // 반복 방송이 맡은 종목이면 true. 터미널은 이때 시작 · 중지 대신 "반복 방송 중" 표시만 둔다.
+        body.put("loop", loop);
+        return ResponseEntity.ok(body);
     }
 
     /**

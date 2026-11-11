@@ -477,7 +477,8 @@ HTTPS 를 도입하며 값을 바꾸거나 새로 넣은 것이 둘 있습니다
 전시 동안 시연 콜을 계속 돌리려면 `DEMO_LOOP_ENABLED='true'` 와 `AI_ENGINE_RESPONSE_MEMO_ENABLED='true'` 를 함께 넣습니다.
 앞의 것은 재생 → 종합 판단 → 3분 쉬기 → 새 회차 재생을 반복하고(`DEMO_LOOP_PAUSE_MS`), 뒤의 것은 두 번째 회차부터
 AI Engine 을 부르지 않고 첫 회차 결과를 다시 씁니다. 뒤의 것을 빼면 회차마다 Gemini 를 불러 하루 종일 돌릴 때 무료
-한도에 걸립니다. 반복 중에는 터미널에서 같은 종목 시연을 시작할 수 없습니다(409). 기억한 결과는 backend 메모리에만
+한도에 걸립니다. 반복 중에는 터미널에서 같은 종목 시연을 시작 · 중지할 수 없습니다(409 `loop_running`). 반복을 멈추려면
+`DEMO_LOOP_ENABLED` 를 끄고 재시작합니다. 기억한 결과는 backend 메모리에만
 있어서, 시연 중에 근거 뉴스나 직전 콜 녹취록을 새로 넣었다면 backend 를 재시작해야 새 근거로 다시 분석합니다.
 
 `GUEST_TOKEN_TTL_SECONDS`(기본 3600), `GUEST_ISSUE_PER_MINUTE`(IP 당 1분 발급 수, 기본 20),

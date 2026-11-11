@@ -720,7 +720,7 @@ Redis `trading-signals` 수신을 계기로 발행하던 토픽입니다. #127 �
   보고 세그먼트를 모두 거부합니다.
 - **status 는 끝난 재생의 결과도 알려 줍니다.** 재생 중이면 `{running: true, ticker, call_id, published_count,
   total_segments}`, 끝났으면 `{running: false, ticker, last_run: {call_id, outcome, published_count, total_segments}}`,
-  기록이 없으면 `{running: false, ticker}` 입니다. `outcome` 은 `COMPLETED` · `STOPPED` · `NO_SEGMENT_PUBLISHED` 이며,
+  기록이 없으면 `{running: false, ticker}` 입니다. 모든 응답에 반복 방송이 그 종목을 맡고 있는지(`loop`)가 실립니다. `outcome` 은 `COMPLETED` · `STOPPED` · `NO_SEGMENT_PUBLISHED` 이며,
   마지막은 세그먼트를 하나도 내보내지 못하고 끝난 경우입니다.
 - **스크립트 교체 시 규칙.** 시작 시점에 검증하며, 어기면 500 `{"error": "<사유>"}` 로 거부합니다.
   1. `sequence` 는 0부터 1씩 늘어야 합니다. AI Engine 은 `call_id` 가 아니라 `ticker` 로 팩트체크 버퍼를 잡고
@@ -763,8 +763,10 @@ Redis `trading-signals` 수신을 계기로 발행하던 토픽입니다. #127 �
 ```
 
 - **반복 방송.** `demo.earnings-call.loop.enabled=true` 면 기동 직후부터 스크립트를 재생하고, 끝난 뒤
-  `loop.pause-ms`(기본 3분, 종합 판단 시간 포함) 쉬었다가 새 `call_id` 로 다시 재생하기를 계속합니다. 재생 중에 터미널이
-  start 하면 409 입니다. 누가 stop 해도 쉬는 시간이 지나면 다시 시작합니다. `ai-engine.response-memo-enabled=true`
+  `loop.pause-ms`(기본 3분, 종합 판단 시간 포함) 쉬었다가 새 `call_id` 로 다시 재생하기를 계속합니다. 반복 중인
+  종목은 start · stop 을 모두 409 `{"error", "code": "loop_running", "ticker"}` 로 거절합니다. 부스에서 한 번 누르는
+  것으로 관람객 전체의 방송이 끊기거나 처음으로 돌아가지 않게 하려는 것입니다. 터미널은 status 의 `loop: true` 를 보고
+  시연 제어 대신 반복 방송 중 표시를 둡니다. 다른 종목은 지금처럼 시작 · 중지할 수 있습니다. `ai-engine.response-memo-enabled=true`
   를 함께 켜면 두 번째 회차부터 AI Engine 을 거의 부르지 않고 첫 회차 결과를 같은 세그먼트 시점에 새 `call_id` 로 다시
   발행합니다.
   - 팩트체크는 회차 단위로 녹화합니다. 엔진이 종목 버퍼(상태)를 가지므로, 한 회차의 모든 문장이 쓸 만한 응답(대기,
