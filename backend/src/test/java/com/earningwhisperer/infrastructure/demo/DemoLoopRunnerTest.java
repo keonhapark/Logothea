@@ -108,4 +108,17 @@ class DemoLoopRunnerTest {
         verify(demo, times(1)).start(null);
         verify(demo, never()).start("WMT");
     }
+
+    @Test
+    @DisplayName("첫 시작 전에는 종목 없는 요청만, 시작 뒤에는 그 종목(대소문자 무관)만 맡는다")
+    void controlsLoopTicker() {
+        org.assertj.core.api.Assertions.assertThat(runner.controls(null)).isTrue();
+        org.assertj.core.api.Assertions.assertThat(runner.controls("WMT")).isFalse();
+
+        when(demo.start(null)).thenReturn(started("c1"));
+        runner.tick();
+
+        org.assertj.core.api.Assertions.assertThat(runner.controls("wmt")).isTrue();
+        org.assertj.core.api.Assertions.assertThat(runner.controls("ORCL")).isFalse();
+    }
 }

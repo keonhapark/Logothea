@@ -14,8 +14,9 @@ import java.time.Clock;
  *
  * <ul>
  *   <li>기동 직후 첫 확인에서 바로 시작한다.</li>
- *   <li>재생 중이면 아무것도 하지 않는다. 터미널이 같은 종목을 시작하려 하면 지금처럼 409 다.</li>
- *   <li>누가 중지해도 쉬는 시간이 지나면 다시 시작한다. 반복을 멈추려면 설정을 끄고 재시작한다.</li>
+ *   <li>재생 중이면 아무것도 하지 않는다.</li>
+ *   <li>반복 중인 종목은 API 로 시작 · 중지할 수 없다({@link #controls}, 409 {@code loop_running}).
+ *       반복을 멈추려면 설정을 끄고 재시작한다.</li>
  *   <li>회차마다 같은 스크립트라, {@code ai-engine.response-memo-enabled=true} 면 두 번째 회차부터 AI Engine 을
  *       부르지 않고 첫 회차 결과를 같은 시점에 다시 발행한다.</li>
  * </ul>
@@ -47,6 +48,19 @@ public class DemoLoopRunner {
 
     void setClock(Clock clock) {
         this.clock = clock;
+    }
+
+    /**
+     * 이 종목을 반복 방송이 맡고 있는지. 맡은 종목은 터미널의 시작 · 중지 · 처음부터를 받지 않는다. 받으면 부스에서
+     * 한 번 누르는 것으로 웹 관람객 전체의 방송이 끊기거나 처음으로 돌아간다. 첫 시작 전(종목 미정)에는 요청 종목이
+     * 비어 있을 때만 맡은 것으로 본다(스크립트 기본 종목).
+     */
+    public boolean controls(String requestedTicker) {
+        String current = ticker;
+        if (requestedTicker == null || requestedTicker.isBlank()) {
+            return true;
+        }
+        return current != null && current.equalsIgnoreCase(requestedTicker.trim());
     }
 
     @Scheduled(initialDelayString = "${demo.earnings-call.loop.initial-delay-ms:5000}",

@@ -209,4 +209,50 @@ class DemoEarningsCallControllerTest {
         mockMvc.perform(get("/api/v1/demo/earnings-call/snapshot").param("ticker", "../etc"))
                 .andExpect(status().isBadRequest());
     }
+
+    @org.springframework.boot.test.mock.mockito.MockBean
+    com.earningwhisperer.infrastructure.demo.DemoLoopRunner loopRunner;
+
+    @Test
+    @DisplayName("반복 방송 중인 종목은 시작 · 중지를 409 loop_running 으로 거절하고 서비스를 부르지 않는다")
+    void loopRejectsStartAndStop() throws Exception {
+        when(loopRunner.controls("WMT")).thenReturn(true);
+
+        mockMvc.perform(post("/api/v1/demo/earnings-call/start")
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"ticker\":\"WMT\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("loop_running"));
+        mockMvc.perform(post("/api/v1/demo/earnings-call/stop")
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"ticker\":\"WMT\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("loop_running"));
+        org.mockito.Mockito.verify(service, org.mockito.Mockito.never()).start(any());
+        org.mockito.Mockito.verify(service, org.mockito.Mockito.never()).stop(any());
+    }
+
+    @Test
+    @DisplayName("반복 방송이 맡지 않은 종목은 지금처럼 시작할 수 있다")
+    void loopAllowsOtherTickers() throws Exception {
+        when(loopRunner.controls("ORCL")).thenReturn(false);
+        when(service.start("ORCL")).thenReturn(new DemoEarningsCallService.StartResult(
+                DemoEarningsCallService.StartResult.Outcome.STARTED, "ORCL", "demo-orcl-9", 24, 6000, null, null));
+
+        mockMvc.perform(post("/api/v1/demo/earnings-call/start")
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"ticker\":\"ORCL\"}"))
+                .andExpect(status().isAccepted());
+    }
+
+    @Test
+    @DisplayName("status 는 반복 방송 여부를 loop 로 싣는다")
+    void statusCarriesLoopFlag() throws Exception {
+        when(loopRunner.controls("WMT")).thenReturn(true);
+        when(service.status("WMT")).thenReturn(java.util.Optional.of(
+                new DemoEarningsCallService.Status("WMT", "demo-wmt-3", 5, 24)));
+
+        mockMvc.perform(get("/api/v1/demo/earnings-call/status").param("ticker", "WMT"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.running").value(true))
+                .andExpect(jsonPath("$.loop").value(true))
+                .andExpect(jsonPath("$.call_id").value("demo-wmt-3"));
+    }
 }
