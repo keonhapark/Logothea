@@ -99,7 +99,7 @@ class CallAnalysisServiceTest {
         service.onIngested(segment("c1", 2, "", true));
 
         verify(summaryService, timeout(2_000)).summarizeAndPublish(
-                "CSCO", "c1", "Revenue grew 8%. Guidance raised.", List.of(), null, null);
+                "CSCO", "c1", "Revenue grew 8%. Guidance raised.", List.of(), null, null, null);
         verify(client, after(300).times(2)).submitSentence(any());
         assertThat(service.liveCallCount()).isZero();
     }
@@ -114,7 +114,7 @@ class CallAnalysisServiceTest {
         verify(client, timeout(2_000)).submitSentence(fc.capture());
         assertThat(fc.getValue().isSessionEnd()).isTrue();
         verify(summaryService, timeout(2_000)).summarizeAndPublish(
-                eq("CSCO"), eq("c1"), eq("Thank you."), any(), any(), any());
+                eq("CSCO"), eq("c1"), eq("Thank you."), any(), any(), any(), any());
     }
 
     @Test
@@ -125,7 +125,7 @@ class CallAnalysisServiceTest {
         service.onIngested(segment("old", 1, "", true));
 
         verify(summaryService, after(500).never())
-                .summarizeAndPublish(anyString(), eq("old"), anyString(), any(), any(), any());
+                .summarizeAndPublish(anyString(), eq("old"), anyString(), any(), any(), any(), any());
     }
 
     @Test
@@ -157,12 +157,25 @@ class CallAnalysisServiceTest {
     }
 
     @Test
+    @DisplayName("시연 회차의 종합 판단은 회차 정보의 기준 시각(as_of)을 그대로 넘긴다")
+    void demoSummaryCarriesAsOf() {
+        CallAnalysisService.CallHandle demo = service.open("CSCO", "demo-1",
+                new CallAnalysisService.CallContext(List.of(), null, null, null, 0, 1_787_230_000L), "demo-call");
+        demo.submit(segment("demo-1", 0, "Revenue grew 8%.", false));
+        demo.submitSummary();
+
+        verify(summaryService, timeout(2_000)).summarizeAndPublish(
+                eq("CSCO"), eq("demo-1"), eq("Revenue grew 8%."), any(), any(), any(), eq(1_787_230_000L));
+        demo.close(0);
+    }
+
+    @Test
     @DisplayName("자막이 없었던 회차는 종료 신호가 와도 종합 판단을 내지 않는다")
     void noTranscriptNoSummary() {
         service.onIngested(segment("c1", 0, "", true));
 
         verify(summaryService, after(300).never())
-                .summarizeAndPublish(anyString(), anyString(), anyString(), any(), any(), any());
+                .summarizeAndPublish(anyString(), anyString(), anyString(), any(), any(), any(), any());
     }
 
     @Test
@@ -202,7 +215,7 @@ class CallAnalysisServiceTest {
 
             assertThat(shortIdle.liveCallCount()).isZero();
             verify(summaryService, after(300).never())
-                    .summarizeAndPublish(anyString(), anyString(), anyString(), any(), any(), any());
+                    .summarizeAndPublish(anyString(), anyString(), anyString(), any(), any(), any(), any());
         } finally {
             shortIdle.shutdown();
         }
@@ -228,7 +241,7 @@ class CallAnalysisServiceTest {
     }
 
     private static final CallAnalysisService.CallContext REPLAYABLE =
-            new CallAnalysisService.CallContext(List.of(), null, null, "WMT|script", 3);
+            new CallAnalysisService.CallContext(List.of(), null, null, "WMT|script", 3, null);
 
     private static TranscriptSegment demoSegment(String callId, int sequence) {
         return new TranscriptSegment("WMT", callId, sequence, sequence * 6000L, sequence * 6000L + 6000L,

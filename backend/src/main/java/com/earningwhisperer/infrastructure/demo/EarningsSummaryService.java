@@ -9,6 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
+import java.time.format.DateTimeParseException;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -55,7 +56,7 @@ public class EarningsSummaryService {
     public boolean summarizeAndPublish(String ticker, String callId, DemoEarningsCallScript script) {
         DemoEarningsCallScript.AnalystQa qa = script.analystQa();
         return summarizeAndPublish(ticker, callId, joinTranscript(script), script.relatedTickers(),
-                qa == null ? null : qa.question(), qa == null ? null : qa.answer());
+                qa == null ? null : qa.question(), qa == null ? null : qa.answer(), summaryAsOfEpoch(script));
     }
 
     /**
@@ -65,9 +66,10 @@ public class EarningsSummaryService {
      * @param relatedTickers  파급 분석 대상 종목. 없으면 빈 목록
      * @param analystQuestion 회피 지표용 애널리스트 질문. 답과 함께 있어야 쓴다
      * @param analystAnswer   그 답
+     * @param asOfEpoch       기준 시각(Unix 초). 과거 콜은 {@link #summaryAsOfEpoch}, 실시간은 null
      */
     public boolean summarizeAndPublish(String ticker, String callId, String transcript, List<String> relatedTickers,
-                                       String analystQuestion, String analystAnswer) {
+                                       String analystQuestion, String analystAnswer, Long asOfEpoch) {
         if (!aiEngineClient.isSummaryEnabled()) {
             log.info("[Summary] 종합 판단 비활성화 - ticker={}", ticker);
             return false;
@@ -89,7 +91,7 @@ public class EarningsSummaryService {
         EarningsSummaryModels.Analysis judgment = analyzed.get().analysis();
 
         EarningsSummaryModels.IntelligenceRequest intelRequest = intelligenceRequest(
-                ticker, transcript, relatedTickers, analystQuestion, analystAnswer, marketData, judgment);
+                ticker, transcript, relatedTickers, analystQuestion, analystAnswer, marketData, judgment, asOfEpoch);
         Optional<EarningsSummaryModels.IntelligenceResponse> intel =
                 aiEngineClient.earningsIntelligence(intelRequest);
         if (intel.isEmpty()) {
@@ -132,7 +134,8 @@ public class EarningsSummaryService {
             String analystQuestion,
             String analystAnswer,
             Map<String, Object> marketData,
-            EarningsSummaryModels.Analysis judgment) {
+            EarningsSummaryModels.Analysis judgment,
+            Long asOfEpoch) {
         String question = usableQaText(analystQuestion);
         String answer = usableQaText(analystAnswer);
         if (question == null || answer == null) {
@@ -150,7 +153,24 @@ public class EarningsSummaryService {
                 relatedTickers,
                 marketData,
                 judgment.direction(),
-                judgment.confidence());
+                judgment.confidence(),
+                asOfEpoch);
+    }
+
+    /** Historical summaries use the end of the source call, never the replay wall clock. */
+    static Long summaryAsOfEpoch(DemoEarningsCallScript script) {
+        if (script.callStartedAt() == null || script.callStartedAt().isBlank()) {
+            return null; // Legacy scripts omit the additive field; the engine keeps its live-call default.
+        }
+        try {
+            long started = Instant.parse(script.callStartedAt().trim()).getEpochSecond();
+            long lastEndMs = script.segments() == null ? 0 : script.segments().stream()
+                    .mapToLong(DemoEarningsCallScript.Segment::endMs).max().orElse(0);
+            return Math.addExact(started, Math.max(0, lastEndMs) / 1000L);
+        } catch (DateTimeParseException | ArithmeticException exception) {
+            log.warn("[Summary] Invalid historical call timestamp for ticker={}; as_of_epoch omitted", script.ticker());
+            return null;
+        }
     }
 
     /**
