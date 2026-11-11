@@ -26,6 +26,8 @@ interface CallBarProps {
     onStart: () => void
     onStop: () => void
     onRestart: () => void
+    /** 서버가 이 종목을 반복 방송하는 중인지. 그러면 시작 · 중지 대신 "반복 방송 중" 만 둔다. */
+    loop?: boolean
   }
 }
 
@@ -72,7 +74,7 @@ export default function CallBar({
 
       <div className="flex items-center gap-2 shrink-0 on-glass">
         <PhaseMark phase={phase} />
-        {isDemo && (
+        {(isDemo || demo?.loop) && (
           <span
             className="px-2 py-0.5 rounded-full border border-border-strong text-[11px] font-semibold text-ink-2"
             title="준비된 어닝콜 스크립트를 재생하는 중입니다"
@@ -98,7 +100,15 @@ export default function CallBar({
       <div className="flex-1" />
 
       <div className="flex items-center gap-1.5 shrink-0">
-        {demo && (
+        {demo?.loop && (
+          <span
+            className="px-3 text-[12px] font-semibold text-ink-2 on-glass"
+            title="전시용 웹과 같은 시연 방송을 서버가 반복 재생하고 있어 이 화면에서 시작하거나 멈출 수 없습니다"
+          >
+            반복 방송 중
+          </span>
+        )}
+        {demo && !demo.loop && (
           <>
             {phase === 'LIVE' && isDemo ? (
               <button type="button" className="gbtn gbtn-sm" onClick={demo.onStop} disabled={demo.busy}>

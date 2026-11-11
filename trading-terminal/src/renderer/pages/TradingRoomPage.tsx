@@ -42,6 +42,10 @@ import { useFactCheck } from "../hooks/useFactCheck";
 import { useTranscriptDiff } from "../hooks/useTranscriptDiff";
 import { useTranscriptTranslation } from "../hooks/useTranscriptTranslation";
 import { useEarningsSummary } from "../hooks/useEarningsSummary";
+import { useDemoLoop } from "../hooks/useDemoLoop";
+
+const LOOP_RUNNING_MESSAGE =
+  "전시용 웹과 같은 시연 방송을 서버가 반복 재생하고 있어 이 화면에서 시작하거나 멈출 수 없습니다.";
 
 /** 위쪽에 떠 있는 콜 바 아래로 내용이 지나가도록 각 면의 위쪽에 비워 두는 높이(px). */
 const TOP_INSET = 72;
@@ -157,12 +161,18 @@ export default function TradingRoomPage() {
   );
   const isLive = phase === "LIVE";
 
-  // 첫 사용 안내 — 실제 콜이 처음 시작된 화면에서 한 번만 띄운다. 시연 재생 중에는 띄우지 않는다.
+  // 서버가 시연 콜을 반복 방송하는 중이면(전시용 웹과 같은 방송) 이 화면에서 시작 · 중지하지 않는다.
+  const { loop: demoLoop, markLoop: markDemoLoop, refresh: refreshDemoLoop } = useDemoLoop(
+    ticker,
+    ticker === DEMO_TICKER,
+  );
+
+  // 첫 사용 안내 — 실제 콜이 처음 시작된 화면에서 한 번만 띄운다. 시연 재생 · 반복 방송 중에는 띄우지 않는다.
   const [tourOpen, setTourOpen] = useState(false);
   useEffect(() => {
-    if (isLive && !isDemo && !isCallTourDone()) setTourOpen(true);
-  }, [isLive, isDemo]);
-  const showTour = tourOpen && isLive && !isDemo;
+    if (isLive && !isDemo && !demoLoop && !isCallTourDone()) setTourOpen(true);
+  }, [isLive, isDemo, demoLoop]);
+  const showTour = tourOpen && isLive && !isDemo && !demoLoop;
   const lastCallId = segments.length > 0 ? segments[segments.length - 1].callId : null;
   const translations = useMemo(
     () => translationsByLastSequence(translationItems, lastCallId),
@@ -379,6 +389,12 @@ export default function TradingRoomPage() {
       setDemo(true);
       return;
     }
+    if (result.reason === "LOOP_RUNNING") {
+      // 다음 상태 조회를 기다리지 않고 시연 제어를 "반복 방송 중" 으로 바꾼다.
+      markDemoLoop(ticker);
+      showIpcErrorToast(new Error(LOOP_RUNNING_MESSAGE));
+      return;
+    }
     // showIpcErrorToast 는 Error 를 기대한다 — 문자열을 그대로 넘기지 않는다.
     showIpcErrorToast(
       new Error(
@@ -406,6 +422,8 @@ export default function TradingRoomPage() {
     const stopped = await ipc.invoke<boolean>(IPC_CHANNELS.DEMO_EARNINGS_STOP, { ticker });
     // 중지하면 종료 표시가 오지 않아 LIVE 로 남는다. 이 화면에서 끝난 콜로 다룬다.
     if (stopped && lastCallId) setStoppedCallId(lastCallId);
+    // 중지가 거절됐다면 반복 방송 때문인지 확인한다(서버가 반복 중인 종목의 중지를 409 로 거절한다).
+    if (!stopped && (await refreshDemoLoop())) showIpcErrorToast(new Error(LOOP_RUNNING_MESSAGE));
   }
 
   /** 처음부터 — 재생을 멈추고 다시 시작한다. 지난 회차 자막은 시작이 성공한 뒤에 비운다. */
@@ -509,6 +527,7 @@ export default function TradingRoomPage() {
             onStart: () => void runDemo(restartDemo),
             onStop: () => void runDemo(stopDemo),
             onRestart: () => void runDemo(restartDemo),
+            loop: demoLoop,
           }}
         />
       </div>
