@@ -8,7 +8,6 @@ import { useTranscriptStore } from "../store/useTranscriptStore";
 import { ipc, IPC_CHANNELS } from "../lib/ipc";
 import SpeakerProfileModal from "../components/trading/SpeakerProfileModal";
 import CallBar from "../components/call/CallBar";
-import CallTimeline from "../components/call/CallTimeline";
 import CallBriefing from "../components/call/CallBriefing";
 import TranscriptStream from "../components/call/TranscriptStream";
 import CallSideTabs, { type SideTab } from "../components/call/CallSideTabs";
@@ -555,10 +554,6 @@ export default function TradingRoomPage() {
     setSessionOrders((prev) => [order, ...prev].slice(0, 30));
   }
 
-  const timeline = (
-    <CallTimeline segments={segments} diffItems={transcriptDiffItems} onFocusSequence={focusSequence} />
-  );
-
   const priceCard = (
     <PriceCard
       currentPrice={currentPrice}
@@ -620,7 +615,8 @@ export default function TradingRoomPage() {
               diffsBySequence={diffsBySequence}
               isLive
               topInset={TOP_INSET}
-              timeline={transcriptDiffItems.length > 0 ? timeline : undefined}
+              diffItems={transcriptDiffItems.length > 0 ? transcriptDiffItems : undefined}
+              onFocusSequence={focusSequence}
               focus={focus}
               {...translationProps}
               onAskAbout={askAbout}
@@ -635,6 +631,8 @@ export default function TradingRoomPage() {
               isLive={false}
               compact={splitPct < 40}
               topInset={TOP_INSET}
+              diffItems={splitPct >= 40 && transcriptDiffItems.length > 0 ? transcriptDiffItems : undefined}
+              onFocusSequence={focusSequence}
               focus={focus}
               {...translationProps}
               onAskAbout={askAbout}

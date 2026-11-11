@@ -3,10 +3,11 @@ import type { TranscriptSegment } from '../../store/useTranscriptStore'
 import type { HighlightedTranslation } from '../../hooks/useTranscriptTranslation'
 import type { GlossaryStatus } from '../../store/useGlossaryStore'
 import type { TranscriptDiffItem } from '../../store/useTranscriptDiffStore'
-import { formatCallClock, isProminentDiff } from '../../lib/callScreen'
+import { computeViewportIndicator, formatCallClock, isProminentDiff, type ViewportIndicator } from '../../lib/callScreen'
 import { CHANGE_META, topicLabel } from './diffMeta'
 import TranslationBlock from './TranslationBlock'
 import ScrollEdge from './ScrollEdge'
+import CallTimeline from './CallTimeline'
 
 interface TranscriptStreamProps {
   segments: readonly TranscriptSegment[]
@@ -27,7 +28,10 @@ interface TranscriptStreamProps {
   glossaryStatus: GlossaryStatus
   /** 이 발언을 범위로 질의응답을 연다. 없으면 버튼을 두지 않는다. */
   onAskAbout?: (sequence: number) => void
-  /** 머리줄 아래에 붙는 가로 시간축. 스크롤하면 콜 바 바로 아래에 멈춰 있다. */
+  /** 직전 콜 대조 항목 전체 (세로 시간축 레일용). */
+  diffItems?: readonly TranscriptDiffItem[]
+  onFocusSequence?: (sequence: number) => void
+  /** 하위 호환용 */
   timeline?: ReactNode
 }
 
@@ -36,6 +40,7 @@ interface TranscriptStreamProps {
  *
  *  - 길게 읽는 면이라 서리 유리 위에 둔다.
  *  - 직전 콜 대조는 해당 발언 바로 아래에 붙는다. `후퇴` · 고위험만 카드로 펼치고 나머지는 칩이다.
+ *  - 대조가 있을 때 좌측에 세로 시간축 레일이 판 높이에 고정되어 콜 전체 개요(미니맵)를 제공한다.
  *  - 맨 아래를 보고 있을 때만 따라 내려간다. 위로 올려 읽는 중에는 멈추고 "새 발언 N개" 로 알린다.
  *  - text 는 외부 데이터라 innerHTML 을 쓰지 않는다.
  */
@@ -52,13 +57,31 @@ export default function TranscriptStream({
   onShowTranslationChange,
   glossaryStatus,
   onAskAbout,
+  diffItems,
+  onFocusSequence,
   timeline,
 }: TranscriptStreamProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
+  const rafIdRef = useRef<number | null>(null)
+  const [viewport, setViewport] = useState<ViewportIndicator>({ topPercent: 0, heightPercent: 100 })
   const [stuck, setStuck] = useState(true)
   // 따라 내려가기를 멈춘 순간의 발언 수. 그 뒤로 온 만큼이 "새 발언" 이다.
   const [seenCount, setSeenCount] = useState(segments.length)
   const [flash, setFlash] = useState<number | null>(null)
+
+  const showTimeline = !compact && !!diffItems && diffItems.length > 0 && segments.length > 0 && !!onFocusSequence
+
+  const updateViewport = () => {
+    const el = scrollRef.current
+    if (!el) return
+    const next = computeViewportIndicator(el.scrollTop, el.clientHeight, el.scrollHeight)
+    setViewport((prev) => {
+      if (Math.abs(prev.topPercent - next.topPercent) < 0.2 && Math.abs(prev.heightPercent - next.heightPercent) < 0.2) {
+        return prev
+      }
+      return next
+    })
+  }
 
   // 대조 카드와 번역은 발언보다 늦게 붙어 높이를 늘린다. 맨 아래를 보고 있었다면 그때도 따라 내려간다.
   useLayoutEffect(() => {
@@ -67,6 +90,18 @@ export default function TranscriptStream({
     if (el) el.scrollTop = el.scrollHeight
     setSeenCount(segments.length)
   }, [segments.length, diffsBySequence, translations, showTranslation, stuck])
+
+  useEffect(() => {
+    updateViewport()
+  }, [segments.length, diffsBySequence])
+
+  useEffect(() => {
+    return () => {
+      if (rafIdRef.current != null) {
+        cancelAnimationFrame(rafIdRef.current)
+      }
+    }
+  }, [])
 
   useEffect(() => {
     if (!focus) return
@@ -84,6 +119,13 @@ export default function TranscriptStream({
     if (!el) return
     const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 24
     if (atBottom !== stuck) setStuck(atBottom)
+
+    if (rafIdRef.current == null) {
+      rafIdRef.current = requestAnimationFrame(() => {
+        rafIdRef.current = null
+        updateViewport()
+      })
+    }
   }
 
   function jumpToLatest() {
@@ -98,13 +140,35 @@ export default function TranscriptStream({
   return (
     <section className="cloud relative h-full rounded-[28px] overflow-hidden" aria-label="자막" data-tour="transcript">
       <ScrollEdge height={topInset + 12} />
+
+      {/* 좌측 세로 레일 시간축 — 스크롤에 관계없이 판 높이에 고정 */}
+      {showTimeline && (
+        <CallTimeline
+          segments={segments}
+          diffItems={diffItems!}
+          onFocusSequence={onFocusSequence!}
+          viewport={viewport}
+          className="absolute z-[3]"
+          style={{
+            top: topInset + 48,
+            bottom: 24,
+            left: 12,
+            width: 24,
+          }}
+        />
+      )}
+
       <div
         ref={scrollRef}
         onScroll={handleScroll}
         className="absolute inset-0 overflow-y-auto"
         style={{ paddingTop: topInset }}
       >
-        <div className={`flex items-center justify-between gap-3 ${compact ? 'px-5 pt-3 pb-2' : 'px-7 pt-4 pb-3'}`}>
+        <div
+          className={`flex items-center justify-between gap-3 ${
+            compact ? 'px-5 pt-3 pb-2' : showTimeline ? 'pl-12 pr-7 pt-4 pb-3' : 'px-7 pt-4 pb-3'
+          }`}
+        >
           <span className="text-[13px] font-semibold text-ink-2">
             {compact ? '자막 다시 보기' : '자막'}
             <span className="tabular-nums text-ink-3 font-normal ml-2">{segments.length}문장</span>
@@ -112,20 +176,23 @@ export default function TranscriptStream({
           {!compact && <TranslationToggle show={showTranslation} onChange={onShowTranslationChange} />}
         </div>
         {showTranslation && glossaryStatus === 'failed' && translations.size > 0 && !compact && (
-          <p className="px-7 -mt-1 pb-2 text-[12px] text-ink-3">용어 설명을 불러오지 못해 번역만 보여 줍니다.</p>
-        )}
-        {timeline && (
-          <div className="sticky z-[2] px-7 pt-1 pb-3 mb-1" style={{ top: 0, background: 'var(--cloud)' }}>
-            {timeline}
-          </div>
+          <p className={`${showTimeline ? 'pl-12 pr-7' : 'px-7'} -mt-1 pb-2 text-[12px] text-ink-3`}>
+            용어 설명을 불러오지 못해 번역만 보여 줍니다.
+          </p>
         )}
 
         {segments.length === 0 ? (
-          <p className="px-7 py-10 text-center text-[13px] text-ink-3">
+          <p className={`${showTimeline ? 'pl-12 pr-7' : 'px-7'} py-10 text-center text-[13px] text-ink-3`}>
             {isLive ? '첫 발언을 기다리고 있습니다.' : '받은 자막이 없습니다.'}
           </p>
         ) : (
-          <ol role="log" aria-label="자막" className={`flex flex-col ${compact ? 'gap-3 px-5 pb-6' : 'gap-5 px-7 pb-10'}`}>
+          <ol
+            role="log"
+            aria-label="자막"
+            className={`flex flex-col ${
+              compact ? 'gap-3 px-5 pb-6' : showTimeline ? 'gap-5 pl-12 pr-7 pb-10' : 'gap-5 px-7 pb-10'
+            }`}
+          >
             {segments.map((seg, i) => {
               // 같은 사람이 이어 말하면 이름을 다시 쓰지 않고 앞 발언에 붙여 한 덩어리로 읽힌다.
               // 앞 발언 밑에 대조 · 번역이 붙어 있으면 그 아래로 당기지 않는다(카드에 딸린 글처럼 보인다).

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
+  computeViewportIndicator,
   countDiffsByType,
   countdownParts,
   currentCallSegments,
@@ -251,5 +252,47 @@ describe('timelineMarks', () => {
   it('점은 도착 순서가 아니라 시각 순으로 놓인다', () => {
     const { marks } = timelineMarks([seg(0), seg(1), seg(2)], [diff({ sequence: 2 }), diff({ sequence: 0 })])
     expect(marks.map((m) => m.sequence)).toEqual([0, 2])
+  })
+})
+
+describe('computeViewportIndicator', () => {
+  it('스크롤 영역이 뷰포트 이하이면 전체(0~100%)를 반환한다', () => {
+    expect(computeViewportIndicator(0, 500, 500)).toEqual({ topPercent: 0, heightPercent: 100 })
+    expect(computeViewportIndicator(0, 600, 400)).toEqual({ topPercent: 0, heightPercent: 100 })
+    expect(computeViewportIndicator(0, 0, 0)).toEqual({ topPercent: 0, heightPercent: 100 })
+  })
+
+  it('맨 위에 있을 때(scrollTop=0) topPercent 는 0이고 높이는 뷰포트 비율이다', () => {
+    // clientHeight 500, scrollHeight 1000 => heightPercent 50%
+    const res = computeViewportIndicator(0, 500, 1000)
+    expect(res.topPercent).toBe(0)
+    expect(res.heightPercent).toBe(50)
+  })
+
+  it('맨 아래에 있을 때 topPercent + heightPercent 는 100% 이다', () => {
+    // clientHeight 400, scrollHeight 1000, maxScroll = 600
+    const res = computeViewportIndicator(600, 400, 1000)
+    expect(res.heightPercent).toBe(40)
+    expect(res.topPercent).toBe(60)
+    expect(res.topPercent + res.heightPercent).toBe(100)
+  })
+
+  it('중간 스크롤 위치에서 비율에 맞게 topPercent 가 계산된다', () => {
+    // clientHeight 400, scrollHeight 1000, scrollTop = 300 (50% scrolled)
+    const res = computeViewportIndicator(300, 400, 1000)
+    expect(res.heightPercent).toBe(40)
+    expect(res.topPercent).toBe(30)
+  })
+
+  it('스크롤 높이가 매우 길 때도 minHeightRatio 최소 높이를 보장한다', () => {
+    // clientHeight 100, scrollHeight 10000 => raw ratio 1%, but min 8%
+    const res = computeViewportIndicator(0, 100, 10000, 0.08)
+    expect(res.heightPercent).toBe(8)
+    expect(res.topPercent).toBe(0)
+
+    // scrolled to bottom
+    const resBottom = computeViewportIndicator(9900, 100, 10000, 0.08)
+    expect(resBottom.heightPercent).toBe(8)
+    expect(resBottom.topPercent + resBottom.heightPercent).toBeCloseTo(100)
   })
 })
