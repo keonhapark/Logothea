@@ -14,6 +14,8 @@ import { ACCOUNT_LABELS, useOrderAccount } from '../hooks/useOrderAccount'
 import { showIpcErrorToast } from '../components/common/Toast'
 import { ComingSoon, EmptyState, LoadingBlock } from '../components/common/StateView'
 import Pagination from '../components/common/Pagination'
+import SegmentedControl from '../components/common/SegmentedControl'
+import ScheduleCalendar from '../components/dashboard/ScheduleCalendar'
 import { paginateSchedule, type SchedulePageGroup } from '../lib/homeSchedule'
 import { isIpcError } from '../../lib/types/ipcError'
 import type {
@@ -62,6 +64,7 @@ export default function HomePage() {
   }, [timeline, mineTags])
 
   const openCall = (ticker: string) => navigate(`/call?ticker=${encodeURIComponent(ticker)}`)
+  const [scheduleView, setScheduleView] = useState<'calendar' | 'list'>('calendar')
   return (
     <div className="flex flex-col gap-6 max-w-[1320px]">
       <header className="flex items-center justify-between gap-4 pt-2">
@@ -99,13 +102,28 @@ export default function HomePage() {
             )}
           </Panel>
 
-          <Panel title="전체 일정" meta="KST">
+          <Panel
+            title="전체 일정"
+            meta="KST"
+            action={
+              <SegmentedControl
+                items={[
+                  { id: 'calendar', label: '달력' },
+                  { id: 'list', label: '목록' },
+                ]}
+                activeId={scheduleView}
+                onChange={setScheduleView}
+              />
+            }
+          >
             {timelineStatus === 'loading' ? (
               <LoadingBlock lines={5} lineHeight={20} className="px-5 pb-5" />
             ) : timelineStatus === 'error' ? (
               <TimelineError onRetry={retryTimeline} />
             ) : timeline.groups.every((g) => g.events.length === 0) ? (
               <EmptyState message="예정된 실적 콜이 없습니다." />
+            ) : scheduleView === 'calendar' ? (
+              <ScheduleCalendar groups={timeline.groups} tags={mineTags} onPick={openDrawer} />
             ) : (
               <SchedulePager groups={timeline.groups} tags={mineTags} onPick={openDrawer} />
             )}
@@ -464,13 +482,18 @@ function IndexRow({ item }: { item: MarketIndexItem }) {
   const sign = chg > 0 ? '+' : chg < 0 ? '−' : ''
   // 금리처럼 % 로 표시하는 지표의 등락은 %p 다.
   const chgLabel = `${sign}${Math.abs(chg).toFixed(2)}${item.format === 'percent' ? '%p' : '%'}`
+  const isUp = chg > 0
+  const isDown = chg < 0
   return (
-    <li className="flex items-baseline gap-3 py-2 border-b border-edge/[0.06] last:border-b-0">
-      <span className="num text-[12.5px] font-semibold text-ink-3 w-10">{item.symbol}</span>
-      <span className="flex-1 text-right text-[14px] tabular-nums text-ink-1">{price}</span>
+    <li className="flex items-center justify-between p-2.5 rounded-[12px] bg-wash/[0.02] border border-edge/[0.05] mb-1.5 last:mb-0">
+      <div className="flex flex-col">
+        <span className="num text-[12.5px] font-bold text-ink-1">{item.symbol}</span>
+        <span className="text-[13.5px] tabular-nums font-semibold text-ink-1">{price}</span>
+      </div>
       <span
-        className="w-16 text-right text-[12.5px] tabular-nums"
-        style={{ color: chg > 0 ? 'var(--up)' : chg < 0 ? 'var(--down)' : 'var(--ink-3)' }}
+        className={`px-2 py-0.5 rounded-[6px] text-[12px] font-semibold tabular-nums ${
+          isUp ? 'text-up bg-up/10' : isDown ? 'text-down bg-down/10' : 'text-ink-3 bg-wash/[0.05]'
+        }`}
       >
         {chgLabel}
       </span>
@@ -480,12 +503,25 @@ function IndexRow({ item }: { item: MarketIndexItem }) {
 
 // ── 공통 ──────────────────────────────────────────────────────────────
 
-function Panel({ title, meta, children }: { title: string; meta?: string; children: React.ReactNode }) {
+function Panel({
+  title,
+  meta,
+  action,
+  children,
+}: {
+  title: string
+  meta?: string
+  action?: React.ReactNode
+  children: React.ReactNode
+}) {
   return (
     <section className="cloud rounded-[28px] flex flex-col" aria-label={title}>
-      <div className="flex items-baseline justify-between gap-3 px-5 pt-4 pb-2">
-        <h2 className="text-[16px] font-semibold text-ink-1 on-glass">{title}</h2>
-        {meta && <span className="text-[12px] text-ink-3">{meta}</span>}
+      <div className="flex items-center justify-between gap-3 px-5 pt-4 pb-2">
+        <div className="flex items-baseline gap-3">
+          <h2 className="text-[16px] font-semibold text-ink-1 on-glass">{title}</h2>
+          {meta && <span className="text-[12px] text-ink-3">{meta}</span>}
+        </div>
+        {action && <div>{action}</div>}
       </div>
       {children}
     </section>
