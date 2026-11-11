@@ -66,13 +66,13 @@ export default function HomePage() {
   const openCall = (ticker: string) => navigate(`/call?ticker=${encodeURIComponent(ticker)}`)
   const [scheduleView, setScheduleView] = useState<'calendar' | 'list'>('calendar')
   return (
-    <div className="flex flex-col gap-3 max-w-[1320px]">
+    <div className="flex flex-col gap-3 max-w-[1320px] min-h-full">
       <header className="flex items-center justify-between gap-4">
         <h1 className="text-[24px] font-bold tracking-[-0.02em] text-ink-1">홈</h1>
       </header>
 
-      <div className="grid grid-cols-[minmax(0,1fr)_300px] gap-5 items-start">
-        <div className="flex flex-col gap-3 min-w-0">
+      <div className="grid grid-cols-[minmax(0,1fr)_300px] gap-5 items-start flex-1">
+        <div className="flex flex-col gap-3 min-w-0 self-stretch">
           {timeline.live && (
             <LiveCallCard
               event={timeline.live}
@@ -105,6 +105,7 @@ export default function HomePage() {
           <Panel
             title="전체 일정"
             meta="KST"
+            grow
             action={
               <SegmentedControl
                 items={[
@@ -533,15 +534,18 @@ function Panel({
   title,
   meta,
   action,
+  grow = false,
   children,
 }: {
   title: string
   meta?: string
   action?: React.ReactNode
+  /** 남은 세로 공간을 채운다(전체 일정 — 창이 크면 달력이 커진다). */
+  grow?: boolean
   children: React.ReactNode
 }) {
   return (
-    <section className="cloud rounded-[28px] flex flex-col" aria-label={title}>
+    <section className={`cloud rounded-[28px] flex flex-col ${grow ? 'flex-1 min-h-0' : ''}`} aria-label={title}>
       <div className="flex items-center justify-between gap-3 px-5 pt-3 pb-1">
         <div className="flex items-baseline gap-3">
           <h2 className="text-[16px] font-semibold text-ink-1 on-glass">{title}</h2>
