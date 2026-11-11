@@ -59,7 +59,6 @@ export default function TranscriptStream({
   onAskAbout,
   diffItems,
   onFocusSequence,
-  timeline,
 }: TranscriptStreamProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const rafIdRef = useRef<number | null>(null)
