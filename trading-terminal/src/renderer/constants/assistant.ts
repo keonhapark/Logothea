@@ -23,7 +23,7 @@ export const ASSISTANT_ERROR_MESSAGES: Record<string, string> = {
   assistant_busy: '이전 질문의 답변이 끝난 뒤 다시 질문해 주세요.',
   daily_limit_exceeded: '오늘 질문 횟수를 모두 썼습니다.',
   assistant_overloaded: '질문이 몰려 있습니다. 잠시 후 다시 질문해 주세요.',
-  assistant_unavailable: '질의응답을 잠시 사용할 수 없습니다.',
+  assistant_unavailable: 'AI 어시스턴트를 잠시 사용할 수 없습니다.',
   assistant_stream_interrupted: '답변 전송이 중간에 끊겼습니다.',
   stream_interrupted: '답변 전송이 중간에 끊겼습니다.',
   timeout: '답변 시간이 제한을 넘어 중단했습니다.',
