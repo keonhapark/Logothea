@@ -12,7 +12,7 @@ import { usePrices } from '../hooks/usePrices'
 import { useEarningsTimeline } from '../hooks/useEarningsTimeline'
 import { ACCOUNT_LABELS, useOrderAccount } from '../hooks/useOrderAccount'
 import { showIpcErrorToast } from '../components/common/Toast'
-import { ComingSoon, EmptyState, LoadingBlock } from '../components/common/StateView'
+import { EmptyState, LoadingBlock } from '../components/common/StateView'
 import Pagination from '../components/common/Pagination'
 import SegmentedControl from '../components/common/SegmentedControl'
 import ScheduleCalendar from '../components/dashboard/ScheduleCalendar'
@@ -30,8 +30,8 @@ type MineTag = '보유' | '관심'
 /**
  * 홈 — 어닝콜 중심 첫 화면 (docs/design/screens/home.md).
  *
- * 주인공은 진행 중인 콜과 내 종목(관심 + 보유)의 다가오는 콜이다. 전체 일정과 지난 콜이 뒤따르고,
- * 시장 지수와 계좌 요약은 오른쪽 좁은 열에 둔다.
+ * 주인공은 진행 중인 콜과 내 종목(관심 + 보유)의 다가오는 콜이다. 전체 일정이 뒤따르고,
+ * 시장 지수와 계좌 요약은 오른쪽 좁은 열에 둔다. 기본 창(1200×800)에서 달력까지 스크롤 없이 보이게 잡는다.
  *
  * 잔고 동기화(KIS_GET_BALANCE → 보유 종목 시세 폴링 등록)는 앱 첫 화면인 이 화면이 맡는다.
  */
@@ -66,13 +66,13 @@ export default function HomePage() {
   const openCall = (ticker: string) => navigate(`/call?ticker=${encodeURIComponent(ticker)}`)
   const [scheduleView, setScheduleView] = useState<'calendar' | 'list'>('calendar')
   return (
-    <div className="flex flex-col gap-6 max-w-[1320px]">
-      <header className="flex items-center justify-between gap-4 pt-2">
+    <div className="flex flex-col gap-3 max-w-[1320px]">
+      <header className="flex items-center justify-between gap-4">
         <h1 className="text-[24px] font-bold tracking-[-0.02em] text-ink-1">홈</h1>
       </header>
 
-      <div className="grid grid-cols-[minmax(0,1fr)_300px] gap-6 items-start">
-        <div className="flex flex-col gap-6 min-w-0">
+      <div className="grid grid-cols-[minmax(0,1fr)_300px] gap-5 items-start">
+        <div className="flex flex-col gap-3 min-w-0">
           {timeline.live && (
             <LiveCallCard
               event={timeline.live}
@@ -98,7 +98,7 @@ export default function HomePage() {
             ) : myUpcoming.length === 0 ? (
               <EmptyState message="내 종목 중 다가오는 실적 콜이 없습니다. 일정이 잡히면 여기에 나타납니다." />
             ) : (
-              <EventList events={myUpcoming} tags={mineTags} showDate onPick={openDrawer} />
+              <MyUpcomingPager events={myUpcoming} tags={mineTags} onPick={openDrawer} />
             )}
           </Panel>
 
@@ -128,11 +128,6 @@ export default function HomePage() {
               <SchedulePager groups={timeline.groups} tags={mineTags} onPick={openDrawer} />
             )}
           </Panel>
-
-          <ComingSoon
-            title="지난 콜"
-            note="지난 콜의 자막 · 대조 · 판단 다시 보기는 서버가 콜 결과를 저장한 뒤에 생깁니다"
-          />
         </div>
 
         <aside className="flex flex-col gap-6">
@@ -218,10 +213,10 @@ function LiveCallCard({
 }) {
   return (
     <section
-      className="cloud rounded-[28px] px-6 py-5 flex items-center gap-6"
+      className="cloud rounded-[28px] px-6 py-3.5 flex items-center gap-6"
       aria-label="진행 중인 콜"
     >
-      <div className="flex flex-col gap-1.5 min-w-0 flex-1">
+      <div className="flex flex-col gap-1 min-w-0 flex-1">
         <div className="flex items-center gap-2 text-[12.5px] text-ink-2">
           <span className="w-1.5 h-1.5 rounded-full bg-ink-1 animate-pulse" aria-hidden />
           <span className="font-semibold tracking-[0.08em]">LIVE</span>
@@ -241,6 +236,37 @@ function LiveCallCard({
         콜 화면 열기
       </button>
     </section>
+  )
+}
+
+/** 내 종목의 다가오는 콜 한 페이지의 행 수. 달력까지 한 화면에 들어오게 짧게 둔다. */
+const MY_UPCOMING_PAGE_SIZE = 5
+
+/** 내 종목의 다가오는 콜 — 다섯 개씩 넘긴다. 다섯 개 이하면 페이지 버튼을 두지 않는다. */
+function MyUpcomingPager({
+  events,
+  tags,
+  onPick,
+}: {
+  events: readonly EarningsEvent[]
+  tags: ReadonlyMap<string, MineTag>
+  onPick: (ticker: string) => void
+}) {
+  const [page, setPage] = useState(0)
+  const totalPages = Math.max(1, Math.ceil(events.length / MY_UPCOMING_PAGE_SIZE))
+  // 일정이 갱신돼 페이지 수가 줄면 마지막 페이지로 맞춘다
+  const current = Math.min(page, totalPages - 1)
+  const shown = events.slice(current * MY_UPCOMING_PAGE_SIZE, (current + 1) * MY_UPCOMING_PAGE_SIZE)
+
+  return (
+    <div className="flex flex-col">
+      <EventList events={shown} tags={tags} showDate onPick={onPick} />
+      {totalPages > 1 && (
+        <div className="border-t border-edge/[0.06] [&>div]:py-1.5">
+          <Pagination page={current} totalPages={totalPages} onPageChange={setPage} />
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -325,7 +351,7 @@ function EventList({
               type="button"
               onClick={() => onPick(e.ticker)}
               className="w-full grid grid-cols-[176px_64px_minmax(0,1fr)_auto_20px] items-center gap-3
-                         px-3 py-2.5 rounded-[14px] text-left transition-colors duration-100
+                         px-3 py-1.5 rounded-[14px] text-left transition-colors duration-100
                          hover:bg-wash/[0.05] focus-visible:outline focus-visible:outline-1 focus-visible:outline-gold"
             >
               <span className="text-[13px] text-ink-2 tabular-nums">
@@ -516,7 +542,7 @@ function Panel({
 }) {
   return (
     <section className="cloud rounded-[28px] flex flex-col" aria-label={title}>
-      <div className="flex items-center justify-between gap-3 px-5 pt-4 pb-2">
+      <div className="flex items-center justify-between gap-3 px-5 pt-3 pb-1">
         <div className="flex items-baseline gap-3">
           <h2 className="text-[16px] font-semibold text-ink-1 on-glass">{title}</h2>
           {meta && <span className="text-[12px] text-ink-3">{meta}</span>}
