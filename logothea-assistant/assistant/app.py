@@ -77,7 +77,7 @@ def create_app(settings: Settings | None = None, pipeline: AnswerPipeline | None
 
     @app.get("/health")
     def health() -> dict[str, str]:
-        return {"status": "ok", "answer_mode": settings.answer_mode}
+        return {"status": "ok", "answer_mode": settings.answer_mode, "model": settings.assistant_model}
 
     @app.post("/v1/assistant/ask", dependencies=[Depends(require_internal_secret)])
     async def ask(body: AskRequest) -> StreamingResponse:

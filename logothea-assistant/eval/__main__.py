@@ -29,7 +29,7 @@ from eval.failures import FAILURE_TYPES, failure_table
 from eval.dataset import DATASET_PATH, load_dataset, validate_dataset
 from assistant.llm import LLMError
 from eval.judge import Judgment, judge_item_with_issues, should_judge
-from eval.metrics import summarize, time_violations
+from eval.metrics import PRICE_PER_MILLION, summarize, time_violations
 from eval.report import write_report
 from eval.review_sheet import agreement, build_sheet_rows, read_sheet, write_sheet
 from eval.runner import AssistantRunner, ItemResult
@@ -60,16 +60,18 @@ def git_short_sha() -> str:
         return "unknown"
 
 
-def fetch_answer_mode(http: httpx.Client, assistant_url: str) -> str:
+def fetch_health(http: httpx.Client, assistant_url: str) -> dict[str, str]:
+    """assistant 의 답변 방식과 생성 모델. 읽지 못한 값은 "unknown"."""
+    unknown = {"answer_mode": "unknown", "model": "unknown"}
     try:
         response = http.get(f"{assistant_url}/health", timeout=5.0)
         response.raise_for_status()
         body = response.json()
-        if not isinstance(body, dict):
-            return "unknown"
-        return str(body.get("answer_mode") or "unknown")
     except (httpx.HTTPError, ValueError):
-        return "unknown"
+        return unknown
+    if not isinstance(body, dict):
+        return unknown
+    return {key: str(body.get(key) or "unknown") for key in unknown}
 
 
 async def _judge_all(llm, items, results) -> tuple[dict[str, Judgment], dict[str, list[str]], dict[str, str], dict[str, int]]:
@@ -190,8 +192,13 @@ def main(argv: list[str] | None = None) -> int:
 
     settings = Settings()
     with httpx.Client(timeout=30.0) as http:
-        answer_mode = fetch_answer_mode(http, ASSISTANT_URL)
-        print(f"답변 방식: {answer_mode}")
+        health = fetch_health(http, ASSISTANT_URL)
+        answer_mode, model = health["answer_mode"], health["model"]
+        print(f"답변 방식: {answer_mode}, 생성 모델: {model}")
+        if model not in PRICE_PER_MILLION:
+            print(f"생성 모델 {model} 의 가격이 metrics.PRICE_PER_MILLION 에 없어 실행하지 않습니다. "
+                  "assistant 가 떠 있는지 확인하고, 새 모델이면 가격을 먼저 넣어 주세요.")
+            return 1
         for run_index in range(args.runs):
             call_id = new_call_id()
             seed_segments(http, backend_url=settings.backend_base_url, secret=settings.internal_secret,
@@ -219,7 +226,7 @@ def main(argv: list[str] | None = None) -> int:
                 finished = True
             finally:
                 done_items = items[: len(results)]
-                summary = summarize(items, results, segments, judgments or None, judge_usage=judge_usage,
+                summary = summarize(items, results, segments, judgments or None, model=model, judge_usage=judge_usage,
                                     judge_model=JUDGE_MODEL)
                 summary.update({"git_sha": git_short_sha(), "dataset_items": len(dataset.items), "call_id": call_id, "answer_mode": answer_mode})
                 rows = [{"id": i.id, "group": i.group, "expected_status": i.expected_status,

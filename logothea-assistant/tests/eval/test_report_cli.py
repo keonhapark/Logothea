@@ -74,6 +74,7 @@ def test_full_fake_run_writes_report_with_runner_and_judge_errors(tmp_path, monk
     monkeypatch.setattr(cli, "load_dataset", lambda path: type("D", (), {"items": answered, "ticker": "WMT"})())
     monkeypatch.setattr(cli, "validate_dataset", lambda dataset, segments: [])
     monkeypatch.setattr(cli, "seed_segments", lambda *a, **k: 0)
+    monkeypatch.setattr(cli, "fetch_health", lambda http, url: {"answer_mode": "fixed", "model": "gpt-6-luna"})
     monkeypatch.setattr(cli, "OpenAIClient", lambda **k: object())
 
     class FakeRunner:
@@ -114,6 +115,7 @@ def test_judge_client_is_created_per_run_and_judged_each_run(tmp_path, monkeypat
     monkeypatch.setattr(cli, "load_dataset", lambda path: type("D", (), {"items": answered, "ticker": "WMT"})())
     monkeypatch.setattr(cli, "validate_dataset", lambda dataset, segments: [])
     monkeypatch.setattr(cli, "seed_segments", lambda *a, **k: 0)
+    monkeypatch.setattr(cli, "fetch_health", lambda http, url: {"answer_mode": "fixed", "model": "gpt-6-luna"})
     made, judged = [], []
     monkeypatch.setattr(cli, "make_judge_client", lambda settings: made.append(1) or object())
 
@@ -136,16 +138,30 @@ def test_judge_client_is_created_per_run_and_judged_each_run(tmp_path, monkeypat
     assert len(list(tmp_path.glob("*.json"))) == 2
 
 
-def test_fetch_answer_mode_reads_health_and_falls_back_to_unknown():
-    ok = httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(200, json={"status": "ok", "answer_mode": "agent"})))
+def test_fetch_health_reads_mode_and_model_and_falls_back_to_unknown():
+    ok = httpx.Client(transport=httpx.MockTransport(
+        lambda r: httpx.Response(200, json={"status": "ok", "answer_mode": "agent", "model": "gpt-6-luna"})))
     old = httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(200, json={"status": "ok"})))
     down = httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(503)))
     non_dict = httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(200, json=[])))
-    from eval.__main__ import fetch_answer_mode
-    assert fetch_answer_mode(ok, "http://a") == "agent"
-    assert fetch_answer_mode(old, "http://a") == "unknown"
-    assert fetch_answer_mode(down, "http://a") == "unknown"
-    assert fetch_answer_mode(non_dict, "http://a") == "unknown"
+    from eval.__main__ import fetch_health
+    unknown = {"answer_mode": "unknown", "model": "unknown"}
+    assert fetch_health(ok, "http://a") == {"answer_mode": "agent", "model": "gpt-6-luna"}
+    assert fetch_health(old, "http://a") == unknown
+    assert fetch_health(down, "http://a") == unknown
+    assert fetch_health(non_dict, "http://a") == unknown
+
+
+def test_run_stops_before_seeding_when_model_price_is_unknown(monkeypatch, capsys):
+    import eval.__main__ as cli
+
+    def forbidden(*a, **k):
+        raise AssertionError("실행하면 안 됩니다")
+
+    monkeypatch.setattr(cli, "fetch_health", lambda http, url: {"answer_mode": "fixed", "model": "new-model"})
+    monkeypatch.setattr(cli, "seed_segments", forbidden)
+    assert main(["run", "--label", "x", "--limit", "1", "--yes"]) == 1
+    assert "new-model" in capsys.readouterr().out
 
 
 def test_report_header_shows_answer_mode():
