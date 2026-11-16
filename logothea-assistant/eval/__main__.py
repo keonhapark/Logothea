@@ -6,6 +6,7 @@
     python -m eval compare report1.json report2.json ...   # 지표별 평균과 표준편차, pass@k(파일을 쓰지 않는다)
     python -m eval sheet report.json [--n 10]              # 채점기 사람 검수 시트(CSV)
     python -m eval agreement sheet.csv                     # 채운 시트로 채점기 일치율
+    python -m eval failures report1.json ...               # 통과하지 못한 문항의 실패 유형
 """
 
 from __future__ import annotations
@@ -24,6 +25,7 @@ import httpx
 from assistant.config import Settings
 from assistant.openai_client import OpenAIClient
 from eval.compare import aggregate, load_reports, pass_at_k
+from eval.failures import FAILURE_TYPES, failure_table
 from eval.dataset import DATASET_PATH, load_dataset, validate_dataset
 from assistant.llm import LLMError
 from eval.judge import Judgment, judge_item_with_issues, should_judge
@@ -114,6 +116,8 @@ def main(argv: list[str] | None = None) -> int:
     sheet.add_argument("report", type=Path)
     sheet.add_argument("--n", type=int, default=10)
     sheet.add_argument("--seed", type=int, default=0)
+    failures = sub.add_parser("failures")
+    failures.add_argument("reports", nargs="+", type=Path)
     agree = sub.add_parser("agreement")
     agree.add_argument("sheet", type=Path)
     args = parser.parse_args(argv)
@@ -146,6 +150,12 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     dataset = load_dataset(DATASET_PATH)
+    if args.command == "failures":
+        table = failure_table(load_reports(args.reports), {i.id: i.gold_sequences for i in dataset.items})
+        print(f"보고서 {table['runs']}개 — 유형별 건수(문항×회차)")
+        for kind, count in table["counts"].items():
+            print(f"  {kind} {count}건 · {FAILURE_TYPES[kind]}: {', '.join(table['items'][kind])}")
+        return 0
     if args.command == "sheet":
         if args.n < 1:
             print("--n 은 1 이상이어야 합니다.")

@@ -34,6 +34,7 @@ logothea-assistant 의 답변 품질을 같은 질문셋으로 반복 측정하�
 | `report.py` | JSON, Markdown 보고서 작성. |
 | `compare.py` | 여러 보고서의 지표별 평균과 표준편차, 문항 통과와 pass@k. |
 | `review_sheet.py` | 채점기 사람 검수 시트(CSV)와 일치율. |
+| `failures.py` | 통과하지 못한 문항의 실패 유형 분류. |
 | `__main__.py` | CLI. |
 
 ## 실행 전제
@@ -102,6 +103,24 @@ ANSWER_MODE=agent .venv/bin/uvicorn assistant.main:app --host 127.0.0.1 --port 8
 보고서 상단에는 생성 모델, 채점 모델, git 커밋, 질문셋 문항 수, call_id, 답변 방식이 기록됩니다.
 
 세그먼트 분할 규칙을 바꾸면 질문셋의 sequence 도 다시 맞춰야 합니다. `validate` 로 확인합니다.
+
+## 실패 유형 분류
+
+통과하지 못한 문항을 고칠 곳 기준으로 나눕니다. 코드로만 판정하며, 한 문항이 여러 유형에 걸칠 수 있습니다.
+
+```
+.venv/bin/python -m eval failures eval/reports/A-run1.json eval/reports/A-run2.json eval/reports/A-run3.json
+```
+
+| 유형 | 뜻 | 주로 고칠 곳 |
+|---|---|---|
+| `error` | 오류로 답을 받지 못함 | 서비스 |
+| `time_violation` | 질문 시점 이후 자료를 근거로 씀 | 검색·도구의 시점 필터 |
+| `wrong_refusal`, `missed_refusal` | 거절 판단이 틀림 | 분류기 |
+| `no_evidence_as_answered`, `answered_as_no_evidence` | 근거 없음 판정이 틀림 | 상태 판정 규칙, 생성 프롬프트 |
+| `contradicted_point` | 정답 요점과 반대되는 내용을 단정함 | 생성 프롬프트, 근거 |
+| `point_missed_gold_not_cited` | 요점 누락, 정답 근거를 인용하지 못함 | 검색·근거 선택(에이전트는 도구) |
+| `point_missed_gold_cited` | 요점 누락, 정답 근거는 인용함 | 생성 프롬프트 |
 
 ## 채점기 사람 검수
 
