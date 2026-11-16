@@ -167,6 +167,8 @@ ANSWER_MODE=agent .venv/bin/uvicorn assistant.main:app --host 127.0.0.1 --port 8
 
 ## 결과 위치
 
+결론에 쓴 수치는 `RESULTS.md` 에 요약해 커밋합니다. 보고서 원본은 커밋하지 않습니다.
+
 `eval/reports/{YYYY-MM-DD}-{label}.json` 과 `.md` 로 저장됩니다. JSON 에는 문항별 답변·상태·인용·채점 결과가 들어 있고, Markdown 은 시점 위반, 요약, 묶음별 표, 상태 불일치 순서입니다.
 
 ## 한계
