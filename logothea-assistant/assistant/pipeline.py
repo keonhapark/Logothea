@@ -19,7 +19,7 @@ from assistant.citations import MARKER_RE, extract_quantities, split_sentences, 
 from assistant.classifier import Classification, GlossaryProvider, classify, glossary_answer
 from assistant.context import BaseSources, ContextAssembler, ContextError, Evidence, meta_payload
 from assistant.llm import LLMClient, LLMError, StreamDone, TextDelta, Usage
-from assistant.prompts import NO_EVIDENCE_PHRASE, REFUSAL_SUGGESTIONS, REFUSAL_TEXTS, build_generation_messages
+from assistant.prompts import NO_EVIDENCE_LEAD, NO_EVIDENCE_PHRASE, REFUSAL_SUGGESTIONS, REFUSAL_TEXTS, build_generation_messages
 from assistant.schemas import AskRequest
 
 logger = logging.getLogger(__name__)
@@ -177,9 +177,11 @@ def _discard(task: asyncio.Task[Any]) -> None:
         task.exception()
 
 
-# 모델은 정형 문구에 주어를 붙여 "이번 분기 유효세율은 … 찾지 못했습니다" 처럼 쓰기도 한다(#195).
-# 그래서 문구 전체가 아니라 문장마다 "찾지 못함" 문장인지 본다. 사실(수치 포함)을 말한 문장이 하나라도 있으면 일부만 답한 것이다.
-NOT_FOUND_MARKS = (NO_EVIDENCE_PHRASE, "언급되지 않았습니다", "확인되지 않습니다", "언급될 수 있습니다")
+# 근거 없음 판정(#195). 프롬프트는 근거를 못 찾은 답을 NO_EVIDENCE_LEAD 로 시작하게 한다.
+# 모델이 그 문장을 지키지 않고 "이번 분기 유효세율은 … 찾지 못했습니다" 처럼 바꿔 쓰는 경우를 위해,
+# 모든 문장이 "찾지 못함" 문장인 답도 근거 없음으로 본다. 사실(수치 포함)을 말한 문장이 있으면 일부만 답한 것이다.
+NOT_FOUND_MARKS = (NO_EVIDENCE_PHRASE, "언급되지 않았습니다", "언급되지 않았을 수 있습니다", "확인되지 않습니다",
+                   "확인할 수 없습니다", "언급될 수 있습니다")
 _CALL_DID_NOT_MENTION_RE = re.compile(r"콜에서는?\s.*언급하지 않았습니다")
 
 
@@ -192,4 +194,8 @@ def _is_not_found_sentence(sentence: str) -> bool:
 def is_no_evidence_answer(answer: str) -> bool:
     sentences = [MARKER_RE.sub("", sentence).strip() for sentence in split_sentences(answer.replace("**", ""))]
     sentences = [sentence for sentence in sentences if sentence]
-    return bool(sentences) and all(_is_not_found_sentence(sentence) for sentence in sentences)
+    if not sentences:
+        return False
+    if sentences[0].startswith(NO_EVIDENCE_LEAD.rstrip(".")):
+        return True
+    return all(_is_not_found_sentence(sentence) for sentence in sentences)
