@@ -8,13 +8,14 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import time
 from collections.abc import AsyncIterator, Callable
 from contextlib import aclosing
 from typing import Any
 
 from assistant.agent import AgentAnswerer, AgentFinished
-from assistant.citations import MARKER_RE, verify_citations
+from assistant.citations import MARKER_RE, extract_quantities, split_sentences, verify_citations
 from assistant.classifier import Classification, GlossaryProvider, classify, glossary_answer
 from assistant.context import BaseSources, ContextAssembler, ContextError, Evidence, meta_payload
 from assistant.llm import LLMClient, LLMError, StreamDone, TextDelta, Usage
@@ -139,13 +140,7 @@ class AnswerPipeline:
     def _finish(self, started: float, usage: Usage, category: str, answer: str, evidence: dict[str, Evidence],
                 extra_warnings: list[str]) -> list[Event]:
         result = verify_citations(answer, evidence)
-        plain_answer = " ".join(MARKER_RE.sub("", answer).split()).rstrip(" .")
-        missing_answer = f"이번 콜과 제공된 자료에서 {NO_EVIDENCE_PHRASE}"
-        status = "no_evidence" if plain_answer in {
-            NO_EVIDENCE_PHRASE,
-            missing_answer,
-            f"{missing_answer}. 아직 콜에서 언급되지 않았습니다",
-        } else "answered"
+        status = "no_evidence" if is_no_evidence_answer(answer) else "answered"
         return [("citations", result.citations),
                 self._done(started, usage, category, status=status, warnings=[*extra_warnings, *result.warnings])]
 
@@ -180,3 +175,21 @@ def _discard(task: asyncio.Task[Any]) -> None:
     elif not task.cancelled():
         # 거절 경로처럼 결과를 쓰지 않은 실패를 회수해 "exception was never retrieved" 경고를 막는다.
         task.exception()
+
+
+# 모델은 정형 문구에 주어를 붙여 "이번 분기 유효세율은 … 찾지 못했습니다" 처럼 쓰기도 한다(#195).
+# 그래서 문구 전체가 아니라 문장마다 "찾지 못함" 문장인지 본다. 사실(수치 포함)을 말한 문장이 하나라도 있으면 일부만 답한 것이다.
+NOT_FOUND_MARKS = (NO_EVIDENCE_PHRASE, "언급되지 않았습니다", "확인되지 않습니다", "언급될 수 있습니다")
+_CALL_DID_NOT_MENTION_RE = re.compile(r"콜에서는?\s.*언급하지 않았습니다")
+
+
+def _is_not_found_sentence(sentence: str) -> bool:
+    if extract_quantities(sentence):
+        return False
+    return any(mark in sentence for mark in NOT_FOUND_MARKS) or bool(_CALL_DID_NOT_MENTION_RE.search(sentence))
+
+
+def is_no_evidence_answer(answer: str) -> bool:
+    sentences = [MARKER_RE.sub("", sentence).strip() for sentence in split_sentences(answer.replace("**", ""))]
+    sentences = [sentence for sentence in sentences if sentence]
+    return bool(sentences) and all(_is_not_found_sentence(sentence) for sentence in sentences)
