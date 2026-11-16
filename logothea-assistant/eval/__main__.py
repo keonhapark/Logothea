@@ -3,7 +3,9 @@
     python -m eval segments            # 원문에서 고정 세그먼트 파일을 다시 만든다
     python -m eval validate            # 질문셋 검증
     python -m eval run --label baseline [--runs 3] [--judge] [--limit N] [--group G] --yes
-    python -m eval compare report1.json report2.json ...   # 지표별 평균과 표준편차(파일을 쓰지 않는다)
+    python -m eval compare report1.json report2.json ...   # 지표별 평균과 표준편차, pass@k(파일을 쓰지 않는다)
+    python -m eval sheet report.json [--n 10]              # 채점기 사람 검수 시트(CSV)
+    python -m eval agreement sheet.csv                     # 채운 시트로 채점기 일치율
 """
 
 from __future__ import annotations
@@ -21,12 +23,13 @@ import httpx
 
 from assistant.config import Settings
 from assistant.openai_client import OpenAIClient
-from eval.compare import aggregate, load_summaries
+from eval.compare import aggregate, load_reports, pass_at_k
 from eval.dataset import DATASET_PATH, load_dataset, validate_dataset
 from assistant.llm import LLMError
 from eval.judge import Judgment, judge_item_with_issues, should_judge
 from eval.metrics import summarize, time_violations
 from eval.report import write_report
+from eval.review_sheet import agreement, build_sheet_rows, read_sheet, write_sheet
 from eval.runner import AssistantRunner, ItemResult
 from eval.seed import new_call_id, seed_segments
 from eval.transcript import CALL_STARTED_AT, SEGMENTS_PATH, TRANSCRIPT_PATH, build_segments, load_segments, write_segments
@@ -34,8 +37,8 @@ from eval.transcript import CALL_STARTED_AT, SEGMENTS_PATH, TRANSCRIPT_PATH, bui
 REPORTS_DIR = Path(__file__).resolve().parent / "reports"
 JUDGE_MODEL = os.environ.get("EVAL_JUDGE_MODEL", "gpt-5.4-mini")
 ASSISTANT_URL = os.environ.get("EVAL_ASSISTANT_URL", "http://127.0.0.1:8100")
-# 문항당 대략값: 생성(콜 전체 ~1.6만 토큰 입력) $0.002, 채점 $0.004. 실제 비용은 보고서의 usage 로 확인한다.
-COST_PER_ITEM = {"generate": 0.002, "judge": 0.004}
+# 문항당 대략값(2026-10-07 기준 평가 실측): 생성 $0.002, 채점 $0.001. 실제 비용은 보고서의 usage 로 확인한다.
+COST_PER_ITEM = {"generate": 0.002, "judge": 0.001}
 
 
 def estimate_cost_usd(item_count: int, judge: bool) -> float:
@@ -107,12 +110,31 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--yes", action="store_true")
     compare = sub.add_parser("compare")
     compare.add_argument("reports", nargs="+", type=Path)
+    sheet = sub.add_parser("sheet")
+    sheet.add_argument("report", type=Path)
+    sheet.add_argument("--n", type=int, default=10)
+    sheet.add_argument("--seed", type=int, default=0)
+    agree = sub.add_parser("agreement")
+    agree.add_argument("sheet", type=Path)
     args = parser.parse_args(argv)
     if args.command == "compare":
-        stats = aggregate(load_summaries(args.reports))
+        reports = load_reports(args.reports)
+        stats = aggregate([r["summary"] for r in reports])
         print(f"보고서 {len(args.reports)}개 — 평균 ± 표준편차(모집단)")
         for name, row in stats.items():
             print(f"  {name}: " + ("-" if row["mean"] is None else f"{row['mean']:.4f} ± {row['std']:.4f}"))
+        passes = pass_at_k(reports)
+        if passes["items"]:
+            print(f"  문항 통과(공통 {passes['items']}문항, k={passes['k']}): pass@1 {passes['pass_at_1']:.4f}, "
+                  f"pass@k {passes['pass_at_k']:.4f}, pass^k {passes['pass_hat_k']:.4f}")
+            print(f"  회차마다 결과가 달라진 문항: {', '.join(passes['flaky']) or '없음'}")
+        return 0
+    if args.command == "agreement":
+        for kind, row in agreement(read_sheet(args.sheet)).items():
+            rate = "-" if row["rate"] is None else f"{row['rate'] * 100:.1f}%"
+            print(f"{kind}: 검수 {row['checked']}건, 일치 {row['agreed']}건 ({rate}), 알 수 없는 값 {row['invalid']}건")
+            for line in row["disagreements"]:
+                print(f"  불일치 {line}")
         return 0
     if args.command == "run" and (args.runs < 1 or (args.limit is not None and args.limit < 1)):
         print("--runs 와 --limit 은 1 이상이어야 합니다.")
@@ -124,6 +146,19 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     dataset = load_dataset(DATASET_PATH)
+    if args.command == "sheet":
+        if args.n < 1:
+            print("--n 은 1 이상이어야 합니다.")
+            return 1
+        report = load_reports([args.report])[0]
+        rows = build_sheet_rows(report, {i.id: i for i in dataset.items}, n=args.n, seed=args.seed)
+        if not rows:
+            print("채점된 문항이 없는 보고서입니다. --judge 로 실행한 보고서를 넣어 주세요.")
+            return 1
+        out = args.report.with_name(f"{args.report.stem}-review.csv")
+        write_sheet(out, rows)
+        print(f"검수 시트: {out} ({len({r['item_id'] for r in rows})}문항, 판정 {len(rows)}줄)")
+        return 0
     segments = load_segments(SEGMENTS_PATH)
     errors = validate_dataset(dataset, segments)
     if args.command == "validate":
