@@ -1,11 +1,13 @@
 import json
 from contextlib import aclosing
 
+import pytest
+
 from assistant.agent import AgentAnswerer
 from assistant.classifier import Classification, GlossaryProvider
 from assistant.context import ContextAssembler
 from assistant.llm import LLMError, RoundDone, TextDelta, ToolCall, Usage
-from assistant.pipeline import AnswerPipeline
+from assistant.pipeline import AnswerPipeline, is_no_evidence_answer
 from assistant.prompts import REFUSAL_TEXTS
 from assistant.schemas import AskRequest
 from tests.fakes import NOT_FOUND, FakeBackend, FakeEngine, FakeLLM, segments_payload
@@ -119,6 +121,36 @@ async def test_partial_answer_with_missing_evidence_remains_answered():
     ])
     events = await _collect(_pipeline(llm), _request())
     assert events[-1][1]["status"] == "answered"
+
+
+async def test_no_evidence_answer_with_subject_is_flagged():
+    # #195: 평가에서 모델이 정형 문구에 주어를 붙여 답한 실제 문장들이다.
+    llm = FakeLLM(parsed=_answer(), deltas=[
+        "이번 분기 날씨가 매출에 미친 영향은 콜에서 언급되지 않았습니다. 이번 콜과 제공된 자료에서 찾지 못했습니다."
+    ])
+    events = await _collect(_pipeline(llm), _request())
+    assert events[-1][1]["status"] == "no_evidence"
+
+
+@pytest.mark.parametrize("answer, expected", [
+    ("이번 분기 유효세율은 이번 콜과 제공된 자료에서 찾지 못했습니다.", True),
+    ("이번 분기 이자 비용 증가액은 콜에서 확인되지 않습니다. 이번 콜과 제공된 자료에서 찾지 못했습니다.", True),
+    ("Bettergoods 매출 규모를 찾지 못했습니다. 아직 콜에서 언급되지 않았습니다.", True),
+    ("콜에서 확인되지 않습니다. 찾지 못했습니다. [S0][S648]", True),
+    ("구체적으로 답하지 않았습니다. CFO는 현재 수준을 가정한다고만 말했습니다 [S321]. 비교는 찾지 못했습니다.", False),
+    ("Furner는 구체적인 비율을 제시하지 않았습니다 [S473].", False),
+    ("이번 콜에서는 OnePay의 이번 분기 규모를 언급하지 않았습니다. 이번 콜과 제공된 자료에서 찾지 못했습니다.", True),
+    ("WFS 비중은 찾지 못했습니다. 콜은 아직 진행 중이므로 뒤에 언급될 수 있습니다.", True),
+    ("EPS 전망은 0.62~0.64달러이며, 실제 EPS 실적은 찾지 못했습니다. [S225]", False),
+    ("비교한 내용은 **이번 콜과 제공된 자료에서 찾지 못했습니다.** 2분기 매출 성장률은 5%였습니다.[S30]", False),
+    ("이번 콜과 제공된 자료에서 찾지 못했습니다. 경영진은 개학 시즌 시작이 좋았다고만 언급했습니다.[S386]", True),
+    ("**이번 콜과 제공된 자료에서 찾지 못했습니다.** 콜에서는 마켓플레이스가 50% 넘게 성장했다고 했습니다 [S145].", True),
+    ("이번 분기 희석 주식 수는 콜과 현재 제공된 자료에서 확인할 수 없습니다.", True),
+    ("직원 이직률 변화는 찾지 못했습니다. 아직 콜에서 언급되지 않았을 수 있습니다.", True),
+    ("", False),
+])
+def test_is_no_evidence_answer(answer, expected):
+    assert is_no_evidence_answer(answer) is expected
 
 
 async def test_segments_not_found_is_an_error_before_meta():

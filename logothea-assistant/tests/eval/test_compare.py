@@ -38,3 +38,45 @@ def test_compare_command_prints_and_writes_nothing(tmp_path, capsys):
     assert main(["compare", *paths]) == 0
     assert "status_accuracy: 0.7000 ± 0.1000" in capsys.readouterr().out
     assert sorted(p.name for p in tmp_path.iterdir()) == ["r0.json", "r1.json"]
+
+
+def passing_row(item_id, **overrides):
+    row = {"id": item_id, "status": "answered", "expected_status": "answered", "error": None, "time_violations": [],
+           "judgment": {"points": [{"point_index": 0, "verdict": "present"}], "citations": []}}
+    row.update(overrides)
+    return row
+
+
+def test_item_passed_rules():
+    from eval.compare import item_passed
+    assert item_passed(passing_row("a"))
+    assert not item_passed(passing_row("a", status="refused"))
+    assert not item_passed(passing_row("a", error={"code": "timeout"}))
+    assert not item_passed(passing_row("a", time_violations=["S9"]))
+    assert not item_passed(passing_row("a", judgment={"points": [{"point_index": 0, "verdict": "absent"}], "citations": []}))
+    assert item_passed(passing_row("a", judgment=None))
+
+
+def test_pass_at_k_over_common_items():
+    from eval.compare import pass_at_k
+    run1 = {"items": [passing_row("a"), passing_row("b"), passing_row("c", status="refused")]}
+    run2 = {"items": [passing_row("a"), passing_row("b", status="refused"), passing_row("c", status="refused"),
+                      passing_row("only-here")]}
+    result = pass_at_k([run1, run2])
+    assert result["items"] == 3 and result["k"] == 2
+    assert result["pass_at_1"] == pytest.approx((2 / 3 + 1 / 3) / 2)
+    assert result["pass_at_k"] == pytest.approx(2 / 3)
+    assert result["pass_hat_k"] == pytest.approx(1 / 3)
+    assert result["flaky"] == ["b"]
+
+
+def test_compare_command_prints_pass_at_k(tmp_path, capsys):
+    paths = []
+    for n in range(2):
+        path = tmp_path / f"r{n}.json"
+        path.write_text(json.dumps({"summary": summary(0.5), "items": [passing_row("a")]}), encoding="utf-8")
+        paths.append(str(path))
+    assert main(["compare", *paths]) == 0
+    out = capsys.readouterr().out
+    assert "pass@1 1.0000, pass@k 1.0000, pass^k 1.0000" in out
+    assert "회차마다 결과가 달라진 문항: 없음" in out

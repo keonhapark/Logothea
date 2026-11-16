@@ -4,6 +4,10 @@ logothea-assistant 의 답변 품질을 같은 질문셋으로 반복 측정하�
 
 ## 측정 지표
 
+주 지표는 문항 통과율입니다. 개선 작업은 이 지표를 기준으로 전후를 비교하고, 아래 세부 지표로 원인을 봅니다.
+
+- 문항 통과(`compare.py` 의 `item_passed`): 오류 없이 기대 상태가 맞고, 시점 위반이 없고, 채점된 문항이면 모든 정답 요점이 present 인 경우입니다. 인용 정밀도는 통과 조건에 넣지 않고 따로 봅니다. 채점 없이 돌린 보고서는 상태와 시점만으로 판정되므로 채점을 켠 보고서끼리 비교합니다.
+- pass@1, pass@k, pass^k: 같은 설정을 k회 실행했을 때 회차별 통과율의 평균, 한 번이라도 통과한 문항 비율, 매번 통과한 문항 비율입니다. 모델 응답이 매번 같지 않으므로 pass^k 가 안정성을 보여 줍니다.
 - 상태 정확도: 기대 상태(answered, refused, no_evidence)와 실제 상태의 일치율. 적절한 거절과 부적절한 거절을 나누어 셉니다.
 - 정답 요점 충족률: 문항별 정답 요점을 LLM 이 present, contradicted, absent 로 판정합니다. 점수 척도는 쓰지 않고 요점별 예/아니오만 봅니다.
 - 근거 재현율: 정답 근거 세그먼트 중 답변이 인용한 비율입니다. 정답 근거에는 같은 사실을 담은 세그먼트가 여러 개 들어갈 수 있어, 간결하지만 충분한 답변도 점수가 낮게 나올 수 있습니다.
@@ -28,7 +32,9 @@ logothea-assistant 의 답변 품질을 같은 질문셋으로 반복 측정하�
 | `metrics.py` | 코드로 계산하는 지표와 요약. |
 | `judge.py` | 요점 충족과 인용 정밀도를 LLM 으로 채점합니다. |
 | `report.py` | JSON, Markdown 보고서 작성. |
-| `compare.py` | 여러 보고서의 지표별 평균과 표준편차. |
+| `compare.py` | 여러 보고서의 지표별 평균과 표준편차, 문항 통과와 pass@k. |
+| `review_sheet.py` | 채점기 사람 검수 시트(CSV)와 일치율. |
+| `failures.py` | 통과하지 못한 문항의 실패 유형 분류. |
 | `__main__.py` | CLI. |
 
 ## 실행 전제
@@ -62,7 +68,7 @@ logothea-assistant 의 답변 품질을 같은 질문셋으로 반복 측정하�
 - `--runs N`: N회 반복합니다. 회차마다 새 call_id 로 적재하고 보고서는 `{label}-run{n}` 으로 나뉩니다.
 - `--limit N`, `--group G`: 일부 문항만 실행합니다.
 
-같은 설정을 3회 실행한 뒤에는 `compare` 로 편차를 확인해 보고합니다. 파일은 쓰지 않고 지표별 평균과 모표준편차만 출력합니다.
+같은 설정을 3회 실행한 뒤에는 `compare` 로 편차를 확인해 보고합니다. 파일은 쓰지 않고 지표별 평균과 모표준편차, 그리고 공통 문항의 pass@1·pass@k·pass^k 와 회차마다 결과가 달라진 문항을 출력합니다.
 
 ```
 .venv/bin/python -m eval compare eval/reports/A-run1.json eval/reports/A-run2.json eval/reports/A-run3.json
@@ -98,18 +104,77 @@ ANSWER_MODE=agent .venv/bin/uvicorn assistant.main:app --host 127.0.0.1 --port 8
 
 세그먼트 분할 규칙을 바꾸면 질문셋의 sequence 도 다시 맞춰야 합니다. `validate` 로 확인합니다.
 
+## 실패 유형 분류
+
+통과하지 못한 문항을 고칠 곳 기준으로 나눕니다. 코드로만 판정하며, 한 문항이 여러 유형에 걸칠 수 있습니다.
+
+```
+.venv/bin/python -m eval failures eval/reports/A-run1.json eval/reports/A-run2.json eval/reports/A-run3.json
+```
+
+| 유형 | 뜻 | 주로 고칠 곳 |
+|---|---|---|
+| `error` | 오류로 답을 받지 못함 | 서비스 |
+| `time_violation` | 질문 시점 이후 자료를 근거로 씀 | 검색·도구의 시점 필터 |
+| `wrong_refusal`, `missed_refusal` | 거절 판단이 틀림 | 분류기 |
+| `no_evidence_as_answered`, `answered_as_no_evidence` | 근거 없음 판정이 틀림 | 상태 판정 규칙, 생성 프롬프트 |
+| `contradicted_point` | 정답 요점과 반대되는 내용을 단정함 | 생성 프롬프트, 근거 |
+| `point_missed_gold_not_cited` | 요점 누락, 정답 근거를 인용하지 못함 | 검색·근거 선택(에이전트는 도구) |
+| `point_missed_gold_cited` | 요점 누락, 정답 근거는 인용함 | 생성 프롬프트 |
+
+## 모델·프롬프트를 바꿀 때 회귀 확인
+
+생성 모델(`ASSISTANT_MODEL`), 추론 강도, 프롬프트, 도구, 답변 방식을 바꾸는 변경은 같은 질문셋으로 전후를 비교한 뒤 머지합니다.
+
+1. 기준 측정: 바꾸기 전 main 에서 3회 채점 실행합니다. 최근 같은 설정의 보고서가 있으면 그것을 씁니다.
+
+   ```
+   .venv/bin/python -m eval run --label before --judge --runs 3 --yes
+   ```
+
+2. 변경 후 측정: assistant 를 바꾼 설정으로 다시 띄우고 같은 명령을 `--label after` 로 실행합니다. 생성 모델을 바꿀 때는 먼저 `metrics.py` 의 `PRICE_PER_MILLION` 에 그 모델의 가격을 넣습니다(없으면 보고서 작성 단계에서 멈춥니다).
+3. 비교: `compare` 와 `failures` 를 전후 각각 실행합니다.
+
+   ```
+   .venv/bin/python -m eval compare eval/reports/*-before-run*.json
+   .venv/bin/python -m eval compare eval/reports/*-after-run*.json
+   .venv/bin/python -m eval failures eval/reports/*-after-run*.json
+   ```
+
+4. 판단 기준
+   - 시점 위반은 0건이어야 합니다. 1건이라도 있으면 머지하지 않습니다.
+   - 주 지표 pass@1 과 pass^k 가 기준보다 낮으면 원인을 `failures` 로 확인하고 설명할 수 있어야 합니다. 차이가 표준편차 안이면 같은 수준으로 봅니다.
+   - 상태 정확도와 인용 정밀도도 같은 방식으로 봅니다.
+   - 질문당 비용과 첫 토큰 지연 p50 의 변화를 함께 적습니다.
+5. 기록: PR 본문에 전후 표(지표별 평균 ± 표준편차, pass@1·pass@k·pass^k, 실패 유형별 건수)와 보고서 파일 이름을 적습니다.
+
+3회 실행 비용은 고정 방식 약 $0.5 이고, 에이전트 방식은 도구 호출만큼 더 듭니다.
+
+## 채점기 사람 검수
+
+채점 모델의 판정을 사람이 표본으로 확인해 일치율을 기록합니다.
+
+```
+.venv/bin/python -m eval sheet eval/reports/A-run1.json        # 채점된 문항 10개를 골라 A-run1-review.csv 작성
+.venv/bin/python -m eval agreement eval/reports/A-run1-review.csv
+```
+
+시트는 판정 하나가 한 줄입니다. 질문과 답은 문항의 첫 줄에만 적힙니다. `human` 칸에 요점은 present, contradicted, absent 중 하나를, 인용은 yes 또는 no 를 적습니다(o, x 도 받습니다). 비워 둔 줄은 일치율에서 빠집니다. `--n` 으로 문항 수, `--seed` 로 표본을 바꿉니다.
+
 ## 비용
 
-1회 실행(60문항, 채점 포함)에 약 $0.3 입니다(생성 gpt-6-luna, 채점 gpt-5.4-mini). 뉴스 검색에서 문항당 Gemini 임베딩이 1회 발생합니다. 임베딩은 하루 요청 한도가 있어 반복 실행 시 유의가 필요합니다. 실제 비용은 보고서의 usage 값으로 확인합니다.
+1회 실행(60문항, 채점 포함)에 약 $0.16 입니다(2026-10-07 기준 평가 실측: 생성 $0.12, 채점 $0.04. 생성 gpt-6-luna, 채점 gpt-5.4-mini). 에이전트 방식은 도구 호출 라운드만큼 생성 비용이 늘어납니다. 뉴스 검색에서 문항당 Gemini 임베딩이 1회 발생합니다. 임베딩은 하루 요청 한도가 있어 반복 실행 시 유의가 필요합니다. 실제 비용은 보고서의 usage 값으로 확인합니다.
 
 ## 결과 위치
+
+결론에 쓴 수치는 `RESULTS.md` 에 요약해 커밋합니다. 보고서 원본은 커밋하지 않습니다.
 
 `eval/reports/{YYYY-MM-DD}-{label}.json` 과 `.md` 로 저장됩니다. JSON 에는 문항별 답변·상태·인용·채점 결과가 들어 있고, Markdown 은 시점 위반, 요약, 묶음별 표, 상태 불일치 순서입니다.
 
 ## 한계
 
 - 단일 콜(WMT 2026 2분기)만 다룹니다. 다른 종목·콜로의 일반화는 확인되지 않았습니다.
-- 정답과 요점을 설계자가 직접 작성해 편향이 있을 수 있습니다. 표본 10문항은 사람이 확인해야 하며, 채점기와 사람 판정의 일치율도 아직 확인하지 않았습니다.
+- 정답과 요점을 설계자가 직접 작성해 편향이 있을 수 있습니다. 채점기와 사람 판정의 일치율은 검수 시트로 확인합니다.
 - 추천 질문 `vs_last_quarter` 문항은 콜 안의 1분기·직전 가이던스 언급으로 답하는 것으로 둡니다. 직전 분기 콜의 핵심 문장(P)은 로컬 데이터에 적재되어 있지 않으며, 있다면 근거가 더해질 것입니다.
 - 세그먼트 시각은 문장당 5초로 근사한 값입니다. 시점 필터는 콜 시작 기준 상대 위치만 맞으면 되므로 허용했습니다.
 - 데모 데이터의 뉴스 `published_at` 이 약 4시간 앞당겨진 것으로 보입니다(미국 동부 시각이 UTC 로 저장된 것으로 추정). 그래서 콜 이후 기사 일부가 콜 이전처럼 보입니다. 시점 함정 문항은 이 주제를 피해 작성했으며, 뉴스 시점 위반 수치는 이 영향을 감안해 해석해야 합니다.
