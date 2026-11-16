@@ -122,6 +122,34 @@ ANSWER_MODE=agent .venv/bin/uvicorn assistant.main:app --host 127.0.0.1 --port 8
 | `point_missed_gold_not_cited` | 요점 누락, 정답 근거를 인용하지 못함 | 검색·근거 선택(에이전트는 도구) |
 | `point_missed_gold_cited` | 요점 누락, 정답 근거는 인용함 | 생성 프롬프트 |
 
+## 모델·프롬프트를 바꿀 때 회귀 확인
+
+생성 모델(`ASSISTANT_MODEL`), 추론 강도, 프롬프트, 도구, 답변 방식을 바꾸는 변경은 같은 질문셋으로 전후를 비교한 뒤 머지합니다.
+
+1. 기준 측정: 바꾸기 전 main 에서 3회 채점 실행합니다. 최근 같은 설정의 보고서가 있으면 그것을 씁니다.
+
+   ```
+   .venv/bin/python -m eval run --label before --judge --runs 3 --yes
+   ```
+
+2. 변경 후 측정: assistant 를 바꾼 설정으로 다시 띄우고 같은 명령을 `--label after` 로 실행합니다. 생성 모델을 바꿀 때는 먼저 `metrics.py` 의 `PRICE_PER_MILLION` 에 그 모델의 가격을 넣습니다(없으면 보고서 작성 단계에서 멈춥니다).
+3. 비교: `compare` 와 `failures` 를 전후 각각 실행합니다.
+
+   ```
+   .venv/bin/python -m eval compare eval/reports/*-before-run*.json
+   .venv/bin/python -m eval compare eval/reports/*-after-run*.json
+   .venv/bin/python -m eval failures eval/reports/*-after-run*.json
+   ```
+
+4. 판단 기준
+   - 시점 위반은 0건이어야 합니다. 1건이라도 있으면 머지하지 않습니다.
+   - 주 지표 pass@1 과 pass^k 가 기준보다 낮으면 원인을 `failures` 로 확인하고 설명할 수 있어야 합니다. 차이가 표준편차 안이면 같은 수준으로 봅니다.
+   - 상태 정확도와 인용 정밀도도 같은 방식으로 봅니다.
+   - 질문당 비용과 첫 토큰 지연 p50 의 변화를 함께 적습니다.
+5. 기록: PR 본문에 전후 표(지표별 평균 ± 표준편차, pass@1·pass@k·pass^k, 실패 유형별 건수)와 보고서 파일 이름을 적습니다.
+
+3회 실행 비용은 고정 방식 약 $0.5 이고, 에이전트 방식은 도구 호출만큼 더 듭니다.
+
 ## 채점기 사람 검수
 
 채점 모델의 판정을 사람이 표본으로 확인해 일치율을 기록합니다.
